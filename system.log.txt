@@ -1,0 +1,7 @@
+Event loop started and is ready.
+SnakeGame.jar started
+PID=125587
+Event loop started and is ready.
+SnakeGame.jar started
+PID=128253
+Shutting down ProcessManager...
