@@ -111,6 +111,7 @@ void ProcessManager::eventLoop() {
 
         for (int i = 0; i < n_events; ++i) {
             if (events[i].data.fd == signal_fd_) {
+                logger.log("received signal on signal_fd. Handling child signal");
                 handleChildSignal();
             }
         }
@@ -125,9 +126,7 @@ void ProcessManager::handleChildSignal() {
     }
     
     int status;
-
     pid_t child_pid;
-    int status; 
     while ((child_pid = waitpid(-1, &status, WNOHANG)) > 0) {
         auto end_time = std::chrono::steady_clock::now();
         
@@ -193,14 +192,9 @@ std::vector<char*> ProcessManager::constructArgList(Game* game){
 */
 
 bool ProcessManager::startGame(Game* game){
-    if(not isGameValid(game)) return false;
-
-    // std::vector <char*> args = constructArgList(game);
-    
-    // std::vector< char* > args;
+    if(not isGameValid(game)) return false;    
     
     pid_t child_pid;
-    
     try{   
         child_pid = createProcess();
     }catch(const std::runtime_error& e)
@@ -216,7 +210,7 @@ bool ProcessManager::startGame(Game* game){
         _exit(EXIT_FAILURE);
         return false;
     }
-    
+
     // parent process
     auto start_time = std::chrono::steady_clock::now();
     {
