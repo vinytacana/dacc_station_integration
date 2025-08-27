@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 
 ProcessManager::ProcessManager(){
+
     // a data type to represent multiple signals
     // "signal_mask" is showing wich signals are blocked
     // all blocked signals can't reach the parent process
@@ -34,7 +35,6 @@ ProcessManager::ProcessManager(){
 
     // If the fd argument is -1, then the call creates a new file descriptor and associates the signal set specified in mask with that file descriptor.
     signal_fd_ = signalfd(-1, &signal_mask, SFD_NONBLOCK | SFD_CLOEXEC);
-    
     if (signal_fd_ == -1) {
         throw std::runtime_error("Failed to create signalfd");
     }
@@ -46,15 +46,13 @@ ProcessManager::ProcessManager(){
         throw std::runtime_error("Failed to create epoll instance");
     }
 
-    epoll_event event;
+    epoll_event event{};
     event.events = EPOLLIN; 
     event.data.fd = signal_fd_;
 
     if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, signal_fd_, &event) == -1) {
-
         close(epoll_fd_);
         close(signal_fd_);
-
         throw std::runtime_error("Failed to add signalfd to epoll");
     }
 
@@ -75,7 +73,6 @@ ProcessManager::ProcessManager(){
 
 ProcessManager::~ProcessManager() {
     logger.log("Shutting down ProcessManager...");
-    
     stop_loop_ = true;
 
     // Se a thread estiver "juntável" (ou seja, não foi movida, etc.)
@@ -96,6 +93,7 @@ ProcessManager::~ProcessManager() {
 }
 
 void ProcessManager::eventLoop() {
+    // sinaliza que a thread esta pronta
     ready_promise.set_value();
     epoll_event events[MAX_EVENTS];
     logger.log("Event loop started and is ready.");
@@ -122,14 +120,11 @@ void ProcessManager::eventLoop() {
 
 void ProcessManager::handleChildSignal() {
     signalfd_siginfo ssi;
-    ssize_t bytes = read(signal_fd_, &ssi, sizeof(ssi));
-    
-    if (bytes != sizeof(ssi)) {
-        // Se a leitura falhar, não podemos continuar com segurança.
-        // Pode ser um erro ou o FD foi fechado.
-        logger.log("Warning: Could not read full signalfd_siginfo struct.");
-        return;
+    while (read(signal_fd_, &ssi, sizeof(ssi)) == sizeof(ssi)) {
+        // continue lendo ate que não haja mais nada
     }
+    
+    int status;
 
     pid_t child_pid;
     int status; 
@@ -137,7 +132,6 @@ void ProcessManager::handleChildSignal() {
         auto end_time = std::chrono::steady_clock::now();
         
         std::lock_guard<std::mutex> lock(processes_mutex_);
-        
         auto it = running_processes_.find(child_pid);
         
         if (it != running_processes_.end()) {
@@ -170,7 +164,7 @@ pid_t ProcessManager::createProcess(){
     }
 }
 
-bool ProcessManager::isGameValid(Game* game){
+bool ProcessManager::isGameValid(Game* game) const {
     if (not game) {
         LOG_ERROR("game was not set");
         return false;
@@ -205,25 +199,26 @@ bool ProcessManager::startGame(Game* game){
     
     // std::vector< char* > args;
     
-    auto start_time = std::chrono::steady_clock::now();
     pid_t child_pid;
     
-    try
-    {   
-    child_pid = createProcess();
-    }
-    catch(const std::exception& e)
+    try{   
+        child_pid = createProcess();
+    }catch(const std::runtime_error& e)
     {
-        std::cerr << e.what() << '\n';
+        logger.log(e.what());
+        return false;
     }
     
     if (child_pid == 0){
         execlp(game->getPath(), game->filename.c_str(), (char *) NULL);
-
+        
         LOG_ERROR("couldn't launch the game");
         _exit(EXIT_FAILURE);
         return false;
     }
+    
+    // parent process
+    auto start_time = std::chrono::steady_clock::now();
     {
         std::lock_guard<std::mutex> lock(processes_mutex_);
         running_processes_[child_pid] = start_time;

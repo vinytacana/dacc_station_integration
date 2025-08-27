@@ -42,7 +42,7 @@ public:
     ProcessManager();
     ~ProcessManager(); 
     bool startGame(Game* game);
-    bool isGameValid(Game* game);
+    bool isGameValid(Game* game) const;
     bool startProcess(Game* game);
     // bool stopProcess(pid_t processId);
     // bool isProcessRunning(pid_t processId);

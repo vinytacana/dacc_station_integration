@@ -20,7 +20,7 @@ try {
 
     std::cout << "\n>>> Process Manager is active and monitoring." << std::endl;
     std::cin.get();
-
+    
     } catch (const std::exception& e) {
         std::cerr << "A critical error occurred: " << e.what() << std::endl;
         return 1;
