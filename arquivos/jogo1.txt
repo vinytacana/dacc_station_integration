@@ -1,0 +1,5 @@
+@Guardiões da galaxia
+#Descrição1
+$Aventura, RPG
+*arquivos/jogo1.jpeg
+%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg
