@@ -70,7 +70,7 @@ ProcessManager::ProcessManager(std::unique_ptr<ILogger> logger) : logger_{std::m
 }
 
 ProcessManager::~ProcessManager() {
-    logger_->log("Shutting down ProcessManager...");
+    if (logger_) logger_->log("Shutting down ProcessManager...");
     stop_loop_ = true;
 
     // Se a thread estiver "juntável" (ou seja, não foi movida, etc.)
@@ -87,14 +87,14 @@ ProcessManager::~ProcessManager() {
     if (signal_fd_ != -1) {
         close(signal_fd_);
     }
-    logger_->log("ProcessManager shut down cleanly.");
+    if (logger_) logger_->log("ProcessManager shut down cleanly.");
 }
 
 void ProcessManager::eventLoop() {
     // sinaliza que a thread esta pronta
     ready_promise.set_value();
     epoll_event events[MAX_EVENTS];
-    logger_->log("Event loop started and is ready.");
+    if (logger_) logger_->log("Event loop started and is ready.");
     
     while (!stop_loop_) {
         int n_events = epoll_wait(epoll_fd_, events, MAX_EVENTS, 1000);
@@ -102,18 +102,18 @@ void ProcessManager::eventLoop() {
             if (errno == EINTR) // Se for interrompido por um sinal, apenas continue o loop
                 continue;
             // Para outros erros, saia do loop.
-            logger_->log("epoll_wait error: " + std::string(strerror(errno)));
+            if (logger_) logger_->log("epoll_wait error: " + std::string(strerror(errno)));
             break;
         }
 
         for (int i = 0; i < n_events; ++i) {
             if (events[i].data.fd == signal_fd_) {
-                logger_->log("received signal on signal_fd. Handling child signal");
+                if (logger_) logger_->log("received signal on signal_fd. Handling child signal");
                 handleChildSignal();
             }
         }
     }
-    logger_->log("Event loop finished.");
+    if (logger_) logger_->log("Event loop finished.");
 }
 
 void ProcessManager::handleChildSignal() {
@@ -134,13 +134,15 @@ void ProcessManager::handleChildSignal() {
             auto start_time = it->second;
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
             
-            logger_->log("Process PID=" + std::to_string(child_pid) + " finished.");
-            logger_->log("Total execution time: " + std::to_string(duration.count()) + " seconds.");
+            if (logger_) {
+                logger_->log("Process PID=" + std::to_string(child_pid) + " finished.");
+                logger_->log("Total execution time: " + std::to_string(duration.count()) + " seconds.");
+            }
             
             running_processes_.erase(it);
         }
         else{
-            logger_->log("Reaped untracked child process PID=" + std::to_string(child_pid));
+            if (logger_) logger_->log("Reaped untracked child process PID=" + std::to_string(child_pid));
         }
     }
 }
@@ -164,8 +166,7 @@ bool ProcessManager::isAppValid(const ApplicationDefinition& app) const {
     const std::string& app_path = app.getPath();
 
     if (app_path.empty()){ 
-        //TODO: LogLevel:: 
-        logger_->log("Application executable path is empty for app_id: " + app.getId());
+        if (logger_) logger_->log("Application executable path is empty for app_id: " + app.getId());
         return false;
     }
     
@@ -173,24 +174,29 @@ bool ProcessManager::isAppValid(const ApplicationDefinition& app) const {
 }
     
 
-bool ProcessManager::startGame(Game* game){
-    if(not isGameValid(game)) return false;    
+pid_t ProcessManager::startApplication(ApplicationDefinition& app){
+    if(not isAppValid(app)) return -1;    
     
     pid_t child_pid;
     try{   
         child_pid = createProcess();
     }catch(const std::runtime_error& e)
     {
-        logger_->log(e.what());
-        return false;
+        if (logger_) logger_->log(e.what());
+        return -1;
     }
     
     if (child_pid == 0){
-        execlp(game->getPath(), game->getFilename().c_str(), (char *) NULL);
+        // Child process
+        // execlp espera (file, arg0, arg1, ..., NULL)
+        // arg0 deve ser o nome do arquivo sendo executado por convenção
+        execlp(app.getPath().c_str(), app.getId().c_str(), (char *) NULL);
         
-        LOG_ERROR("couldn't launch the game");
+        // Se execlp retornar, houve erro.
+        // Como o logger não é fork-safe (sockets/fd), melhor usar stderr ou exit direto
+        std::cerr << "CRITICAL: execlp failed for " << app.getPath() << ": " << strerror(errno) << std::endl;
         _exit(EXIT_FAILURE);
-        return false;
+        return -1; // Não alcançado
     }
 
     // parent process
@@ -200,9 +206,11 @@ bool ProcessManager::startGame(Game* game){
         running_processes_[child_pid] = start_time;
     }
 
-    logger_->log(game->getFilename() + " started sucessfully");
-    logger_->log("PID=" + std::to_string(child_pid));
+    if (logger_) {
+        logger_->log("App " + app.getId() + " started successfully");
+        logger_->log("PID=" + std::to_string(child_pid));
+    }
     
-    return true;
+    return child_pid;
 }   
 

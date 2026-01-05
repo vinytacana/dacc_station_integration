@@ -1,31 +1,61 @@
 CXX := g++
 
-CXXFLAGS := -std=c++17 -Wall -Wextra -g -I. 
+# Includes: 
+# -Iinclude: Cabeçalhos locais
+# -Ithird-party: Bibliotecas externas (json.hpp)
+# -I../logs/include: Cabeçalhos do sistema de log (Corrigido para singular)
+CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -Ithird-party -I../logs/include
 LDFLAGS := -pthread
 
-VPATH = $(SRC_DIR):$(LOG_DIR)
-
-# Diretório para os executáveis finais.
+# Diretórios
 BIN_DIR := bin
-
-# Diretório para os arquivos-objeto intermediários.
 BUILD_DIR := build
-
-# Diretórios de código-fonte.
 SRC_DIR := src
-LOG_DIR := logs
+LOGS_SRC_DIR := ../logs/src
 
-# Executáveis que serão gerados.
-TARGET_PM := $(BIN_DIR)/gameman-pm
-TARGET_LOG_SERVER := $(BIN_DIR)/gameman-log
+# Executável
+TARGET_PM := $(BIN_DIR)/process-manager
 
-# Fontes do serviço ProcessManager (gameman-pm).
+# Fontes
+# Incluímos os arquivos locais e os arquivos necessários do projeto de Logs
 PM_SRCS := \
     $(SRC_DIR)/main.cpp \
-    $(SRC_DIR)/GameManager.cpp \
-    $(LOG_DIR)/SocketLogger.cpp \
-    $(LOG_DIR)/UnixSocketClient.cpp \
-    $(LOG_DIR)/LogManager.cpp
+    $(SRC_DIR)/ProcessManager.cpp \
+    $(LOGS_SRC_DIR)/SocketLogger.cpp \
+    $(LOGS_SRC_DIR)/UnixSocketClient.cpp \
+    $(LOGS_SRC_DIR)/LogManager.cpp
+
+# Objetos
+# Usamos notdir para pegar apenas o nome do arquivo (ex: main.o, SocketLogger.o)
+# Isso exige que não existam arquivos com mesmo nome em pastas diferentes
+PM_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(PM_SRCS)))
+
+# VPATH permite que o make encontre os .cpp listados acima
+VPATH := $(SRC_DIR):$(LOGS_SRC_DIR)
+
+# Alvo Padrão
+all: $(TARGET_PM)
+
+# Regra de Linkagem
+$(TARGET_PM): $(PM_OBJS)
+	@echo "==> Ligando (linking): $@"
+	@mkdir -p $(@D)
+	$(CXX) $(PM_OBJS) -o $@ $(LDFLAGS)
+
+# Regra de Compilação
+$(BUILD_DIR)/%.o: %.cpp
+	@echo "==> Compilando: $<"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -MMD -MP
+
+# Include de dependências
+-include $(BUILD_DIR)/*.d
+
+.PHONY: clean all
+
+clean:
+	@echo "==> Limpando..."
+	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 # Fontes do servidor de log (gameman-log).
 LOG_SERVER_SRCS := \

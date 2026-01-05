@@ -13,7 +13,7 @@
 #include <future> 
 #include <memory>
 
-#include "logs/ILogger.hpp"
+#include "ILogger.hpp"
 
 #define MAX_EVENTS 10
 
