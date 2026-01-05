@@ -3,6 +3,7 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
+#include <SDL2/SDL_ttf.h>
 #include <string>
 
 namespace MeuProjeto {
@@ -29,6 +30,16 @@ public:
      * @brief Draws a dimmer overlay (fullscreen rectangle with alpha).
      */
     static void drawOverlay(SDL_Renderer* renderer, int width, int height, int alpha);
+
+    /**
+     * @brief Draws the System Status Bar (Clock, Battery, Wifi) at the top.
+     */
+    static void drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TTF_Font* font);
+
+    /**
+     * @brief Draws the Bottom Navigation Bar with Controller Hints.
+     */
+    static void drawBottomNavHints(SDL_Renderer* renderer, int screenWidth, int screenHeight, TTF_Font* font);
 };
 
 } // namespace MeuProjeto
