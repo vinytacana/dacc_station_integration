@@ -167,6 +167,18 @@ public:
     bool contemPonto(int x, int y);
     
     /**
+     * @brief Define manualmente o estado de seleção (hover) do botão.
+     * Útil para navegação via teclado/controle.
+     * @param selecionado true para ativar o visual de hover.
+     */
+    void setSelecionado(bool selecionado);
+
+    /**
+     * @brief Verifica se o botão está manualmente selecionado.
+     */
+    bool estaSelecionado() const;
+
+    /**
      * @brief A área retangular do botão.
      */
     SDL_Rect area;
@@ -190,6 +202,13 @@ public:
      * @brief O texto a ser exibido no botão.
      */
     std::string texto;
+    
+    /**
+     * @brief Define o texto a ser exibido no botão.
+     *
+     * @param txt O novo texto.
+     */
+    void setTexto(const std::string& txt) { texto = txt; }
     
     /**
      * @brief Define o caminho da imagem (útil para recarregar).

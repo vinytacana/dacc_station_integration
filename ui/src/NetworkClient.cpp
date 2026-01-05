@@ -77,6 +77,9 @@ void NetworkClient::sendStartGame(const std::string& id, const std::string& path
         socket_fd_ = -1;
     } else {
         std::cout << "[NetworkClient] Start command sent for: " << id << std::endl;
+        // Assume sucesso imediato para a UI (Optimistic Update)
+        isRunning_ = true;
+        runningGameId_ = id;
     }
 }
 
@@ -92,9 +95,18 @@ void NetworkClient::checkEvents() {
         
         try {
             auto j = json::parse(buffer);
-            if (j.contains("event") && j["event"] == "game_finished") {
-                std::cout << ">>> JOGO TERMINOU! PID: " << j.value("pid", -1) << " <<<" << std::endl;
-                // Aqui poderíamos disparar um callback para a UI atualizar
+            if (j.contains("event")) {
+                std::string evt = j["event"];
+                
+                if (evt == "game_finished" || evt == "process_exited") {
+                    std::cout << ">>> JOGO TERMINOU! <<<" << std::endl;
+                    isRunning_ = false;
+                    runningGameId_ = "";
+                }
+                else if (evt == "game_started") {
+                     isRunning_ = true;
+                     if(j.contains("id")) runningGameId_ = j["id"];
+                }
             }
         } catch (const std::exception& e) {
             std::cerr << "[NetworkClient] JSON parse error: " << e.what() << std::endl;

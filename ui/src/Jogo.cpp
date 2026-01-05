@@ -18,7 +18,7 @@ Jogo::Jogo(const std::string& nome,
            const std::string& capa,
            const std::vector<std::string>& capturas,
            const std::string& executavel)
-    : nome(nome), descricao(descricao), codigo(codigo), capa(capa), capturas(capturas), executavel(executavel)
+    : nome(nome), descricao(descricao), codigo(codigo), capa(capa), capturas(capturas), executavel(executavel), id("")
 {
 }
 
@@ -42,21 +42,15 @@ std::string Jogo::getDescricao() const
     return descricao;
 }
 
-/**
- * @brief Obtém o código (ou categorias) do jogo.
- * @return O código do jogo.
- */
-std::string Jogo::getCodigo() const
-{
+std::string Jogo::getCodigo() const {
     return codigo;
 }
 
-/**
- * @brief Obtém o caminho da imagem de capa (principal).
- * @return O caminho do arquivo de capa.
- */
-std::string Jogo::getCapa() const
-{
+std::string Jogo::getId() const {
+    return id;
+}
+
+std::string Jogo::getCapa() const {
     return capa;
 }
 
@@ -119,21 +113,15 @@ void Jogo::setDescricao(const std::string& descricao)
     this->descricao = descricao;
 }
 
-/**
- * @brief Define o código (ou categorias) do jogo.
- * @param codigo O novo código.
- */
-void Jogo::setCodigo(const std::string& codigo)
-{
+void Jogo::setCodigo(const std::string& codigo) {
     this->codigo = codigo;
 }
 
-/**
- * @brief Define o caminho da imagem de capa.
- * @param capa O novo caminho da capa.
- */
-void Jogo::setCapa(const std::string& capa)
-{
+void Jogo::setId(const std::string& id) {
+    this->id = id;
+}
+
+void Jogo::setCapa(const std::string& capa) {
     this->capa = capa;
 }
 

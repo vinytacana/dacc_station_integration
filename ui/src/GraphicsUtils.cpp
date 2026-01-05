@@ -1,9 +1,11 @@
 #include "GraphicsUtils.hpp"
+#include "SystemStatus.hpp" // Adicionado TODO 08
 #include <ctime>
 #include <iomanip>
 #include <sstream>
 
 namespace MeuProjeto {
+// ... (keep drawRoundedRect and others)
 
 void GraphicsUtils::drawRoundedRect(SDL_Renderer* renderer, const SDL_Rect& rect, int radius, SDL_Color color) {
     roundedBoxRGBA(renderer, 
@@ -59,11 +61,8 @@ void GraphicsUtils::drawOverlay(SDL_Renderer* renderer, int width, int height, i
 }
 
 void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TTF_Font* font) {
-    // 1. Time
-    std::time_t t = std::time(nullptr);
-    std::tm* now = std::localtime(&t);
-    char buf[16];
-    std::strftime(buf, sizeof(buf), "%H:%M", now);
+    // 1. Obter dados do SystemStatus (TODO 05/08)
+    SystemData data = SystemStatus::getInstance().getCachedData();
     
     if (!font) return;
 
@@ -94,7 +93,7 @@ void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TT
     }
 
     // --- CLOCK ---
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, buf, white);
+    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, data.currentTime.c_str(), white);
     if(surf) {
         SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
         // Position left of Avatar (AvatarX - Radius - Padding - TextWidth)
@@ -117,22 +116,27 @@ void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TT
         roundedRectangleRGBA(renderer, batX, batY, batX + batW, batY + batH, 4, 200, 200, 200, 255);
         // Tip
         boxRGBA(renderer, batX + batW, batY + 6, batX + batW + 4, batY + batH - 6, 200, 200, 200, 255);
-        // Fill (Static 85% for demo)
-        boxRGBA(renderer, batX + 3, batY + 3, batX + (int)(batW * 0.85), batY + batH - 3, 255, 255, 255, 255);
+        // Fill (Dynamic)
+        int fillW = (int)(batW * (data.batteryLevel / 100.0f));
+        if(fillW > batW - 6) fillW = batW - 6;
+        if(fillW < 0) fillW = 0;
+        
+        boxRGBA(renderer, batX + 3, batY + 3, batX + 3 + fillW, batY + batH - 3, 255, 255, 255, 255);
 
         // --- WIFI (Left of Battery) ---
-        int wifiX = batX - 40;
-        int wifiY = batY + 18; // Base of the arc
-        
-        // Simple Arcs
-        for(int r = 4; r <= 16; r += 6) {
-             arcRGBA(renderer, wifiX, wifiY, r, 225, 315, 255, 255, 255, 255);
-             if(r > 4) arcRGBA(renderer, wifiX, wifiY, r-1, 225, 315, 255, 255, 255, 255); // Thickness
+        if (data.wifiConnected) {
+            int wifiX = batX - 40;
+            int wifiY = batY + 18; // Base of the arc
+            
+            // Simple Arcs
+            for(int r = 4; r <= 16; r += 6) {
+                 arcRGBA(renderer, wifiX, wifiY, r, 225, 315, 255, 255, 255, 255);
+                 if(r > 4) arcRGBA(renderer, wifiX, wifiY, r-1, 225, 315, 255, 255, 255, 255); // Thickness
+            }
+            filledCircleRGBA(renderer, wifiX, wifiY, 2, 255, 255, 255, 255);
         }
-        filledCircleRGBA(renderer, wifiX, wifiY, 2, 255, 255, 255, 255);
     }
 }
-
 void GraphicsUtils::drawBottomNavHints(SDL_Renderer* renderer, int screenWidth, int screenHeight, TTF_Font* font) {
     if (!font) return;
 

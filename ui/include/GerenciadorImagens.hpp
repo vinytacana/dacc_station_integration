@@ -39,6 +39,21 @@ public:
     SDL_Texture* carregar(SDL_Renderer* renderer, const std::string& caminho);
 
     /**
+     * @brief Recupera a textura de "Hero Background" (Wallpaper) para um jogo específico.
+     * Implementa lógica de fallback:
+     * 1. Tenta /dacc/games/[ID]/assets/hero_bg.jpg
+     * 2. Tenta /dacc/games/[ID]/assets/cover_portrait.jpg
+     * 3. Retorna textura de placeholder.
+     */
+    SDL_Texture* getWallpaper(SDL_Renderer* renderer, const std::string& jogoId);
+
+    /**
+     * @brief Recupera a textura de "Capa" (Portrait) para um jogo específico.
+     * Implementa lógica de fallback similar.
+     */
+    SDL_Texture* getCapa(SDL_Renderer* renderer, const std::string& jogoId);
+
+    /**
      * @brief Libera (destrói) todas as texturas armazenadas no cache.
      */
     void liberarTudo();

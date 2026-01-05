@@ -132,7 +132,25 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                 }
                 
                 // Adicionar jogo ao gerenciador após coletar todos os campos
-                gerenciador.adicionarJogo(Jogo(nome, descricao, codigo, capa, capturas, executavel));
+                {
+                    Jogo novoJogo(nome, descricao, codigo, capa, capturas, executavel);
+                    
+                    // Extrair ID do nome do arquivo (ex: "assets/data/jogo1.txt" -> "jogo1")
+                    string id = caminho;
+                    // Remove diretorio
+                    size_t lastSlash = id.find_last_of("/\\");
+                    if (lastSlash != string::npos) {
+                        id = id.substr(lastSlash + 1);
+                    }
+                    // Remove extensao
+                    size_t lastDot = id.find_last_of(".");
+                    if (lastDot != string::npos) {
+                        id = id.substr(0, lastDot);
+                    }
+                    novoJogo.setId(id);
+                    
+                    gerenciador.adicionarJogo(novoJogo);
+                }
                 // Limpar variáveis para o próximo jogo (opcional, mas boa prática se houver bugs no arquivo)
                 executavel = ""; 
                 break;

@@ -358,3 +358,11 @@ bool Botao::contemPonto(int x, int y) {
     
     return contem;
 }
+
+void Botao::setSelecionado(bool selecionado) {
+    this->hover = selecionado;
+}
+
+bool Botao::estaSelecionado() const {
+    return this->hover;
+}

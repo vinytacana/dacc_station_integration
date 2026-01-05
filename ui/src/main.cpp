@@ -14,6 +14,7 @@
 #include "Theme.hpp"
 #include "JanelaJogo.hpp"
 #include "NetworkClient.hpp"
+#include "SystemStatus.hpp"
 
 using namespace MeuProjeto;
 using namespace std;
@@ -92,6 +93,7 @@ int main(int argc, char* argv[]) {
 
         // --- B. ATUALIZAÇÃO E COMUNICAÇÃO ---
         NetworkClient::getInstance().checkEvents();
+        SystemStatus::getInstance().update();
 
         // --- C. RENDERIZAÇÃO ---
         SDL_RenderClear(renderer);

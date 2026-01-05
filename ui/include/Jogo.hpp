@@ -55,6 +55,12 @@ public:
     std::string getCodigo() const;
 
     /**
+     * @brief Obtém o ID único do jogo (geralmente derivado do nome do arquivo ou pasta).
+     * @return O ID do jogo.
+     */
+    std::string getId() const;
+
+    /**
      * @brief Obtém o caminho da imagem de capa (principal).
      * @return O caminho do arquivo de capa.
      */
@@ -98,6 +104,12 @@ public:
     void setCodigo(const std::string& codigo);
 
     /**
+     * @brief Define o ID único do jogo.
+     * @param id O novo ID.
+     */
+    void setId(const std::string& id);
+
+    /**
      * @brief Define o caminho da imagem de capa.
      * @param capa O novo caminho da capa.
      */
@@ -136,6 +148,11 @@ private:
      * @brief Código de identificação ou categorias.
      */
     std::string codigo;
+
+    /**
+     * @brief Identificador único do jogo (slug).
+     */
+    std::string id;
 
     /**
      * @brief Caminho para a imagem principal (capa).

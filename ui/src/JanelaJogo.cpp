@@ -44,18 +44,34 @@ bool JanelaJogo::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
 
     int totalJogos = static_cast<int>(listaJogos.size());
 
-    // 1. Navegação por Teclado (Setas)
+    // 1. Navegação por Teclado
     if (evento.type == SDL_KEYDOWN) {
         switch (evento.key.keysym.sym) {
             case SDLK_RIGHT:
-                indiceSelecionado = (indiceSelecionado + 1) % totalJogos;
+                if (focoAtual == Foco::CARROSSEL) {
+                    indiceSelecionado = (indiceSelecionado + 1) % totalJogos;
+                }
                 break;
             case SDLK_LEFT:
-                indiceSelecionado = (indiceSelecionado - 1 + totalJogos) % totalJogos;
+                if (focoAtual == Foco::CARROSSEL) {
+                    indiceSelecionado = (indiceSelecionado - 1 + totalJogos) % totalJogos;
+                }
+                break;
+            case SDLK_UP:
+                // Sobe para ações (Botão Jogar)
+                focoAtual = Foco::ACOES;
+                botaoJogar.setSelecionado(true);
+                break;
+            case SDLK_DOWN:
+                // Desce para carrossel
+                focoAtual = Foco::CARROSSEL;
+                botaoJogar.setSelecionado(false);
                 break;
             case SDLK_RETURN: 
             case SDLK_KP_ENTER:
-                executarJogo();
+                if (focoAtual == Foco::CARROSSEL || (focoAtual == Foco::ACOES && botaoJogar.estaSelecionado())) {
+                     executarJogo();
+                }
                 break;
             case SDLK_ESCAPE:
                 return true; // Sinaliza para fechar a aplicação
@@ -73,14 +89,20 @@ bool JanelaJogo::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
 }
 
 void JanelaJogo::executarJogo() {
+    // Bloquear se já houver algo rodando
+    if (NetworkClient::getInstance().isGameRunning()) {
+        std::cout << "[LAUNCHER] Bloqueado: Já existe um processo ativo." << std::endl;
+        return;
+    }
+
     Jogo* jogoAtual = gerenciadorJogos.obterJogoPorIndice(indiceSelecionado);
     if (!jogoAtual) return;
 
-    std::cout << "[LAUNCHER] Iniciando: " << jogoAtual->getNome() << std::endl;
+    std::cout << "[LAUNCHER] Iniciando: " << jogoAtual->getNome() << " (ID: " << jogoAtual->getId() << ")" << std::endl;
 
     // Envia comando via NetworkClient para o Process Manager
     NetworkClient::getInstance().sendStartGame(
-        jogoAtual->getNome(),
+        jogoAtual->getId(), // Passar ID (TODO 09)
         jogoAtual->getExecutavel(), 
         1280, 720, 60, false
     );
@@ -112,6 +134,22 @@ void JanelaJogo::desenhar(int offsetX, int offsetY) {
     desenharCarrossel(listaJogos);
 
     // --- 4. BOTÕES ---
+    
+    // Atualizar Estado do Botão (TODO 09)
+    if (NetworkClient::getInstance().isGameRunning()) {
+        // Se há um jogo rodando...
+        std::string runningId = NetworkClient::getInstance().getRunningGameId();
+        
+        // Verifica se é o jogo selecionado
+        if (jogoAtual->getId() == runningId) {
+            botaoJogar.setTexto("EM EXECUÇÃO"); 
+        } else {
+            botaoJogar.setTexto("BLOQUEADO"); // Ou "JÁ EXISTE UM JOGO"
+        }
+    } else {
+        botaoJogar.setTexto("JOGAR (Enter)");
+    }
+    
     botaoJogar.desenhar(renderer, offsetX, offsetY);
 
     // --- 5. SYSTEM UI (Top/Bottom Bars) ---
@@ -130,17 +168,51 @@ void JanelaJogo::desenhar(int offsetX, int offsetY) {
 }
 
 void JanelaJogo::desenharHero(const Jogo& jogo) {
-    SDL_Texture* tex = gerImg.carregar(renderer, jogo.getCapa().c_str());
-    
-    if (tex) {
-        GraphicsUtils::drawTextureCover(renderer, tex, areaJanela, 255);
+    // Detectar mudança de seleção para iniciar transição
+    if (indiceSelecionado != lastIndice) {
+        lastIndice = indiceSelecionado;
+        
+        // O antigo "Proximo" vira o "Atual" (fundo)
+        if (bgProximo) {
+            bgAtual = bgProximo;
+        }
+        
+        // Carrega o novo "Proximo"
+        bgProximo = gerImg.getWallpaper(renderer, jogo.getId());
+        
+        // Se não tinha nada antes (primeiro frame), define imediatamente
+        if (!bgAtual) bgAtual = bgProximo;
+        
+        // Reseta transição
+        transitionAlpha = 0.0f;
+    }
+
+    // Atualizar Alpha (Animação) - Aprox. 60 FPS
+    if (transitionAlpha < 255.0f) {
+        transitionAlpha += 15.0f; // Velocidade do fade
+        if (transitionAlpha > 255.0f) transitionAlpha = 255.0f;
+    }
+
+    // 1. Desenhar Fundo (Anterior/Base)
+    if (bgAtual) {
+        SDL_SetTextureAlphaMod(bgAtual, 255);
+        SDL_RenderCopy(renderer, bgAtual, NULL, NULL);
     } else {
-        SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
+        // Fallback cor sólida se não houver imagem nenhuma
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
         SDL_RenderFillRect(renderer, &areaJanela);
     }
 
-    // Overlay Escuro para legibilidade
-    GraphicsUtils::drawOverlay(renderer, areaJanela.w, areaJanela.h, 210); 
+    // 2. Desenhar Novo Fundo (Fade In)
+    if (bgProximo && bgProximo != bgAtual) {
+        SDL_SetTextureAlphaMod(bgProximo, (Uint8)transitionAlpha);
+        SDL_RenderCopy(renderer, bgProximo, NULL, NULL);
+        // Resetar alpha para não afetar outros usos
+        SDL_SetTextureAlphaMod(bgProximo, 255); 
+    }
+
+    // Overlay Escuro para legibilidade (Alpha 200 conforme TODO 02)
+    GraphicsUtils::drawOverlay(renderer, areaJanela.w, areaJanela.h, 200); 
 }
 
 void JanelaJogo::desenharInfo(const Jogo& jogo) {
@@ -168,57 +240,74 @@ void JanelaJogo::desenharInfo(const Jogo& jogo) {
 
     // Descrição
     std::string desc = jogo.getDescricao();
-    // A função desenharTexto do Utils não faz wrap automático por padrão na assinatura simples.
-    // Mas o GraphicsUtils::drawSystemTopBar etc usam TTF. 
-    // Para a descrição, vamos usar um wrap simples ou apenas desenhar.
-    MeuProjeto::desenharTexto(
-        renderer, 
-        desc, 
-        areaDescricao.x, 
-        areaDescricao.y, 
-        Theme::TEXT_SECONDARY, 
-        24, 
-        TipoFonte::NORMAL
-    );
+    if (!desc.empty()) {
+        MeuProjeto::desenharTexto(
+            renderer, 
+            desc, 
+            areaDescricao.x, 
+            areaDescricao.y, 
+            Theme::TEXT_SECONDARY, 
+            24, 
+            TipoFonte::NORMAL
+        );
+    }
 }
 
 void JanelaJogo::desenharCarrossel(const std::vector<Jogo>& listaJogos) {
-    int startX = areaFundo.x; // Alinhado com o texto
-    int yPos = CARROSSEL_Y;
-    int total = static_cast<int>(listaJogos.size());
+    int totalJogos = static_cast<int>(listaJogos.size());
+    
+    // Lógica de Câmera (TODO 01)
+    // Queremos que o item selecionado fique na posição X = 100
+    int targetX = 100;
+    int cameraOffsetX = targetX - (indiceSelecionado * (COVER_WIDTH + COVER_SPACING));
 
-    // Desenha uma janela de jogos a partir do selecionado
-    for (int offset = 0; offset < 5; offset++) {
-        int idx = (indiceSelecionado + offset) % total;
+    for (int i = 0; i < totalJogos; i++) {
+        // Calcular posição absoluta X deste item baseado na câmera
+        int drawX = (i * (COVER_WIDTH + COVER_SPACING)) + cameraOffsetX;
+
+        // Culling: Se estiver totalmente fora da tela, pule
+        if (drawX + COVER_WIDTH < 0 || drawX > SCREEN_WIDTH) {
+            continue;
+        }
+
+        SDL_Rect destRect = {drawX, CAROUSEL_Y_START, COVER_WIDTH, COVER_HEIGHT};
+
+        // Usar capa oficial ou fallback
+        SDL_Texture* capa = gerImg.getCapa(renderer, listaJogos[i].getId());
         
-        int xPos = startX + (offset * (CARD_LARGURA + CARD_SPACING));
-
-        if (xPos > areaJanela.w) break;
-
-        SDL_Rect destRect = {xPos, yPos, CARD_LARGURA, CARD_ALTURA};
-
-        SDL_Texture* capa = gerImg.carregar(renderer, listaJogos[idx].getCapa().c_str());
         if (capa) {
             SDL_RenderCopy(renderer, capa, NULL, &destRect);
         } else {
-            SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
+            // Placeholder simples se falhar tudo
+            SDL_SetRenderDrawColor(renderer, 60, 60, 60, 255);
             SDL_RenderFillRect(renderer, &destRect);
+            
+            // Borda interna para distinguir placeholders
+            SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
+            SDL_Rect rBorder = {destRect.x+2, destRect.y+2, destRect.w-4, destRect.h-4};
+            SDL_RenderDrawRect(renderer, &rBorder);
         }
 
-        if (offset == 0) {
-            // Selecionado
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            GraphicsUtils::drawRoundedRectOutline(renderer, destRect, 0, {255, 255, 255, 255});
-            // Espessura extra
-            SDL_Rect r2 = {destRect.x-1, destRect.y-1, destRect.w+2, destRect.h+2};
-            SDL_RenderDrawRect(renderer, &r2);
-            SDL_Rect r3 = {destRect.x-2, destRect.y-2, destRect.w+4, destRect.h+4};
-            SDL_RenderDrawRect(renderer, &r3);
+        // Highlight Básico (TODO 04)
+        if (i == indiceSelecionado) {
+             // Se o foco estiver nas ações (botão Jogar), o carrossel fica "inativo" (cinza)
+             // Se o foco estiver no carrossel, borda branca brilhante
+             if (focoAtual == Foco::CARROSSEL) {
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // Branco ativo
+             } else {
+                SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255); // Cinza inativo
+             }
+
+             // Borda grossa (4px)
+             for(int w=0; w<4; w++) {
+                 SDL_Rect outline = {destRect.x - w, destRect.y - w, destRect.w + (w*2), destRect.h + (w*2)};
+                 SDL_RenderDrawRect(renderer, &outline);
+             }
         } else {
-            // Não selecionado (Escurecido)
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
-            SDL_RenderFillRect(renderer, &destRect);
+             // Dimming para não selecionados
+             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+             SDL_RenderFillRect(renderer, &destRect);
         }
     }
 }
