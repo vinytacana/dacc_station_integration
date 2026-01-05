@@ -1,0 +1,5 @@
+@MINECRAFT
+#Descrição2
+$Acao, Estrategia
+*arquivos/jogo2.jpeg
+%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg

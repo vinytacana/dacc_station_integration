@@ -1,0 +1,5 @@
+@Star Wars 
+#Descrição4
+$Aventura, Esportes
+*arquivos/jogo4.jpeg
+%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg

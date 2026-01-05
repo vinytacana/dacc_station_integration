@@ -1,0 +1,12 @@
+# Compiled Object files
+*.o
+*.obj
+*.exe
+*.out
+*.app
+bin/
+build/
+*.log
+.vscode/
+.DS_Store
+Thumbs.db
