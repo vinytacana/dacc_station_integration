@@ -1,0 +1,7 @@
+@Minecraft
+#Um mundo aberto onde a criatividade não tem limites, permitindo construir, explorar e sobreviver do seu próprio jeito.
+$Acao, Estrategia
+*arquivos/jogo2CapaTelaPrincipal.jpeg.jpeg
+&arquivos/jogo2FundoDestaque.jpeg
++arquivos/jogo2CapaJanelaJogo.jpeg.jpeg
+%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg

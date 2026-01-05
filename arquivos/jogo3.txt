@@ -1,0 +1,7 @@
+@Naruto
+#Uma experiência inspirada no universo ninja, com batalhas intensas, personagens conhecidos e uma narrativa envolvente
+$Casual, Esportes
+*arquivos/jogo3CapaTelaPrincipal.jpeg.jpeg
+&arquivos/jogo3FundoDestaque.jpeg
++arquivos/jogo3CapaJanelaJogo.jpeg.jpeg
+%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg
