@@ -4,9 +4,15 @@
 #include <iostream>
 #include <sstream>
 #include "Utils.hpp"
+#include "Theme.hpp"
+#include "GraphicsUtils.hpp"
+#include "NetworkClient.hpp" // Added NetworkClient
 #include <SDL2/SDL.h>
-// #include <cstdlib> // Para system()
 
+// Removed raw socket headers as they are now encapsulated in NetworkClient
+#include "json.hpp"
+
+using json = nlohmann::json;
 using namespace MeuProjeto;
 
 extern GerenciadorImagens gerImg;
@@ -17,8 +23,9 @@ static GerenciadorFontes gerenciadorFontesJanela;
  * @brief Construtor da Janela de Jogo.
  */
 JanelaJogo::JanelaJogo(SDL_Renderer* renderer, const std::string& nomeJogo, const std::string& imagemPath,
-                       const std::string& descricao, const std::vector<std::string>& capturasPaths)
-    : renderer(renderer), imagemJogo(nullptr), nomeJogo(nomeJogo), descricao(descricao),
+                       const std::string& descricao, const std::vector<std::string>& capturasPaths,
+                       const std::string& pathExecutavel)
+    : renderer(renderer), imagemJogo(nullptr), nomeJogo(nomeJogo), descricao(descricao), pathExecutavel(pathExecutavel),
       botaoJogar(1080, 450, 770, 120, "JOGAR"),
       botaoFechar(1830, 10, 80, 80, "X"),
       capturaIndex(0),
@@ -46,11 +53,20 @@ JanelaJogo::JanelaJogo(SDL_Renderer* renderer, const std::string& nomeJogo, cons
         }
     }
 
-    // Configurar cores dos botões
-    botaoJogar.setCor({59, 59, 61, 255}, {95, 95, 97, 255}, {78, 78, 80, 255});
-    botaoFechar.setCor({200, 20, 20, 255}, {250, 50, 50, 255}, {180, 0, 0, 255});
-    setaEsquerda.setCor({119, 118, 123, 255}, {96, 97, 99, 255}, {131, 131, 133, 255});
-    setaDireita.setCor({119, 118, 123, 255}, {96, 97, 99, 255}, {131, 131, 133, 133});
+    // Configurar cores dos botões usando o THEME
+    // Botão Jogar: Azul Steam (Accent)
+    botaoJogar.setCor(Theme::ACCENT_COLOR, 
+                      {Theme::ACCENT_COLOR.r, Theme::ACCENT_COLOR.g, Theme::ACCENT_COLOR.b, 200}, // Hover mais claro/transparente
+                      {Theme::ACCENT_COLOR.r, Theme::ACCENT_COLOR.g, Theme::ACCENT_COLOR.b, 150}); // Click
+
+    // Botão Fechar: Vermelho Perigo
+    botaoFechar.setCor(Theme::DANGER_COLOR,
+                       {255, 80, 80, 255},
+                       {180, 0, 0, 255});
+
+    // Setas: Neutras
+    setaEsquerda.setCor(Theme::BTN_NORMAL, Theme::BTN_HOVER, Theme::BTN_ACTIVE);
+    setaDireita.setCor(Theme::BTN_NORMAL, Theme::BTN_HOVER, Theme::BTN_ACTIVE);
 
     // Configurar fontes dos botões
     botaoJogar.setFonte(TipoFonte::NEGRITO);
@@ -142,28 +158,18 @@ bool JanelaJogo::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
 void JanelaJogo::executarJogo() {
     std::cout << "[LAUNCHER] Tentando iniciar o jogo: " << nomeJogo << std::endl;
     
-    // --- PONTO DE IMPLEMENTAÇÃO ---
-    // A lógica de execução depende da sua plataforma e como os jogos estão
-    // armazenados.
-    
-    /*
-    Exemplo de execução de comando de sistema (usando <cstdlib>):
-    
-    std::string comando = "caminho/para/executavel/" + nomeJogo + ".exe";
-    int resultado = system(comando.c_str());
-    
-    if (resultado != 0) {
-        std::cerr << "[LAUNCHER ERRO] Falha ao executar o comando: " << resultado << std::endl;
+    if (pathExecutavel.empty()) {
+        std::cerr << "[LAUNCHER ERRO] Caminho do executável não definido para " << nomeJogo << std::endl;
+        return;
     }
-    
-    Exemplo de uso de SDL_OpenURL (útil para links de launchers como Steam):
-    
-    std::string steamUrl = "steam://run/APPID_DO_JOGO"; 
-    SDL_OpenURL(steamUrl.c_str());
-    */
-    
-    std::cout << "[LAUNCHER] Jogo '" << nomeJogo << "' seria executado aqui." << std::endl;
-    std::cout << "[LAUNCHER] Implemente a lógica de execução nesta função." << std::endl;
+
+    // Usando NetworkClient (Singleton) para enviar o comando
+    // Por enquanto, hardcoded parameters para Gamescope (podem vir de config futura)
+    NetworkClient::getInstance().sendStartGame(
+        nomeJogo, 
+        pathExecutavel, 
+        1280, 720, 60, false // useGamescope=false inicial
+    );
 }
 
 /**
@@ -171,7 +177,7 @@ void JanelaJogo::executarJogo() {
  */
 void JanelaJogo::desenhar(int offsetX, int offsetY) {
     desenharFundo();
-    desenharTopo();
+    //desenharTopo(); // Topo removido ou integrado ao design limpo
     desenharAreaFundo();
     desenharImagem(offsetX, offsetY);
     desenharDescricao(offsetX, offsetY);
@@ -184,32 +190,44 @@ void JanelaJogo::desenhar(int offsetX, int offsetY) {
 }
 
 /**
- * @brief Desenha o fundo da janela.
+ * @brief Desenha o fundo da janela (Ambient Backdrop).
  */
 void JanelaJogo::desenharFundo() {
-    SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
+    // 1. Preenche com a cor base (caso a imagem falhe)
+    SDL_SetRenderDrawColor(renderer, Theme::BG_PRIMARY.r, Theme::BG_PRIMARY.g, Theme::BG_PRIMARY.b, 255);
     SDL_RenderFillRect(renderer, &areaJanela);
+
+    // 2. Desenha a imagem do jogo esticada no fundo
+    if (imagemJogo) {
+        GraphicsUtils::drawTextureCover(renderer, imagemJogo, areaJanela, 255);
+    }
+
+    // 3. Aplica o overlay escuro (Vidro fumê)
+    // Se tiver imagem, escurece bastante (220/255). Se não, escurece pouco.
+    int overlayAlpha = imagemJogo ? 235 : 50; 
+    GraphicsUtils::drawOverlay(renderer, areaJanela.w, areaJanela.h, overlayAlpha);
 }
 
 /**
  * @brief Desenha o cabeçalho e o nome do jogo.
  */
 void JanelaJogo::desenharTopo() {
-    SDL_SetRenderDrawColor(renderer, 50, 50, 60, 255);
+    // Mantido por compatibilidade, mas idealmente seria removido ou redesenhado
+    SDL_SetRenderDrawColor(renderer, Theme::BG_PANEL.r, Theme::BG_PANEL.g, Theme::BG_PANEL.b, Theme::BG_PANEL.a);
     SDL_RenderFillRect(renderer, &areaTopo);
-    
-    int fontSize = 48;
-    // Posição ajustada para centralização aproximada do título
-    int xPos = 960 - (nomeJogo.length() * 12); 
-    MeuProjeto::desenharTexto(renderer, nomeJogo, xPos, 26, {255, 255, 255, 255}, fontSize, MeuProjeto::TipoFonte::NEGRITO);
 }
 
 /**
  * @brief Desenha a área de fundo do painel principal.
  */
 void JanelaJogo::desenharAreaFundo() {
-    SDL_SetRenderDrawColor(renderer, 50, 50, 60, 255);
-    SDL_RenderFillRect(renderer, &areaFundo);
+    // Retângulo arredondado translúcido para segurar o conteúdo
+    GraphicsUtils::drawRoundedRect(renderer, areaFundo, Theme::RADIUS_LARGE, Theme::BG_PANEL);
+
+    // Nome do jogo desenhado acima/dentro da área
+    int fontSize = 52; // Fonte maior
+    int xPos = areaFundo.x + 30; // Alinhado a esquerda agora, mais moderno
+    MeuProjeto::desenharTexto(renderer, nomeJogo, xPos, areaFundo.y - 30, Theme::TEXT_PRIMARY, fontSize, MeuProjeto::TipoFonte::NEGRITO);
 }
 
 /**
@@ -218,6 +236,8 @@ void JanelaJogo::desenharAreaFundo() {
 void JanelaJogo::desenharImagem(int offsetX, int offsetY) {
     if (imagemJogo) {
         SDL_Rect dst = {areaImagem.x + offsetX, areaImagem.y + offsetY, areaImagem.w, areaImagem.h};
+        // Opcional: Borda na imagem
+        // GraphicsUtils::drawRoundedRectOutline(renderer, dst, 0, Theme::TEXT_SECONDARY);
         SDL_RenderCopy(renderer, imagemJogo, nullptr, &dst);
     }
 }
@@ -227,7 +247,7 @@ void JanelaJogo::desenharImagem(int offsetX, int offsetY) {
  */
 void JanelaJogo::desenharDescricao(int offsetX, int offsetY) {
     int fontSize = 24;
-    int linhaAltura = 30;
+    int linhaAltura = 32; // Mais entrelinha para leitura
     
     int x = areaDescricao.x + offsetX + 10;
     int y = areaDescricao.y + offsetY + 10;
@@ -265,7 +285,7 @@ void JanelaJogo::desenharDescricao(int offsetX, int offsetY) {
         for (const auto& textoLinha : linhasQuebradas) {
             if (y + linhaAltura > areaDescricao.y + areaDescricao.h) break;
          
-            MeuProjeto::desenharTexto(renderer, textoLinha, x, y, {200, 200, 200, 255}, fontSize, MeuProjeto::TipoFonte::NORMAL);
+            MeuProjeto::desenharTexto(renderer, textoLinha, x, y, Theme::TEXT_PRIMARY, fontSize, MeuProjeto::TipoFonte::NORMAL);
             y += linhaAltura;
         }
     }
@@ -277,13 +297,12 @@ void JanelaJogo::desenharDescricao(int offsetX, int offsetY) {
 void JanelaJogo::desenharCapturas(int offsetX, int offsetY) {
     int numCapturas = static_cast<int>(capturasTexturas.size());
 
-    // Fundo cinza
-    SDL_Rect bgCarrossel = {areaFundoCapturas.x + offsetX, areaFundoCapturas.y + offsetY, areaFundoCapturas.w, areaFundoCapturas.h};
-    SDL_SetRenderDrawColor(renderer, 50, 50, 60, 255);
-    SDL_RenderFillRect(renderer, &bgCarrossel);
+    // Fundo do Carrossel (Arredondado agora)
+    SDL_Rect bgCarrossel = {areaFundoCapturas.x + offsetX + 20, areaFundoCapturas.y + offsetY, areaFundoCapturas.w - 40, areaFundoCapturas.h};
+    GraphicsUtils::drawRoundedRect(renderer, bgCarrossel, Theme::RADIUS_MEDIUM, Theme::BG_PANEL);
 
     // Título
-    MeuProjeto::desenharTexto(renderer, "Capturas de Tela", 50, areaFundoCapturas.y + 10, {255, 255, 255, 255}, 28 ,MeuProjeto::TipoFonte::NEGRITO);
+    MeuProjeto::desenharTexto(renderer, "Capturas de Tela", 60, areaFundoCapturas.y + 15, Theme::TEXT_SECONDARY, 28 ,MeuProjeto::TipoFonte::NEGRITO);
     
     if (numCapturas == 0) {
         return;
@@ -317,6 +336,9 @@ void JanelaJogo::desenharCapturas(int offsetX, int offsetY) {
             };
             
             SDL_RenderCopy(renderer, capturasTexturas[i], nullptr, &dst);
+            
+            // Borda fina na screenshot
+            // GraphicsUtils::drawRoundedRectOutline(renderer, dst, 0, {255,255,255,50});
         }
     }
     

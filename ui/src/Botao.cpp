@@ -3,6 +3,8 @@
 #include "GerenciadorFontes.hpp"
 #include "GerenciadorImagens.hpp"
 #include "Utils.hpp" 
+#include "Theme.hpp"
+#include "GraphicsUtils.hpp"
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL2_gfxPrimitives.h> // Para filledCircleRGBA
@@ -194,7 +196,6 @@ void Botao::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
     // Desenha o overlay de cor PRIMEIRO (antes da imagem)
     if (corAtual.a > 0) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
         
         if (isRound) {
             // Desenha um círculo preenchido
@@ -202,9 +203,19 @@ void Botao::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
             int centroY = adjustedArea.y + adjustedArea.h / 2;
             int raio = (adjustedArea.w < adjustedArea.h) ? (adjustedArea.w / 2) : (adjustedArea.h / 2);
             filledCircleRGBA(renderer, centroX, centroY, raio, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
+            
+            // Highlight circular se hover
+            if (hover) {
+                aacircleRGBA(renderer, centroX, centroY, raio, 255, 255, 255, 255);
+            }
         } else {
-            // Desenha um retângulo preenchido
-            SDL_RenderFillRect(renderer, &adjustedArea);
+            // Desenha um retângulo ARREDONDADO
+            GraphicsUtils::drawRoundedRect(renderer, adjustedArea, Theme::RADIUS_MEDIUM, corAtual);
+            
+            // Efeito de Borda (Highlight) quando selecionado
+            if (hover) {
+                GraphicsUtils::drawRoundedRectOutline(renderer, adjustedArea, Theme::RADIUS_MEDIUM, {255, 255, 255, 100});
+            }
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }

@@ -1,7 +1,7 @@
-#include "logs/LogManager.hpp"
-#include "logs/ILogWriter.hpp"
-#include "logs/FileWriter.hpp"
-#include "logs/ConsoleWriter.hpp"
+#include "LogManager.hpp"
+#include "ILogWriter.hpp"
+#include "FileWriter.hpp"
+#include "ConsoleWriter.hpp"
 #include "json.hpp"
 
 #include <unistd.h>

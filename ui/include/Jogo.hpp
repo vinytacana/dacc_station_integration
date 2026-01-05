@@ -26,12 +26,14 @@ public:
      * @param codigo O código de identificação ou categorias do jogo.
      * @param capa O caminho para o arquivo da imagem de capa (principal).
      * @param capturas Um vetor de caminhos para os arquivos das capturas de tela adicionais.
+     * @param executavel O caminho para o script ou binário executável do jogo.
      */
     Jogo(const std::string& nome, 
          const std::string& descricao, 
          const std::string& codigo, 
          const std::string& capa,
-         const std::vector<std::string>& capturas);
+         const std::vector<std::string>& capturas,
+         const std::string& executavel = "");
 
     // --- Getters ---
     /**
@@ -63,6 +65,12 @@ public:
      * @return Um vetor de caminhos das capturas.
      */
     std::vector<std::string> getCapturas() const;
+
+    /**
+     * @brief Obtém o caminho do executável do jogo.
+     * @return O caminho do script ou binário.
+     */
+    std::string getExecutavel() const;
 
     /**
      * @brief Obtém todos os caminhos de imagem (capa seguida pelas capturas) para compatibilidade.
@@ -102,6 +110,12 @@ public:
     void setCapturas(const std::vector<std::string>& capturas);
 
     /**
+     * @brief Define o caminho do executável.
+     * @param executavel O novo caminho.
+     */
+    void setExecutavel(const std::string& executavel);
+
+    /**
      * @brief Define todas as imagens. A primeira imagem se torna a capa e o resto as capturas.
      * @param imagens O vetor contendo todos os caminhos de imagem.
      */
@@ -132,6 +146,11 @@ private:
      * @brief Vetor de caminhos para imagens secundárias (capturas de tela).
      */
     std::vector<std::string> capturas;
+
+    /**
+     * @brief Caminho para o executável (script .sh ou binário).
+     */
+    std::string executavel;
 };
 
 } // namespace MeuProjeto

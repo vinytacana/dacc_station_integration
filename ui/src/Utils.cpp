@@ -12,13 +12,13 @@ namespace MeuProjeto {
  * @brief Caminho para o arquivo da fonte Normal/Principal.
  */
 std::string ConfigFontes::FONTE_NORMAL = 
-    "Fontes/Garet-Book.ttf";
+    "assets/fonts/Garet-Book.ttf";
 
 /**
  * @brief Caminho para o arquivo da fonte Negrito/Secundária.
  */
 std::string ConfigFontes::FONTE_NEGRITO = 
-    "Fontes/Garet-Heavy.ttf";
+    "assets/fonts/Garet-Heavy.ttf";
 
 
 /**

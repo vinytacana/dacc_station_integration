@@ -53,6 +53,10 @@ int main(){
             // Tenta um nível acima se estiver rodando de bin/
             config_file.open("../config.json");
         }
+        if (!config_file.is_open()) {
+            // Tenta no diretório do módulo se estiver rodando da raiz
+            config_file.open("process-manager/config.json");
+        }
         
         if (!config_file.is_open()) {
             throw std::runtime_error("Could not open config.json");
@@ -80,26 +84,6 @@ int main(){
         composite_logger->log("Starting Process Manager...");
         
         ProcessManager pm(std::move(composite_logger));
-        
-        // Exemplo de aplicação (substituindo a antiga classe 'Game')
-        // ID, Caminho do Executável, Tipo
-        ApplicationDefinition snake_game(
-            "snake_game_01", 
-            "/home/feliph/game_scripts/run_snake.sh", 
-            "native"
-        );
-        
-        // Validação básica antes de iniciar
-        if (pm.isAppValid(snake_game)) {
-            pid_t pid = pm.startApplication(snake_game);
-            if (pid > 0) {
-                 std::cout << "App started successfully with PID: " << pid << std::endl;
-            } else {
-                 std::cerr << "Failed to start the app." << std::endl;
-            }
-        } else {
-            std::cerr << "Application definition is invalid." << std::endl;
-        }
 
         std::cout << "\n>>> Process Manager is active. Press Ctrl+C to exit." << std::endl;
         

@@ -2,6 +2,8 @@
 
 #include <sys/epoll.h> 
 #include <sys/signalfd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <iostream>
 #include <vector>
@@ -9,13 +11,16 @@
 #include <thread>
 #include <atomic>
 #include <unordered_map>
+#include <set>
 #include <string>
 #include <future> 
 #include <memory>
+#include <mutex>
 
 #include "ILogger.hpp"
 
 #define MAX_EVENTS 10
+#define SOCKET_PATH "/tmp/gameman.sock"
 
 class ApplicationDefinition;
 
@@ -27,6 +32,7 @@ private:
     std::unique_ptr<ILogger> logger_;   
 
     std::unordered_map<pid_t, TimePoint> running_processes_;
+    std::set<int> connected_clients_;
     std::mutex processes_mutex_;
 
     std::promise<void> ready_promise;
@@ -35,9 +41,16 @@ private:
     
     int epoll_fd_;
     int signal_fd_;
+    int server_socket_fd_;
 
     void eventLoop();
     void handleChildSignal();
+    std::vector<std::string> buildCommand(const ApplicationDefinition& app);
+    
+    // Novas funções para IPC
+    void setupServerSocket();
+    void handleNewConnection();
+    void handleClientMessage(int client_fd);
 
 public:
     explicit ProcessManager(std::unique_ptr<ILogger> logger);
@@ -55,6 +68,15 @@ private:
     std::string type_;
     
 public:
+    // Graphics Configuration
+    int renderWidth = 1280;
+    int renderHeight = 720;
+    int outputWidth = 0;   // 0 = Auto
+    int outputHeight = 0;  // 0 = Auto
+    int refreshRate = 60;
+    bool useGamescope = false;
+    bool fullscreen = true;
+
     ApplicationDefinition(std::string id, const char* path, std::string type) : 
         id_{std::move(id)}, executable_path_{path}, type_{std::move(type)} { }
 

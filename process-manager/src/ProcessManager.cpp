@@ -6,6 +6,7 @@
 #include <sys/signalfd.h> 
 #include <signal.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -14,6 +15,9 @@
 #include <stdexcept>
 #include <thread>
 
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 ProcessManager::ProcessManager(std::unique_ptr<ILogger> logger) : logger_{std::move(logger)} {
 
@@ -55,6 +59,9 @@ ProcessManager::ProcessManager(std::unique_ptr<ILogger> logger) : logger_{std::m
         throw std::runtime_error("Failed to add signalfd to epoll");
     }
 
+    // Configurar Socket do Servidor
+    setupServerSocket();
+
     std::future<void> ready_future = ready_promise.get_future();
     try {
         event_loop_thread_ = std::thread(&ProcessManager::eventLoop, this);
@@ -87,6 +94,10 @@ ProcessManager::~ProcessManager() {
     if (signal_fd_ != -1) {
         close(signal_fd_);
     }
+    if (server_socket_fd_ != -1) {
+        close(server_socket_fd_);
+        unlink(SOCKET_PATH);
+    }
     if (logger_) logger_->log("ProcessManager shut down cleanly.");
 }
 
@@ -107,9 +118,14 @@ void ProcessManager::eventLoop() {
         }
 
         for (int i = 0; i < n_events; ++i) {
-            if (events[i].data.fd == signal_fd_) {
+            int current_fd = events[i].data.fd;
+            if (current_fd == signal_fd_) {
                 if (logger_) logger_->log("received signal on signal_fd. Handling child signal");
                 handleChildSignal();
+            } else if (current_fd == server_socket_fd_) {
+                handleNewConnection();
+            } else {
+                handleClientMessage(current_fd);
             }
         }
     }
@@ -139,6 +155,17 @@ void ProcessManager::handleChildSignal() {
                 logger_->log("Total execution time: " + std::to_string(duration.count()) + " seconds.");
             }
             
+            // Notify connected clients
+            json response;
+            response["event"] = "game_finished";
+            response["pid"] = child_pid;
+            response["status"] = status;
+            
+            std::string msg = response.dump();
+            for (int client_fd : connected_clients_) {
+                send(client_fd, msg.c_str(), msg.length(), MSG_NOSIGNAL);
+            }
+
             running_processes_.erase(it);
         }
         else{
@@ -188,13 +215,20 @@ pid_t ProcessManager::startApplication(ApplicationDefinition& app){
     
     if (child_pid == 0){
         // Child process
-        // execlp espera (file, arg0, arg1, ..., NULL)
-        // arg0 deve ser o nome do arquivo sendo executado por convenção
-        execlp(app.getPath().c_str(), app.getId().c_str(), (char *) NULL);
+        std::vector<std::string> argsVector = buildCommand(app);
+
+        // Convert std::vector<std::string> to char* const*
+        std::vector<char*> execArgs;
+        for (const auto& arg : argsVector) {
+            execArgs.push_back(const_cast<char*>(arg.c_str()));
+        }
+        execArgs.push_back(nullptr); 
+
+        // Execute
+        execvp(execArgs[0], execArgs.data());
         
-        // Se execlp retornar, houve erro.
-        // Como o logger não é fork-safe (sockets/fd), melhor usar stderr ou exit direto
-        std::cerr << "CRITICAL: execlp failed for " << app.getPath() << ": " << strerror(errno) << std::endl;
+        // Se execvp retornar, houve erro.
+        std::cerr << "CRITICAL: execvp failed for " << app.getPath() << ": " << strerror(errno) << std::endl;
         _exit(EXIT_FAILURE);
         return -1; // Não alcançado
     }
@@ -210,7 +244,150 @@ pid_t ProcessManager::startApplication(ApplicationDefinition& app){
         logger_->log("App " + app.getId() + " started successfully");
         logger_->log("PID=" + std::to_string(child_pid));
     }
-    
+        
     return child_pid;
-}   
+}
 
+std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinition& app) {
+    std::vector<std::string> args;
+
+    if (app.useGamescope) {
+        args.push_back("gamescope");
+        
+        // Resolução Interna
+        args.push_back("-w");
+        args.push_back(std::to_string(app.renderWidth));
+        args.push_back("-h");
+        args.push_back(std::to_string(app.renderHeight));
+
+        // Resolução de Saída
+        if (app.outputWidth > 0 && app.outputHeight > 0) {
+            args.push_back("-W");
+            args.push_back(std::to_string(app.outputWidth));
+            args.push_back("-H");
+            args.push_back(std::to_string(app.outputHeight));
+        }
+
+        // Taxa de Atualização
+        args.push_back("-r");
+        args.push_back(std::to_string(app.refreshRate));
+
+        // Fullscreen
+        if (app.fullscreen) {
+            args.push_back("-f");
+        }
+
+        // Separador
+        args.push_back("--");
+    }
+
+    // O comando do jogo (pode ser um script sh)
+    // Para simplificar, assumimos que o path é executável diretamente.
+    // Se for um script que não é executável (+x), precisaria chamar "sh" ou "bash" antes.
+    // Por enquanto, confiamos no shebang #!/bin/bash
+    args.push_back(app.getPath());
+    
+    return args;
+}
+    
+    void ProcessManager::setupServerSocket() {
+        server_socket_fd_ = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        if (server_socket_fd_ == -1) {
+            throw std::runtime_error("Failed to create server socket: " + std::string(strerror(errno)));
+        }
+    
+        struct sockaddr_un addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
+    
+        unlink(SOCKET_PATH); // Remover se já existir
+    
+        if (bind(server_socket_fd_, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+            close(server_socket_fd_);
+            throw std::runtime_error("Failed to bind server socket: " + std::string(strerror(errno)));
+        }
+    
+        if (listen(server_socket_fd_, 5) == -1) {
+            close(server_socket_fd_);
+            throw std::runtime_error("Failed to listen on server socket: " + std::string(strerror(errno)));
+        }
+    
+        epoll_event ev{};
+        ev.events = EPOLLIN;
+        ev.data.fd = server_socket_fd_;
+        if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, server_socket_fd_, &ev) == -1) {
+            close(server_socket_fd_);
+            throw std::runtime_error("Failed to add server socket to epoll: " + std::string(strerror(errno)));
+        }
+    
+        if (logger_) logger_->log("Server socket setup successfully at " + std::string(SOCKET_PATH));
+    }
+    
+    void ProcessManager::handleNewConnection() {
+        int client_fd = accept4(server_socket_fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        if (client_fd == -1) {
+            if (logger_) logger_->log("accept4 failed: " + std::string(strerror(errno)));
+            return;
+        }
+    
+        epoll_event ev{};
+        ev.events = EPOLLIN;
+        ev.data.fd = client_fd;
+        if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) == -1) {
+            if (logger_) logger_->log("Failed to add client socket to epoll: " + std::string(strerror(errno)));
+            close(client_fd);
+            return;
+        }
+        
+        connected_clients_.insert(client_fd);
+        if (logger_) logger_->log("New client connection accepted (FD: " + std::to_string(client_fd) + ")");
+    }
+    
+    void ProcessManager::handleClientMessage(int client_fd) {
+        char buffer[1024];
+        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+    
+        if (bytes_read <= 0) {
+            if (bytes_read == 0) {
+                if (logger_) logger_->log("Client disconnected (FD: " + std::to_string(client_fd) + ")");
+            } else {
+                if (logger_) logger_->log("read failed (FD: " + std::to_string(client_fd) + "): " + std::string(strerror(errno)));
+            }
+            epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
+            connected_clients_.erase(client_fd);
+            close(client_fd);
+            return;
+        }
+    
+        buffer[bytes_read] = '\0';
+        if (logger_) logger_->log("Received message from client: " + std::string(buffer));
+    
+        try {
+            auto j = json::parse(buffer);
+            if (j.contains("action") && j["action"] == "start") {
+                std::string id = j.value("id", "unknown");
+                std::string path = j.value("path", "");
+                
+                if (path.empty()) {
+                    if (logger_) logger_->log("Error: Start action received but path is empty");
+                    return;
+                }
+    
+                ApplicationDefinition app(id, path.c_str(), "game");
+
+                if (j.contains("graphics")) {
+                    auto g = j["graphics"];
+                    app.useGamescope = g.value("use_gamescope", false);
+                    app.renderWidth = g.value("width", 1280);
+                    app.renderHeight = g.value("height", 720);
+                    app.refreshRate = g.value("fps", 60);
+                }
+
+                startApplication(app);
+            }
+        } catch (const json::parse_error& e) {
+            if (logger_) logger_->log("JSON parse error: " + std::string(e.what()));
+        }
+    }
+    

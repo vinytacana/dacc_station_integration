@@ -27,9 +27,11 @@ public:
      * @param imagemPath Caminho para a imagem principal/capa.
      * @param descricao A descrição longa do jogo.
      * @param capturasPaths Vetor de caminhos para as capturas de tela.
+     * @param pathExecutavel Caminho para o script ou binário do jogo.
      */
     JanelaJogo(SDL_Renderer* renderer, const std::string& nomeJogo, const std::string& imagemPath,
-               const std::string& descricao, const std::vector<std::string>& capturasPaths);
+               const std::string& descricao, const std::vector<std::string>& capturasPaths,
+               const std::string& pathExecutavel = "");
 
     /**
      * @brief Destrutor.
@@ -67,6 +69,7 @@ private:
     std::vector<SDL_Texture*> capturasTexturas; ///< Vetor de texturas das capturas de tela.
     std::string nomeJogo; ///< Nome do jogo.
     std::string descricao; ///< Descrição longa do jogo.
+    std::string pathExecutavel; ///< Caminho para o executável.
 
     Botao botaoJogar; ///< Botão principal para iniciar o jogo.
     Botao botaoFechar; ///< Botão 'X' para fechar a janela.

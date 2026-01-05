@@ -1,5 +1,6 @@
 @Guardiões da galaxia
 #Descrição1
 $Aventura, RPG
-*arquivos/jogo1.jpeg
-%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg
+&bin/guardioes.sh
+*assets/textures/jogo1.jpeg
+%assets/textures/captura1.jpeg;assets/textures/captura2.jpeg;assets/textures/captura3.jpeg;assets/textures/captura4.jpeg

@@ -39,6 +39,11 @@ bool Arquivos::salvarJogos(const string& caminho, const vector<Jogo>& jogos)
         arquivo << "#" << jogo.getDescricao() << "\n";
         arquivo << "$" << jogo.getCodigo() << "\n";
         
+        // Executável (campo &)
+        if (!jogo.getExecutavel().empty()) {
+            arquivo << "&" << jogo.getExecutavel() << "\n";
+        }
+        
         // Capa (campo *)
         arquivo << "*" << jogo.getCapa() << "\n";
         
@@ -75,7 +80,7 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
         return false;
     }
 
-    string linha, nome, descricao, codigo, capa;
+    string linha, nome, descricao, codigo, capa, executavel;
     vector<string> capturas;
 
     while (getline(arquivo, linha))
@@ -104,6 +109,11 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                 codigo = conteudo;
                 break;
                 
+            case '&':
+                // Caminho do executável
+                executavel = conteudo;
+                break;
+
             case '*':
                 // Capa principal (apenas 1 imagem)
                 capa = conteudo;
@@ -122,7 +132,9 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                 }
                 
                 // Adicionar jogo ao gerenciador após coletar todos os campos
-                gerenciador.adicionarJogo(Jogo(nome, descricao, codigo, capa, capturas));
+                gerenciador.adicionarJogo(Jogo(nome, descricao, codigo, capa, capturas, executavel));
+                // Limpar variáveis para o próximo jogo (opcional, mas boa prática se houver bugs no arquivo)
+                executavel = ""; 
                 break;
         }
     }

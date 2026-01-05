@@ -20,6 +20,9 @@
 #include "BotaoPesquisa.hpp"
 #include "GerenciadorJogos.hpp" 
 #include "Arquivos.hpp" 
+#include "NetworkClient.hpp" 
+#include "Theme.hpp"        // Added
+#include "GraphicsUtils.hpp" // Added
 
 using namespace MeuProjeto;
 using namespace std;
@@ -75,11 +78,11 @@ void carregarTodosJogos() {
     cout << "A carregar dados dos jogos..." << endl;
     
     vector<string> arquivos = {
-        "arquivos/jogo1.txt",
-        "arquivos/jogo2.txt",
-        "arquivos/jogo3.txt",
-        "arquivos/jogo4.txt",
-        "arquivos/jogo5.txt"
+        "assets/data/jogo1.txt",
+        "assets/data/jogo2.txt",
+        "assets/data/jogo3.txt",
+        "assets/data/jogo4.txt",
+        "assets/data/jogo5.txt"
     };
     
     for (const auto& arquivo : arquivos) {
@@ -106,6 +109,7 @@ JanelaJogo* criarJanelaDeJogoReal(SDL_Renderer* renderer, Jogo* jogo) {
     string desc = jogo->getDescricao();
     string categorias = jogo->getCodigo(); // Ex: "Aventura, RPG"
     string capa = jogo->getCapa();         // Imagem principal (campo *)
+    string exec = jogo->getExecutavel();   // Caminho do executável (campo &)
     vector<string> capturas = jogo->getCapturas(); // Capturas de tela (campo %)
     
     // Formatar descrição para o popup
@@ -114,8 +118,8 @@ JanelaJogo* criarJanelaDeJogoReal(SDL_Renderer* renderer, Jogo* jogo) {
        << "Gênero: [" << categorias << "]\n"
        << "Sinopse:" << desc << "]\n";
     
-    // Usar capa como imagem principal, capturas no carrossel
-    return new JanelaJogo(renderer, nome, capa, ss.str(), capturas);
+    // Usar capa como imagem principal, capturas no carrossel, e passar o executável
+    return new JanelaJogo(renderer, nome, capa, ss.str(), capturas, exec);
 }
 
 // ============================================================================
@@ -299,8 +303,8 @@ int main(int argc, char* argv[]) {
     };
 
     //  Barra Superior (Configurações, Pesquisa e Tema) 
-    Botao config(renderizador, 35, 5, 130, 180, "arquivos/configs2.png", "Configurações", "", false);
-    Botao mudarTema(renderizador, 1730, 27, 120, 120, "arquivos/mudarTema.png", "Mudar Tema", "", false);
+    Botao config(renderizador, 35, 5, 130, 180, "assets/textures/configs2.png", "Configurações", "", false);
+    Botao mudarTema(renderizador, 1730, 27, 120, 120, "assets/textures/mudarTema.png", "Mudar Tema", "", false);
     config.setIsRound(true);
     mudarTema.setIsRound(true);
     config.setCor({0, 0, 0, 0}, {81, 78, 78, 150}, {74, 72, 73, 150}); 
@@ -313,7 +317,7 @@ int main(int argc, char* argv[]) {
     pesquisa.setTamanhoFonteResultados(32);
     pesquisa.setCor({69, 67, 67, 255}, {90, 88, 88, 255}, {75, 74, 74, 255});
     
-    SDL_Texture* lupa = gerImg.carregar(renderizador, "arquivos/lupa_Pesquisa.png");
+    SDL_Texture* lupa = gerImg.carregar(renderizador, "assets/textures/lupa_Pesquisa.png");
     
     //  Categorias (Carrossel) 
     vector<string> nomesCategorias = {"Aventura", "Casual", "Acao", "RPG", "Estrategia", "Esportes"};
@@ -333,13 +337,13 @@ int main(int argc, char* argv[]) {
     setaDireita.setCor({119, 118, 123, 255}, {96, 97, 99, 255}, {131, 131, 133, 255});
     setaEsquerda.setFonte(TipoFonte::NORMAL);
     setaDireita.setFonte(TipoFonte::NORMAL);
-    Forma fundoCategorias(30, 920, 980, 100, COR_RETANGULO, "retangulo");
+    // Forma fundoCategorias(...) removido, desenhado agora via GraphicsUtils
     
     //  Botão Aleatório 
     Botao aleatorio(1200, 920, 600, 100, "Escolher aleatoriamente");
     aleatorio.setCor({59, 59, 61, 255}, {124, 124, 127, 255}, {104, 104, 106, 255});
     aleatorio.setTamanhoFonte(24);
-    SDL_Texture* dado = gerImg.carregar(renderizador, "arquivos/jogoAleatorio.png");
+    SDL_Texture* dado = gerImg.carregar(renderizador, "assets/textures/jogoAleatorio.png");
     
     //  Destaques (Carrossel de Capas) 
     vector<Botao> destaques;
@@ -395,7 +399,14 @@ int main(int argc, char* argv[]) {
     // =========================================================================
     // 6. LOOP PRINCIPAL
     // =========================================================================
+    
+    // Tenta conectar ao ProcessManager na inicialização (opcional)
+    NetworkClient::getInstance().connectToManager();
+
     while (rodando) {
+        // Verificar eventos de rede (IPC com ProcessManager)
+        NetworkClient::getInstance().checkEvents();
+
         //  Atualização de Posição das Categorias (Carrossel Circular) 
         int numCategorias = static_cast<int>(categorias.size());
         int totalWidthCategorias = numCategorias * CATEGORIA_ESPACAMENTO;
@@ -719,20 +730,34 @@ int main(int argc, char* argv[]) {
         
         //  Renderização da Janela Principal 
         
-        // 7.1. Limpa a tela
-        SDL_SetRenderDrawColor(renderizador, COR_FUNDO.r, COR_FUNDO.g, COR_FUNDO.b, COR_FUNDO.a);
+        // 7.1. Limpa a tela com a cor base do tema
+        SDL_SetRenderDrawColor(renderizador, Theme::BG_PRIMARY.r, Theme::BG_PRIMARY.g, Theme::BG_PRIMARY.b, 255);
         SDL_RenderClear(renderizador);
         
-        // 7.2. Fundo dos Destaques (Rotativo)
+        // 7.2. Fundo dos Destaques (Rotativo e Ambiental)
         if (fundoDestaques) {
-            SDL_Rect fundoRect = {30 - scrollX, 180 - scrollY, 1862, 597};
-            SDL_RenderCopy(renderizador, fundoDestaques, NULL, &fundoRect);
+            // Desenha a imagem cobrindo toda a tela (respeitando aspect ratio 'cover')
+            SDL_Rect screenRect = {0, 0, LARGURA_JANELA, ALTURA_JANELA};
+            // Se tiver scroll, a imagem de fundo fica fixa (efeito parallax zero) ou move junto?
+            // Vamos deixar fixa para "ancorar" a experiência visual.
+            GraphicsUtils::drawTextureCover(renderizador, fundoDestaques, screenRect);
+            
+            // Aplica o overlay escuro (Vidro fumê) para garantir legibilidade
+            GraphicsUtils::drawOverlay(renderizador, LARGURA_JANELA, ALTURA_JANELA, 220); // 220/255 = bem escuro
         }
         
         // 7.3. Elementos estáticos/base (Scroll aplicado)
-        fundoCategorias.desenhar(renderizador, -scrollX, -scrollY);
+        
+        // Fundo das Categorias (Painel Arredondado Moderno)
+        SDL_Rect rectFundoCategorias = {30 - scrollX, 920 - scrollY, 980, 100};
+        GraphicsUtils::drawRoundedRect(renderizador, rectFundoCategorias, Theme::RADIUS_MEDIUM, Theme::BG_PANEL);
+
+        // Botão Aleatório (Estilo Card)
+        // aleatorio.desenhar() já usa GraphicsUtils internamente agora, mas podemos desenhar um fundo extra se quiser
         aleatorio.desenhar(renderizador, -scrollX, -scrollY);
-        desenharTexto(renderizador, "Categorias", 40 - scrollX, 950 - scrollY, COR_TEXTO, 28,TipoFonte::NEGRITO);
+        
+        // Título "Categorias"
+        desenharTexto(renderizador, "Categorias", 50 - scrollX, 935 - scrollY, Theme::TEXT_SECONDARY, 20, TipoFonte::NEGRITO);
         
         if (dado) {
             SDL_Rect rectDado = {1200 - scrollX, 900 - scrollY, 150, 150};
@@ -743,6 +768,12 @@ int main(int argc, char* argv[]) {
         setaDireita.desenhar(renderizador, -scrollX, -scrollY);
         
         // 7.4. Desenha jogos e destaques
+        // Destaques (Hero Section)
+        if (!destaques.empty()) {
+             // Título da seção Hero
+             // desenharTexto(renderizador, "Destaques", 70 - scrollX, 550 - scrollY, Theme::TEXT_PRIMARY, 28, TipoFonte::NEGRITO);
+        }
+        
         for (auto& jogo : jogos) jogo.desenhar(renderizador, -scrollX, -scrollY);
         for (auto& dest : destaques) dest.desenhar(renderizador, -scrollX, -scrollY);
 
@@ -752,15 +783,15 @@ int main(int argc, char* argv[]) {
             int posicoes_x[] = {posX_base, posX_base - totalWidthCategorias, posX_base + totalWidthCategorias};
 
             for (int posX : posicoes_x) {
-
-                // Atualiza a cor para o estado Ativo/Inativo
+                // Atualiza a cor para o estado Ativo/Inativo usando o Tema
                 if (i == categoriaAtivaIndex) {
-                    // Categoria Ativa (cor diferente)
-                    categorias[i].setCor({46, 46, 46, 255}, {124, 124, 127, 255}, {104, 104, 106, 255});
+                    categorias[i].setCor(Theme::ACCENT_COLOR, Theme::BTN_HOVER, Theme::BTN_ACTIVE);
                 } else {
-                    // Categoria Inativa (cor normal)
-                    categorias[i].setCor({59, 59, 61, 255}, {124, 124, 127, 255}, {104, 104, 106, 255});
+                    categorias[i].setCor(Theme::BTN_NORMAL, Theme::BTN_HOVER, Theme::BTN_ACTIVE);
                 }
+                
+                // Força botões redondos/arredondados nas categorias
+                // categorias[i].setIsRound(false); // Já são retangulares, mas desenhados com drawRoundedRect no Botao.cpp
 
                 // Desenha apenas as categorias dentro da área visível (clip manual)
                 if (posX >= CATEGORIA_AREA_VISIVEL_INICIO && posX + CATEGORIA_LARGURA <= CATEGORIA_AREA_VISIVEL_FIM) {
@@ -772,7 +803,13 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // 7.6. Elementos da Barra Superior (sem scroll)
+        // 7.6. Elementos da Barra Superior (Header - Sem Scroll)
+        // Desenha um painel de fundo para o Header (Vidro jateado no topo)
+        SDL_Rect headerRect = {0, 0, LARGURA_JANELA, 160};
+        GraphicsUtils::drawRoundedRect(renderizador, headerRect, 0, Theme::BG_PANEL); // Radius 0 = retângulo puro
+        // Linha sutil separando o header
+        // boxRGBA(renderizador, 0, 160, LARGURA_JANELA, 161, 255, 255, 255, 20);
+
         config.desenhar(renderizador, -scrollX, -scrollY);
         pesquisa.desenhar(renderizador, -scrollX, -scrollY);
         mudarTema.desenhar(renderizador, -scrollX, -scrollY);

@@ -10,13 +10,15 @@ using namespace MeuProjeto;
  * @param codigo O código.
  * @param capa O caminho da capa.
  * @param capturas O vetor de caminhos das capturas.
+ * @param executavel O caminho do executável.
  */
 Jogo::Jogo(const std::string& nome, 
            const std::string& descricao, 
            const std::string& codigo, 
            const std::string& capa,
-           const std::vector<std::string>& capturas)
-    : nome(nome), descricao(descricao), codigo(codigo), capa(capa), capturas(capturas)
+           const std::vector<std::string>& capturas,
+           const std::string& executavel)
+    : nome(nome), descricao(descricao), codigo(codigo), capa(capa), capturas(capturas), executavel(executavel)
 {
 }
 
@@ -65,6 +67,15 @@ std::string Jogo::getCapa() const
 std::vector<std::string> Jogo::getCapturas() const
 {
     return capturas;
+}
+
+/**
+ * @brief Obtém o caminho do executável do jogo.
+ * @return O caminho do script ou binário.
+ */
+std::string Jogo::getExecutavel() const
+{
+    return executavel;
 }
 
 /**
@@ -133,6 +144,15 @@ void Jogo::setCapa(const std::string& capa)
 void Jogo::setCapturas(const std::vector<std::string>& capturas)
 {
     this->capturas = capturas;
+}
+
+/**
+ * @brief Define o caminho do executável.
+ * @param executavel O novo caminho.
+ */
+void Jogo::setExecutavel(const std::string& executavel)
+{
+    this->executavel = executavel;
 }
 
 /**

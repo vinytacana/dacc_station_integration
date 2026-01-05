@@ -1,5 +1,5 @@
 @God of War
 #Descrição5
 $RPG, Casual
-*arquivos/jogo5.jpeg
-%arquivos/captura1.jpeg;arquivos/captura2.jpeg;arquivos/captura3.jpeg;arquivos/captura4.jpeg
+*assets/textures/jogo5.jpeg
+%assets/textures/captura1.jpeg;assets/textures/captura2.jpeg;assets/textures/captura3.jpeg;assets/textures/captura4.jpeg
