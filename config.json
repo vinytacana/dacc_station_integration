@@ -1,0 +1,9 @@
+{
+  "server": {
+    "socket_path": "/tmp/game_logger.sock"
+  },
+  "output": {
+    "type": "file",
+    "filepath": "system.log.txt"
+  }
+}

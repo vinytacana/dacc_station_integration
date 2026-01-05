@@ -1,11 +1,11 @@
-#include "GameManager.hpp"
+#include "ProcessManager.hpp"
 
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/epoll.h> 
 #include <sys/signalfd.h> 
 #include <signal.h>
-#include <sys/signalfd.h>
+#include <sys/wait.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -13,9 +13,9 @@
 #include <vector>
 #include <stdexcept>
 #include <thread>
-#include <sys/wait.h>
 
-ProcessManager::ProcessManager(){
+
+ProcessManager::ProcessManager(std::unique_ptr<ILogger> logger) : logger_{std::move(logger)} {
 
     // a data type to represent multiple signals
     // "signal_mask" is showing wich signals are blocked
@@ -39,8 +39,7 @@ ProcessManager::ProcessManager(){
         throw std::runtime_error("Failed to create signalfd");
     }
 
-    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
-    
+    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);   
     if (epoll_fd_ == -1) {
         close(signal_fd_);
         throw std::runtime_error("Failed to create epoll instance");
@@ -57,7 +56,6 @@ ProcessManager::ProcessManager(){
     }
 
     std::future<void> ready_future = ready_promise.get_future();
-
     try {
         event_loop_thread_ = std::thread(&ProcessManager::eventLoop, this);
     
@@ -72,7 +70,7 @@ ProcessManager::ProcessManager(){
 }
 
 ProcessManager::~ProcessManager() {
-    logger.log("Shutting down ProcessManager...");
+    logger_->log("Shutting down ProcessManager...");
     stop_loop_ = true;
 
     // Se a thread estiver "juntável" (ou seja, não foi movida, etc.)
@@ -89,39 +87,38 @@ ProcessManager::~ProcessManager() {
     if (signal_fd_ != -1) {
         close(signal_fd_);
     }
-    logger.log("ProcessManager shut down cleanly.");
+    logger_->log("ProcessManager shut down cleanly.");
 }
 
 void ProcessManager::eventLoop() {
     // sinaliza que a thread esta pronta
     ready_promise.set_value();
     epoll_event events[MAX_EVENTS];
-    logger.log("Event loop started and is ready.");
+    logger_->log("Event loop started and is ready.");
     
     while (!stop_loop_) {
         int n_events = epoll_wait(epoll_fd_, events, MAX_EVENTS, 1000);
         if (n_events < 0){
-            // Se for interrompido por um sinal, apenas continue o loop
-            if (errno == EINTR)
+            if (errno == EINTR) // Se for interrompido por um sinal, apenas continue o loop
                 continue;
             // Para outros erros, saia do loop.
-            logger.log("epoll_wait error: " + std::string(strerror(errno)));
+            logger_->log("epoll_wait error: " + std::string(strerror(errno)));
             break;
         }
 
         for (int i = 0; i < n_events; ++i) {
             if (events[i].data.fd == signal_fd_) {
-                logger.log("received signal on signal_fd. Handling child signal");
+                logger_->log("received signal on signal_fd. Handling child signal");
                 handleChildSignal();
             }
         }
     }
-    logger.log("Event loop finished.");
+    logger_->log("Event loop finished.");
 }
 
 void ProcessManager::handleChildSignal() {
     signalfd_siginfo ssi;
-    while (read(signal_fd_, &ssi, sizeof(ssi)) == sizeof(ssi)) {
+        while (read(signal_fd_, &ssi, sizeof(ssi)) == sizeof(ssi)) {
         // continue lendo ate que não haja mais nada
     }
     
@@ -137,13 +134,13 @@ void ProcessManager::handleChildSignal() {
             auto start_time = it->second;
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
             
-            logger.log("Process PID=" + std::to_string(child_pid) + " finished.");
-            logger.log("Total execution time: " + std::to_string(duration.count()) + " seconds.");
+            logger_->log("Process PID=" + std::to_string(child_pid) + " finished.");
+            logger_->log("Total execution time: " + std::to_string(duration.count()) + " seconds.");
             
             running_processes_.erase(it);
         }
         else{
-            logger.log("Reaped untracked child process PID=" + std::to_string(child_pid));
+            logger_->log("Reaped untracked child process PID=" + std::to_string(child_pid));
         }
     }
 }
@@ -163,33 +160,18 @@ pid_t ProcessManager::createProcess(){
     }
 }
 
-bool ProcessManager::isGameValid(Game* game) const {
-    if (not game) {
-        LOG_ERROR("game was not set");
-        return false;
-    }
+bool ProcessManager::isAppValid(const ApplicationDefinition& app) const {
+    const std::string& app_path = app.getPath();
 
-    const char* game_path = game->getPath();
-    if (game_path == nullptr || game_path[0] == '\0') {
-        LOG_ERROR("executable path is empty");
+    if (app_path.empty()){ 
+        //TODO: LogLevel:: 
+        logger_->log("Application executable path is empty for app_id: " + app.getId());
         return false;
     }
     
     return true;
 }
     
-/*
-std::vector<char*> ProcessManager::constructArgList(Game* game){
-    todo: 
-        if(game->type == "java"){
-            std::vector< char* > args = {
-            (char*)"-jar",
-            (char*)game->getPath(),
-            nullptr
-            };
-    }
-}        
-*/
 
 bool ProcessManager::startGame(Game* game){
     if(not isGameValid(game)) return false;    
@@ -199,12 +181,12 @@ bool ProcessManager::startGame(Game* game){
         child_pid = createProcess();
     }catch(const std::runtime_error& e)
     {
-        logger.log(e.what());
+        logger_->log(e.what());
         return false;
     }
     
     if (child_pid == 0){
-        execlp(game->getPath(), game->filename.c_str(), (char *) NULL);
+        execlp(game->getPath(), game->getFilename().c_str(), (char *) NULL);
         
         LOG_ERROR("couldn't launch the game");
         _exit(EXIT_FAILURE);
@@ -218,9 +200,8 @@ bool ProcessManager::startGame(Game* game){
         running_processes_[child_pid] = start_time;
     }
 
-    // todo: capturar horario
-    logger.log(game->filename + " started suc");
-    logger.log("PID=" + std::to_string(child_pid));
+    logger_->log(game->getFilename() + " started sucessfully");
+    logger_->log("PID=" + std::to_string(child_pid));
     
     return true;
 }   

@@ -1,0 +1,33 @@
+@startuml
+!theme vibrant
+
+title Diagrama de Componentes - GameManPrototyope
+
+actor User as "Usuário"
+
+node "Máquina Local" {
+    artifact "gameman" as GameManApp
+    artifact "logger" as LogServerProcess
+
+    component "GameManager" as GM
+    component "LogManager"
+    component "LogClient"
+    component "LogServer"
+}
+
+User --> GameManApp : inicia
+
+GameManApp --> GM : utiliza
+GM --> LogManager : para registrar logs
+
+LogManager --> LogClient : utiliza
+LogClient ..> LogServerProcess : envia logs (via IPC/Sockets)
+
+LogServerProcess --> LogServer : executa
+
+note right of LogClient
+  Comunicação entre processos
+  (ex: Sockets, Pipes, etc.)
+end note
+
+@enduml
