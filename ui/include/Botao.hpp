@@ -178,6 +178,9 @@ public:
      */
     bool estaSelecionado() const;
 
+    void setCornerRadius(int radius);
+    int getCornerRadius() const { return cornerRadius; }
+
     /**
      * @brief A área retangular do botão.
      */
@@ -328,6 +331,8 @@ private:
      * @brief Indica se o botão é um destaque.
      */
     bool isDestaque = false;
+
+    int cornerRadius = 10;
 };
 
 } // namespace MeuProjeto

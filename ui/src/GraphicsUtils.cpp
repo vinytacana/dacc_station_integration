@@ -57,7 +57,14 @@ void GraphicsUtils::drawTextureCover(SDL_Renderer* renderer, SDL_Texture* textur
 void GraphicsUtils::drawOverlay(SDL_Renderer* renderer, int width, int height, int alpha) {
     // Garante que o blend mode está ativo para transparência
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    boxRGBA(renderer, 0, 0, width, height, 0, 0, 0, alpha);
+    
+    // Desenhar apenas na metade inferior para garantir leitura do texto e carrossel
+    // sem escurecer a arte principal no topo.
+    int startY = height / 2;
+    boxRGBA(renderer, 0, startY, width, height, 0, 0, 0, alpha);
+    
+    // Opcional: Uma faixa mais suave logo acima para transição (simulando gradiente)
+    boxRGBA(renderer, 0, startY - 50, width, startY, 0, 0, 0, alpha / 2);
 }
 
 void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TTF_Font* font) {
@@ -71,17 +78,20 @@ void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TT
     int topMargin = 25;
 
     // --- AVATAR (Far Right) ---
-    int avatarRadius = 22;
-    int avatarX = screenWidth - 45;
+    int avatarRadius = 24; // Slightly larger
+    int avatarX = screenWidth - 50;
     int avatarY = topMargin + 10;
     
-    // Border
-    filledCircleRGBA(renderer, avatarX, avatarY, avatarRadius + 2, 200, 200, 200, 255);
-    // Fill (Placeholder color - Blue)
-    filledCircleRGBA(renderer, avatarX, avatarY, avatarRadius, 50, 100, 200, 255);
+    // Border (White, thicker)
+    aacircleRGBA(renderer, avatarX, avatarY, avatarRadius + 2, 255, 255, 255, 255);
+    aacircleRGBA(renderer, avatarX, avatarY, avatarRadius + 1, 255, 255, 255, 255);
+    
+    // Fill (Dark Blue/Grey placeholder)
+    filledCircleRGBA(renderer, avatarX, avatarY, avatarRadius, 40, 45, 60, 255);
+    
     // Initial "U"
     if(font) {
-         SDL_Color uCol = {255, 255, 255, 255};
+         SDL_Color uCol = {200, 200, 200, 255};
          SDL_Surface* sU = TTF_RenderUTF8_Blended(font, "U", uCol);
          if(sU) {
              SDL_Texture* tU = SDL_CreateTextureFromSurface(renderer, sU);

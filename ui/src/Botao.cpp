@@ -210,11 +210,11 @@ void Botao::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
             }
         } else {
             // Desenha um retângulo ARREDONDADO
-            GraphicsUtils::drawRoundedRect(renderer, adjustedArea, Theme::RADIUS_MEDIUM, corAtual);
+            GraphicsUtils::drawRoundedRect(renderer, adjustedArea, cornerRadius, corAtual);
             
             // Efeito de Borda (Highlight) quando selecionado
             if (hover) {
-                GraphicsUtils::drawRoundedRectOutline(renderer, adjustedArea, Theme::RADIUS_MEDIUM, {255, 255, 255, 100});
+                GraphicsUtils::drawRoundedRectOutline(renderer, adjustedArea, cornerRadius, {255, 255, 255, 100});
             }
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
@@ -343,6 +343,10 @@ void MeuProjeto::Botao::setParentJanela(Janela* janela) {
  */
 void Botao::setIsRound(bool round) {
     isRound = round;
+}
+
+void Botao::setCornerRadius(int radius) {
+    cornerRadius = radius;
 }
 
 /**

@@ -109,13 +109,17 @@ void JanelaJogo::executarJogo() {
 }
 
 void JanelaJogo::desenhar(int offsetX, int offsetY) {
+    // Obter dimensões reais da janela de renderização
+    int screenW, screenH;
+    SDL_GetRendererOutputSize(renderer, &screenW, &screenH);
+
     auto listaJogos = gerenciadorJogos.listarJogos();
     
     // Fallback se não houver jogos
     if (listaJogos.empty()) {
         SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
         SDL_RenderClear(renderer);
-        MeuProjeto::desenharTexto(renderer, "Nenhum jogo encontrado!", 500, 500, {255,255,255,255}, 40, TipoFonte::NEGRITO);
+        MeuProjeto::desenharTexto(renderer, "Nenhum jogo encontrado!", screenW/2 - 200, screenH/2, {255,255,255,255}, 40, TipoFonte::NEGRITO);
         return;
     }
 
@@ -135,6 +139,13 @@ void JanelaJogo::desenhar(int offsetX, int offsetY) {
 
     // --- 4. BOTÕES ---
     
+    // Reposiciona Botão Jogar (TODO 02)
+    botaoJogar.area.x = areaDescricao.x;
+    botaoJogar.area.y = 520; // Abaixo da descrição
+    botaoJogar.area.w = 300;
+    botaoJogar.area.h = 60;
+    botaoJogar.setCornerRadius(30); // Pill shape
+
     // Atualizar Estado do Botão (TODO 09)
     if (NetworkClient::getInstance().isGameRunning()) {
         // Se há um jogo rodando...
@@ -143,28 +154,29 @@ void JanelaJogo::desenhar(int offsetX, int offsetY) {
         // Verifica se é o jogo selecionado
         if (jogoAtual->getId() == runningId) {
             botaoJogar.setTexto("EM EXECUÇÃO"); 
+            botaoJogar.setCor({50, 150, 50, 255}, {70, 170, 70, 255}, {40, 120, 40, 255}); // Verde
         } else {
             botaoJogar.setTexto("BLOQUEADO"); // Ou "JÁ EXISTE UM JOGO"
+             botaoJogar.setCor({100, 50, 50, 255}, {100, 50, 50, 255}, {100, 50, 50, 255}); // Vermelho
         }
     } else {
-        botaoJogar.setTexto("JOGAR (Enter)");
+        botaoJogar.setTexto("JOGAR"); // Simplificado
+        // Azul Steam (Default)
+        botaoJogar.setCor(Theme::ACCENT_COLOR, 
+                      {Theme::ACCENT_COLOR.r, Theme::ACCENT_COLOR.g, Theme::ACCENT_COLOR.b, 200},
+                      {Theme::ACCENT_COLOR.r, Theme::ACCENT_COLOR.g, Theme::ACCENT_COLOR.b, 150});
     }
     
     botaoJogar.desenhar(renderer, offsetX, offsetY);
 
     // --- 5. SYSTEM UI (Top/Bottom Bars) ---
-    // Usamos as fontes globais via ConfigFontes ou gerenciador se necessário.
-    // Para simplificar e manter performance, JanelaJogo poderia ter suas próprias fontes abertas,
-    // mas aqui usaremos o Utils::desenharTexto que já lida com isso.
-    // No entanto, as funções de GraphicsUtils pedem TTF_Font*.
-    // Vou carregar fontes locais na JanelaJogo para as barras.
-    
     static GerenciadorFontes fontGen;
     TTF_Font* fontUI = fontGen.carregar(ConfigFontes::obterCaminho(TipoFonte::NORMAL), 24);
     TTF_Font* fontUINegrito = fontGen.carregar(ConfigFontes::obterCaminho(TipoFonte::NEGRITO), 28);
 
-    GraphicsUtils::drawSystemTopBar(renderer, areaJanela.w, fontUINegrito);
-    GraphicsUtils::drawBottomNavHints(renderer, areaJanela.w, areaJanela.h, fontUI);
+    // Usar dimensões dinâmicas (screenW, screenH) garante que a barra cole no fundo real
+    GraphicsUtils::drawSystemTopBar(renderer, screenW, fontUINegrito);
+    GraphicsUtils::drawBottomNavHints(renderer, screenW, screenH, fontUI);
 }
 
 void JanelaJogo::desenharHero(const Jogo& jogo) {
@@ -216,27 +228,20 @@ void JanelaJogo::desenharHero(const Jogo& jogo) {
 }
 
 void JanelaJogo::desenharInfo(const Jogo& jogo) {
-    // Título
-    MeuProjeto::desenharTexto(
-        renderer, 
-        jogo.getNome(), 
-        areaFundo.x, 
-        areaFundo.y, 
-        Theme::TEXT_PRIMARY, 
-        72, 
-        TipoFonte::NEGRITO
-    );
+    // Título (Maior e com Sombra)
+    // Sombra
+    MeuProjeto::desenharTexto(renderer, jogo.getNome(), areaFundo.x + 3, areaFundo.y + 3, {0,0,0,150}, 72, TipoFonte::NEGRITO);
+    // Texto Principal
+    MeuProjeto::desenharTexto(renderer, jogo.getNome(), areaFundo.x, areaFundo.y, Theme::TEXT_PRIMARY, 72, TipoFonte::NEGRITO);
 
-    // Categoria
-    MeuProjeto::desenharTexto(
-        renderer, 
-        jogo.getCodigo(), 
-        areaFundo.x, 
-        areaFundo.y + 100, 
-        Theme::TEXT_SECONDARY, 
-        28, 
-        TipoFonte::NORMAL
-    );
+    // Metadata Row (TODO 03)
+    std::string metaObj = jogo.getCodigo(); 
+    if(metaObj.empty()) metaObj = "GENERICO";
+    
+    // Formatação Visual
+    std::string metaDisplay = metaObj + "  •  2024  •  1 JOGADOR"; 
+    
+    MeuProjeto::desenharTexto(renderer, metaDisplay, areaFundo.x, areaFundo.y + 90, {200, 200, 200, 255}, 24, TipoFonte::NORMAL);
 
     // Descrição
     std::string desc = jogo.getDescricao();
@@ -246,7 +251,7 @@ void JanelaJogo::desenharInfo(const Jogo& jogo) {
             desc, 
             areaDescricao.x, 
             areaDescricao.y, 
-            Theme::TEXT_SECONDARY, 
+            {220, 220, 220, 255}, // Mais claro para leitura
             24, 
             TipoFonte::NORMAL
         );
@@ -256,58 +261,75 @@ void JanelaJogo::desenharInfo(const Jogo& jogo) {
 void JanelaJogo::desenharCarrossel(const std::vector<Jogo>& listaJogos) {
     int totalJogos = static_cast<int>(listaJogos.size());
     
-    // Lógica de Câmera (TODO 01)
-    // Queremos que o item selecionado fique na posição X = 100
+    // Configurações de Zoom (TODO 01)
+    const int ZOOM_W = (int)(COVER_WIDTH * 1.25); // 25% maior
+    const int ZOOM_H = (int)(COVER_HEIGHT * 1.25);
+    const int ZOOM_OFFSET_Y = (ZOOM_H - COVER_HEIGHT) / 2; // Sobe metade do crescimento
+
+    // Camera: Focada no item selecionado (X = 100)
     int targetX = 100;
+    // O offset da câmera é calculado como se todos fossem normais para manter a grade consistente
     int cameraOffsetX = targetX - (indiceSelecionado * (COVER_WIDTH + COVER_SPACING));
 
-    for (int i = 0; i < totalJogos; i++) {
-        // Calcular posição absoluta X deste item baseado na câmera
-        int drawX = (i * (COVER_WIDTH + COVER_SPACING)) + cameraOffsetX;
+    // Lambda para desenhar um item individual
+    auto desenharItem = [&](int index, bool isSelected) {
+        int w = isSelected ? ZOOM_W : COVER_WIDTH;
+        int h = isSelected ? ZOOM_H : COVER_HEIGHT;
+        
+        // Posição base (Grid normal)
+        int baseX = (index * (COVER_WIDTH + COVER_SPACING)) + cameraOffsetX;
+        
+        // Ajuste de centralização se estiver selecionado
+        // Se cresceu 30px, move 15px pra esquerda e 15px pra cima
+        int drawX = isSelected ? (baseX - (w - COVER_WIDTH)/2) : baseX;
+        int drawY = CAROUSEL_Y_START - (isSelected ? ZOOM_OFFSET_Y : 0);
 
-        // Culling: Se estiver totalmente fora da tela, pule
-        if (drawX + COVER_WIDTH < 0 || drawX > SCREEN_WIDTH) {
-            continue;
-        }
+        SDL_Rect destRect = {drawX, drawY, w, h};
 
-        SDL_Rect destRect = {drawX, CAROUSEL_Y_START, COVER_WIDTH, COVER_HEIGHT};
+        // Culling (Simplificado)
+        if (drawX + w < 0 || drawX > SCREEN_WIDTH) return;
 
-        // Usar capa oficial ou fallback
-        SDL_Texture* capa = gerImg.getCapa(renderer, listaJogos[i].getId());
+        // Capa
+        SDL_Texture* capa = gerImg.getCapa(renderer, listaJogos[index].getId());
         
         if (capa) {
-            SDL_RenderCopy(renderer, capa, NULL, &destRect);
+             SDL_RenderCopy(renderer, capa, NULL, &destRect);
         } else {
-            // Placeholder simples se falhar tudo
-            SDL_SetRenderDrawColor(renderer, 60, 60, 60, 255);
-            SDL_RenderFillRect(renderer, &destRect);
-            
-            // Borda interna para distinguir placeholders
-            SDL_SetRenderDrawColor(renderer, 100, 100, 100, 255);
-            SDL_Rect rBorder = {destRect.x+2, destRect.y+2, destRect.w-4, destRect.h-4};
-            SDL_RenderDrawRect(renderer, &rBorder);
+             // Placeholder simples se falhar tudo
+             SDL_SetRenderDrawColor(renderer, 60, 60, 60, 255);
+             SDL_RenderFillRect(renderer, &destRect);
         }
 
-        // Highlight Básico (TODO 04)
-        if (i == indiceSelecionado) {
-             // Se o foco estiver nas ações (botão Jogar), o carrossel fica "inativo" (cinza)
-             // Se o foco estiver no carrossel, borda branca brilhante
+        if (isSelected) {
+             // GLOW / BORDA DESTAQUE
+             SDL_Color borderColor = {150, 150, 150, 255};
              if (focoAtual == Foco::CARROSSEL) {
-                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // Branco ativo
-             } else {
-                SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255); // Cinza inativo
+                borderColor = {255, 255, 255, 255}; // Branco ativo
              }
 
-             // Borda grossa (4px)
-             for(int w=0; w<4; w++) {
-                 SDL_Rect outline = {destRect.x - w, destRect.y - w, destRect.w + (w*2), destRect.h + (w*2)};
+             SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
+             
+             // Borda grossa manual (4px)
+             for(int i=0; i<4; i++) {
+                 SDL_Rect outline = {destRect.x - i, destRect.y - i, destRect.w + i*2, destRect.h + i*2};
                  SDL_RenderDrawRect(renderer, &outline);
              }
         } else {
-             // Dimming para não selecionados
+             // DIMMING (Não selecionados mais escuros)
              SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
              SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
              SDL_RenderFillRect(renderer, &destRect);
         }
+    };
+
+    // 1. Passada de Fundo: Itens NÃO selecionados
+    for (int i = 0; i < totalJogos; i++) {
+        if (i == indiceSelecionado) continue;
+        desenharItem(i, false);
+    }
+
+    // 2. Passada de Frente: Item SELECIONADO (Z-Index Top)
+    if (indiceSelecionado >= 0 && indiceSelecionado < totalJogos) {
+        desenharItem(indiceSelecionado, true);
     }
 }
