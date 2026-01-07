@@ -54,6 +54,11 @@ public:
     SDL_Texture* getCapa(SDL_Renderer* renderer, const std::string& jogoId);
 
     /**
+     * @brief Recupera o logotipo do jogo.
+     */
+    SDL_Texture* getLogo(SDL_Renderer* renderer, const std::string& jogoId);
+
+    /**
      * @brief Libera (destrói) todas as texturas armazenadas no cache.
      */
     void liberarTudo();

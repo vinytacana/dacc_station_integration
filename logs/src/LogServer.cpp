@@ -2,6 +2,7 @@
 #include "ILogWriter.hpp"
 #include "FileWriter.hpp"
 #include "ConsoleWriter.hpp"
+#include "UnixSocketUtils.hpp"
 #include "json.hpp"
 
 #include <unistd.h>
@@ -34,7 +35,13 @@ int main(){
     std::string socket_path;
 
     try {
-        std::ifstream config_file("../config.json");
+        std::ifstream config_file("config.json");
+        if (!config_file.is_open()) {
+            config_file.open("../config.json");
+        }
+        if (!config_file.is_open()) {
+            config_file.open("process-manager/config.json");
+        }
 
         if (not config_file.is_open()) {
             throw std::runtime_error("Could not open config.json");
@@ -60,8 +67,7 @@ int main(){
         }
 
         sockaddr_un addr {};
-        addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, socket_path.c_str(), sizeof(addr.sun_path) - 1);
+        UnixSocketUtils::prepareAddress(addr, socket_path);
 
         stream_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0); 
         if (stream_socket_fd < 0) {

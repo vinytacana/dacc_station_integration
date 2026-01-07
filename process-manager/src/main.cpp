@@ -9,7 +9,6 @@
 #include <condition_variable>
 
 #include "ProcessManager.hpp"
-// Includes do sistema de log (vêm de ../logs/include)
 #include "SocketLogger.hpp"
 #include "FallbackLogger.hpp"
 #include "CompositeLogger.hpp"
@@ -37,7 +36,6 @@ int main(){
     std::unique_ptr<ILogger> primary_logger;
     std::unique_ptr<ILogger> fallback_logger;
 
-    // 1. Configurar Fallback Logger (Local)
     try {
         fallback_logger = std::make_unique<FallbackLogger>("pm_fallback.log");
     } catch (const std::exception& e) {
@@ -45,16 +43,12 @@ int main(){
         return 1;
     }
 
-    // 2. Configurar Primary Logger (Socket)
     try {
-        // Tenta ler config da raiz ou de ../ (dependendo de onde roda o binário)
         std::ifstream config_file("config.json"); 
         if (!config_file.is_open()) {
-            // Tenta um nível acima se estiver rodando de bin/
             config_file.open("../config.json");
         }
         if (!config_file.is_open()) {
-            // Tenta no diretório do módulo se estiver rodando da raiz
             config_file.open("process-manager/config.json");
         }
         
@@ -74,7 +68,6 @@ int main(){
         fallback_logger->log("[WARNING] ProcessManager will use fallback logging only.");
     }
     
-    // 3. Criar Composite Logger
     auto composite_logger = std::make_unique<CompositeLogger>(
         std::move(primary_logger),
         std::move(fallback_logger)
@@ -87,7 +80,6 @@ int main(){
 
         std::cout << "\n>>> Process Manager is active. Press Ctrl+C to exit." << std::endl;
         
-        // Aguarda sinal de desligamento
         std::unique_lock<std::mutex> lock(shutdown_mutex);
         shutdown_cv.wait(lock, []{ return shutdown_flag.load(); });
     

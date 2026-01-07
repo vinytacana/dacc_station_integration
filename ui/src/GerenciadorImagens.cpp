@@ -107,6 +107,22 @@ SDL_Texture* GerenciadorImagens::getCapa(SDL_Renderer* renderer, const std::stri
     return nullptr;
 }
 
+SDL_Texture* GerenciadorImagens::getLogo(SDL_Renderer* renderer, const std::string& jogoId) {
+    // 1. Tentar estrutura oficial e dev
+    string paths[] = {
+        "/dacc/games/" + jogoId + "/assets/logo.png",
+        "assets/logos/" + jogoId + ".png"
+    };
+
+    for (const auto& path : paths) {
+        if (arquivoExiste(path)) {
+            return carregar(renderer, path);
+        }
+    }
+
+    return nullptr;
+}
+
 /**
  * @brief Função auxiliar para carregar a imagem diretamente do disco usando IMG_LoadTexture.
  *

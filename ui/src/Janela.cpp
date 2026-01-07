@@ -3,6 +3,9 @@
 #include <iostream>
 #include <sstream>
 
+// Declaração externa (definida em main.cpp no escopo global)
+extern MeuProjeto::GerenciadorFontes gerFontes;
+
 using namespace MeuProjeto;
 using namespace std;
 
@@ -118,14 +121,13 @@ void Janela::desenharPopup(int offsetX, int offsetY) {
     }
 
     // 3. Desenhar Título (Grande e Centralizado)
-    static GerenciadorFontes gerenciadorFontes;
     
     int yPos = adjustedArea.y + 215 + 20; 
     int fontSizeTitulo = 30;
     
 
     const std::string& fontePath = ConfigFontes::obterCaminho(TipoFonte::NEGRITO);
-    TTF_Font* font = gerenciadorFontes.carregar(fontePath, fontSizeTitulo);
+    TTF_Font* font = gerFontes.carregar(fontePath, fontSizeTitulo);
     
     int textWidth = 0;
     int textHeight = 0;

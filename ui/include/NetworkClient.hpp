@@ -2,11 +2,10 @@
 
 #include <string>
 #include <functional>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
 #include <iostream>
+#include <memory>
 #include "json.hpp"
+#include "UnixSocketClient.hpp"
 
 using json = nlohmann::json;
 
@@ -27,8 +26,7 @@ private:
     NetworkClient();
     ~NetworkClient();
     
-    int socket_fd_ = -1;
-    bool connected_ = false;
+    std::unique_ptr<UnixSocketClient> client_;
     
     // Game State
     bool isRunning_ = false;

@@ -2,6 +2,7 @@
 #include "GerenciadorFontes.hpp"
 #include "GerenciadorImagens.hpp"
 #include "GerenciadorJogos.hpp" 
+#include "GerenciadorAudio.hpp"
 #include "Utils.hpp"
 #include "Theme.hpp"
 #include "GraphicsUtils.hpp"
@@ -18,7 +19,7 @@ extern GerenciadorJogos gerenciadorJogos;
 JanelaJogo::JanelaJogo(SDL_Renderer* renderer)
     : renderer(renderer),
       indiceSelecionado(0),
-      botaoJogar(1450, 880, 400, 100, "JOGAR (Enter)"),
+      botaoJogar(1450, 880, 400, 100, "JOGAR"), // Texto simplificado
       areaJanela{0, 0, 1920, 1080},
       areaFundo{100, 150, 1000, 600}, 
       areaDescricao{100, 320, 800, 350}
@@ -28,7 +29,11 @@ JanelaJogo::JanelaJogo(SDL_Renderer* renderer)
                       {Theme::ACCENT_COLOR.r, Theme::ACCENT_COLOR.g, Theme::ACCENT_COLOR.b, 200},
                       {Theme::ACCENT_COLOR.r, Theme::ACCENT_COLOR.g, Theme::ACCENT_COLOR.b, 150});
     botaoJogar.setFonte(TipoFonte::NEGRITO);
-    botaoJogar.setTamanhoFonte(36);
+    botaoJogar.setTamanhoFonte(30); // Fonte levemente menor para acomodar ícone
+    botaoJogar.setIcon("A"); // Define o ícone de input
+
+    // Inicia música ambiente
+    gerAudio.tocarMusica("bgm.mp3");
 }
 
 JanelaJogo::~JanelaJogo() {
@@ -50,26 +55,31 @@ bool JanelaJogo::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
             case SDLK_RIGHT:
                 if (focoAtual == Foco::CARROSSEL) {
                     indiceSelecionado = (indiceSelecionado + 1) % totalJogos;
+                    gerAudio.tocarSom("nav.wav");
                 }
                 break;
             case SDLK_LEFT:
                 if (focoAtual == Foco::CARROSSEL) {
                     indiceSelecionado = (indiceSelecionado - 1 + totalJogos) % totalJogos;
+                    gerAudio.tocarSom("nav.wav");
                 }
                 break;
             case SDLK_UP:
                 // Sobe para ações (Botão Jogar)
+                if (focoAtual != Foco::ACOES) gerAudio.tocarSom("nav.wav");
                 focoAtual = Foco::ACOES;
                 botaoJogar.setSelecionado(true);
                 break;
             case SDLK_DOWN:
                 // Desce para carrossel
+                if (focoAtual != Foco::CARROSSEL) gerAudio.tocarSom("nav.wav");
                 focoAtual = Foco::CARROSSEL;
                 botaoJogar.setSelecionado(false);
                 break;
             case SDLK_RETURN: 
             case SDLK_KP_ENTER:
                 if (focoAtual == Foco::CARROSSEL || (focoAtual == Foco::ACOES && botaoJogar.estaSelecionado())) {
+                     gerAudio.tocarSom("select.wav");
                      executarJogo();
                 }
                 break;
@@ -104,7 +114,7 @@ void JanelaJogo::executarJogo() {
     NetworkClient::getInstance().sendStartGame(
         jogoAtual->getId(), // Passar ID (TODO 09)
         jogoAtual->getExecutavel(), 
-        1280, 720, 60, false
+        1280, 720, 60, true // Gamescope ENABLED
     );
 }
 
@@ -170,9 +180,8 @@ void JanelaJogo::desenhar(int offsetX, int offsetY) {
     botaoJogar.desenhar(renderer, offsetX, offsetY);
 
     // --- 5. SYSTEM UI (Top/Bottom Bars) ---
-    static GerenciadorFontes fontGen;
-    TTF_Font* fontUI = fontGen.carregar(ConfigFontes::obterCaminho(TipoFonte::NORMAL), 24);
-    TTF_Font* fontUINegrito = fontGen.carregar(ConfigFontes::obterCaminho(TipoFonte::NEGRITO), 28);
+    TTF_Font* fontUI = fontManager.carregar(ConfigFontes::obterCaminho(TipoFonte::NORMAL), 24);
+    TTF_Font* fontUINegrito = fontManager.carregar(ConfigFontes::obterCaminho(TipoFonte::NEGRITO), 28);
 
     // Usar dimensões dinâmicas (screenW, screenH) garante que a barra cole no fundo real
     GraphicsUtils::drawSystemTopBar(renderer, screenW, fontUINegrito);
@@ -228,18 +237,58 @@ void JanelaJogo::desenharHero(const Jogo& jogo) {
 }
 
 void JanelaJogo::desenharInfo(const Jogo& jogo) {
-    // Título (Maior e com Sombra)
-    // Sombra
-    MeuProjeto::desenharTexto(renderer, jogo.getNome(), areaFundo.x + 3, areaFundo.y + 3, {0,0,0,150}, 72, TipoFonte::NEGRITO);
-    // Texto Principal
-    MeuProjeto::desenharTexto(renderer, jogo.getNome(), areaFundo.x, areaFundo.y, Theme::TEXT_PRIMARY, 72, TipoFonte::NEGRITO);
-
-    // Metadata Row (TODO 03)
-    std::string metaObj = jogo.getCodigo(); 
-    if(metaObj.empty()) metaObj = "GENERICO";
+    // Título (Logo ou Texto)
+    SDL_Texture* logo = gerImg.getLogo(renderer, jogo.getId());
     
-    // Formatação Visual
-    std::string metaDisplay = metaObj + "  •  2024  •  1 JOGADOR"; 
+    if (logo) {
+        // Renderizar Logo (TODO 06)
+        int logoW, logoH;
+        SDL_QueryTexture(logo, NULL, NULL, &logoW, &logoH);
+        
+        // Target: Altura máx 120, Largura máx 500
+        float scale = 1.0f;
+        if (logoH > 140) scale = 140.0f / logoH;
+        if (logoW * scale > 500) scale = 500.0f / logoW;
+        
+        int finalW = (int)(logoW * scale);
+        int finalH = (int)(logoH * scale);
+        
+        SDL_Rect rectLogo = {areaFundo.x, areaFundo.y - 10, finalW, finalH};
+        
+        // Sombra do logo (Opcional, preta com baixa opacidade)
+        SDL_SetTextureColorMod(logo, 0, 0, 0);
+        SDL_SetTextureAlphaMod(logo, 100);
+        SDL_Rect rectSombra = {rectLogo.x + 3, rectLogo.y + 3, rectLogo.w, rectLogo.h};
+        SDL_RenderCopy(renderer, logo, NULL, &rectSombra);
+        
+        // Logo Real
+        SDL_SetTextureColorMod(logo, 255, 255, 255);
+        SDL_SetTextureAlphaMod(logo, 255);
+        SDL_RenderCopy(renderer, logo, NULL, &rectLogo);
+
+    } else {
+        // Título Texto (Fallback)
+        MeuProjeto::desenharTexto(renderer, jogo.getNome(), areaFundo.x + 3, areaFundo.y + 3, {0,0,0,150}, 72, TipoFonte::NEGRITO);
+        MeuProjeto::desenharTexto(renderer, jogo.getNome(), areaFundo.x, areaFundo.y, Theme::TEXT_PRIMARY, 72, TipoFonte::NEGRITO);
+    }
+
+    // Metadata Row (TODO 03 & TODO 07)
+    std::string metaGeneros = jogo.getGenero();
+    if (metaGeneros.empty()) metaGeneros = jogo.getCodigo(); // Fallback para código se gênero não existir
+    if (metaGeneros.empty()) metaGeneros = "GERAL";
+
+    // Formatação Visual Dinâmica
+    std::string metaDisplay = metaGeneros;
+    
+    // Adicionar Ano se válido
+    if (jogo.getAno() > 0) {
+        metaDisplay += "  •  " + std::to_string(jogo.getAno());
+    }
+
+    // Adicionar Players
+    metaDisplay += "  •  " + std::to_string(jogo.getPlayers());
+    if (jogo.getPlayers() == 1) metaDisplay += " JOGADOR";
+    else metaDisplay += " JOGADORES";
     
     MeuProjeto::desenharTexto(renderer, metaDisplay, areaFundo.x, areaFundo.y + 90, {200, 200, 200, 255}, 24, TipoFonte::NORMAL);
 
@@ -301,19 +350,31 @@ void JanelaJogo::desenharCarrossel(const std::vector<Jogo>& listaJogos) {
         }
 
         if (isSelected) {
-             // GLOW / BORDA DESTAQUE
-             SDL_Color borderColor = {150, 150, 150, 255};
-             if (focoAtual == Foco::CARROSSEL) {
-                borderColor = {255, 255, 255, 255}; // Branco ativo
+             // GLOW / BORDA DESTAQUE SUAVE (TODO 05)
+             Uint32 ticks = SDL_GetTicks();
+             // Pulso de Alpha entre 100 e 180
+             int alphaPulse = 100 + (int)(40 * (1.0 + sin(ticks * 0.005))); 
+             
+             SDL_Color glowColor = {255, 255, 255, (Uint8)alphaPulse};
+             if (focoAtual == Foco::ACOES) {
+                 glowColor = {150, 150, 150, (Uint8)(alphaPulse / 2)}; // Mais apagado se foco estiver no botão
              }
 
-             SDL_SetRenderDrawColor(renderer, borderColor.r, borderColor.g, borderColor.b, borderColor.a);
+             // Desenha brilho arredondado atrás (levemente maior)
+             int glowPadding = 8;
+             roundedBoxRGBA(renderer, 
+                            destRect.x - glowPadding, destRect.y - glowPadding, 
+                            destRect.x + destRect.w + glowPadding, destRect.y + destRect.h + glowPadding, 
+                            12, // Radius
+                            glowColor.r, glowColor.g, glowColor.b, glowColor.a);
              
-             // Borda grossa manual (4px)
-             for(int i=0; i<4; i++) {
-                 SDL_Rect outline = {destRect.x - i, destRect.y - i, destRect.w + i*2, destRect.h + i*2};
-                 SDL_RenderDrawRect(renderer, &outline);
-             }
+             // Borda branca sólida fina para definição
+             roundedRectangleRGBA(renderer, 
+                                  destRect.x - 2, destRect.y - 2, 
+                                  destRect.x + destRect.w + 2, destRect.y + destRect.h + 2, 
+                                  4, // Radius menor
+                                  255, 255, 255, 255);
+
         } else {
              // DIMMING (Não selecionados mais escuros)
              SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);

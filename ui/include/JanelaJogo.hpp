@@ -7,6 +7,7 @@
 #include "Botao.hpp"
 #include "GerenciadorJogos.hpp"
 #include "Jogo.hpp"
+#include "GerenciadorFontes.hpp"
 
 namespace MeuProjeto {
 
@@ -45,6 +46,9 @@ private:
 
     // ELEMENTOS DE UI
     Botao botaoJogar;
+
+    // Gerenciador de Fontes Local
+    GerenciadorFontes fontManager;
 
     // Layout Areas
     SDL_Rect areaJanela;

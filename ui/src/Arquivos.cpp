@@ -46,6 +46,11 @@ bool Arquivos::salvarJogos(const string& caminho, const vector<Jogo>& jogos)
         
         // Capa (campo *)
         arquivo << "*" << jogo.getCapa() << "\n";
+
+        // Novos campos (Metadata)
+        if (jogo.getAno() > 0) arquivo << "^" << jogo.getAno() << "\n";
+        if (jogo.getPlayers() > 0) arquivo << "!" << jogo.getPlayers() << "\n";
+        if (!jogo.getGenero().empty()) arquivo << "~" << jogo.getGenero() << "\n";
         
         // Capturas (campo %)
         arquivo << "%";
@@ -80,7 +85,8 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
         return false;
     }
 
-    string linha, nome, descricao, codigo, capa, executavel;
+    string linha, nome, descricao, codigo, capa, executavel, genero;
+    int ano = 0, players = 1;
     vector<string> capturas;
 
     while (getline(arquivo, linha))
@@ -114,6 +120,16 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                 executavel = conteudo;
                 break;
 
+            case '^':
+                try { ano = stoi(conteudo); } catch(...) { ano = 0; }
+                break;
+            case '!':
+                try { players = stoi(conteudo); } catch(...) { players = 1; }
+                break;
+            case '~':
+                genero = conteudo;
+                break;
+
             case '*':
                 // Capa principal (apenas 1 imagem)
                 capa = conteudo;
@@ -133,7 +149,7 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                 
                 // Adicionar jogo ao gerenciador após coletar todos os campos
                 {
-                    Jogo novoJogo(nome, descricao, codigo, capa, capturas, executavel);
+                    Jogo novoJogo(nome, descricao, codigo, capa, capturas, executavel, ano, players, genero);
                     
                     // Extrair ID do nome do arquivo (ex: "assets/data/jogo1.txt" -> "jogo1")
                     string id = caminho;
@@ -151,8 +167,11 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                     
                     gerenciador.adicionarJogo(novoJogo);
                 }
-                // Limpar variáveis para o próximo jogo (opcional, mas boa prática se houver bugs no arquivo)
+                // Limpar variáveis para o próximo jogo
                 executavel = ""; 
+                genero = "";
+                ano = 0;
+                players = 1;
                 break;
         }
     }

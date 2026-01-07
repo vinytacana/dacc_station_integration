@@ -80,14 +80,10 @@ ProcessManager::~ProcessManager() {
     if (logger_) logger_->log("Shutting down ProcessManager...");
     stop_loop_ = true;
 
-    // Se a thread estiver "juntável" (ou seja, não foi movida, etc.)
     if (event_loop_thread_.joinable()) {
-        // Espera a thread terminar sua execução.
-        // O loop vai sair porque stop_loop_ é true.
         event_loop_thread_.join();
     }
 
-    // Fecha os file descriptors para liberar os recursos
     if (epoll_fd_ != -1) {
         close(epoll_fd_);
     }
@@ -214,7 +210,6 @@ pid_t ProcessManager::startApplication(ApplicationDefinition& app){
     }
     
     if (child_pid == 0){
-        // Child process
         std::vector<std::string> argsVector = buildCommand(app);
 
         // Convert std::vector<std::string> to char* const*
@@ -224,13 +219,11 @@ pid_t ProcessManager::startApplication(ApplicationDefinition& app){
         }
         execArgs.push_back(nullptr); 
 
-        // Execute
         execvp(execArgs[0], execArgs.data());
         
-        // Se execvp retornar, houve erro.
         std::cerr << "CRITICAL: execvp failed for " << app.getPath() << ": " << strerror(errno) << std::endl;
         _exit(EXIT_FAILURE);
-        return -1; // Não alcançado
+        return -1; 
     }
 
     // parent process
@@ -248,6 +241,7 @@ pid_t ProcessManager::startApplication(ApplicationDefinition& app){
     return child_pid;
 }
 
+// builds 
 std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinition& app) {
     std::vector<std::string> args;
 
@@ -281,10 +275,14 @@ std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinitio
         args.push_back("--");
     }
 
+    // Check if it is a shell script to execute with bash
+    // This is safer for external scripts that might not have +x permission
+    if (app.getPath().length() >= 3 && 
+        app.getPath().substr(app.getPath().length() - 3) == ".sh") {
+        args.push_back("/bin/bash");
+    }
+
     // O comando do jogo (pode ser um script sh)
-    // Para simplificar, assumimos que o path é executável diretamente.
-    // Se for um script que não é executável (+x), precisaria chamar "sh" ou "bash" antes.
-    // Por enquanto, confiamos no shebang #!/bin/bash
     args.push_back(app.getPath());
     
     return args;
@@ -301,7 +299,7 @@ std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinitio
         addr.sun_family = AF_UNIX;
         strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
     
-        unlink(SOCKET_PATH); // Remover se já existir
+        unlink(SOCKET_PATH); 
     
         if (bind(server_socket_fd_, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
             close(server_socket_fd_);

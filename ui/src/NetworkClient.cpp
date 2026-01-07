@@ -1,7 +1,7 @@
 #include "NetworkClient.hpp"
 #include <cstring>
-#include <fcntl.h>
 #include <cerrno>
+#include "LogManager.hpp"
 
 #define SOCKET_PATH "/tmp/gameman.sock"
 
@@ -13,46 +13,28 @@ NetworkClient& NetworkClient::getInstance() {
 NetworkClient::NetworkClient() {}
 
 NetworkClient::~NetworkClient() {
-    if (socket_fd_ != -1) {
-        close(socket_fd_);
-    }
+    // UnixSocketClient destructor handles cleanup
 }
 
 bool NetworkClient::connectToManager() {
-    if (connected_) return true;
+    if (client_ && client_->isConnected()) return true;
 
-    socket_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (socket_fd_ == -1) {
-        std::cerr << "[NetworkClient] Failed to create socket: " << strerror(errno) << std::endl;
+    try {
+        client_ = std::make_unique<UnixSocketClient>(SOCKET_PATH);
+        client_->setNonBlocking(true);
+        LOG_INFO("Connected to Process Manager.");
+        return true;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Failed to connect to Process Manager: " + std::string(e.what()));
+        client_.reset();
         return false;
     }
-
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
-
-    if (connect(socket_fd_, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        // Don't log spam if just checking
-        // std::cerr << "[NetworkClient] Failed to connect: " << strerror(errno) << std::endl;
-        close(socket_fd_);
-        socket_fd_ = -1;
-        return false;
-    }
-
-    // Set non-blocking mode
-    int flags = fcntl(socket_fd_, F_GETFL, 0);
-    fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK);
-
-    connected_ = true;
-    std::cout << "[NetworkClient] Connected to Process Manager." << std::endl;
-    return true;
 }
 
 void NetworkClient::sendStartGame(const std::string& id, const std::string& path, 
                                  int width, int height, int fps, bool useGamescope) {
     if (!connectToManager()) {
-        std::cerr << "[NetworkClient] Cannot start game: Not connected." << std::endl;
+        LOG_WARNING("Cannot start game: Not connected.");
         return;
     }
 
@@ -69,29 +51,23 @@ void NetworkClient::sendStartGame(const std::string& id, const std::string& path
     j["graphics"] = graphics;
 
     std::string msg = j.dump();
-
-    if (send(socket_fd_, msg.c_str(), msg.size(), MSG_NOSIGNAL) == -1) {
-        std::cerr << "[NetworkClient] Failed to send message: " << strerror(errno) << std::endl;
-        connected_ = false;
-        close(socket_fd_);
-        socket_fd_ = -1;
-    } else {
-        std::cout << "[NetworkClient] Start command sent for: " << id << std::endl;
-        // Assume sucesso imediato para a UI (Optimistic Update)
-        isRunning_ = true;
-        runningGameId_ = id;
-    }
+    client_->send(msg); // UnixSocketClient::send uses mutex and handles writing
+    
+    LOG_INFO("Start command sent for: " + id);
+    // Assume sucesso imediato para a UI (Optimistic Update)
+    isRunning_ = true;
+    runningGameId_ = id;
 }
 
 void NetworkClient::checkEvents() {
-    if (!connected_) return;
+    if (!client_) return;
 
     char buffer[1024];
-    ssize_t bytes_read = recv(socket_fd_, buffer, sizeof(buffer) - 1, 0);
+    ssize_t bytes_read = client_->receive(buffer, sizeof(buffer) - 1);
 
     if (bytes_read > 0) {
         buffer[bytes_read] = '\0';
-        std::cout << "[NetworkClient] Received: " << buffer << std::endl;
+        LOG_DEBUG("Received: " + std::string(buffer));
         
         try {
             auto j = json::parse(buffer);
@@ -99,7 +75,7 @@ void NetworkClient::checkEvents() {
                 std::string evt = j["event"];
                 
                 if (evt == "game_finished" || evt == "process_exited") {
-                    std::cout << ">>> JOGO TERMINOU! <<<" << std::endl;
+                    LOG_INFO(">>> JOGO TERMINOU! <<<");
                     isRunning_ = false;
                     runningGameId_ = "";
                 }
@@ -109,20 +85,16 @@ void NetworkClient::checkEvents() {
                 }
             }
         } catch (const std::exception& e) {
-            std::cerr << "[NetworkClient] JSON parse error: " << e.what() << std::endl;
+            LOG_ERROR("JSON parse error: " + std::string(e.what()));
         }
 
     } else if (bytes_read == 0) {
-        std::cout << "[NetworkClient] Server disconnected." << std::endl;
-        connected_ = false;
-        close(socket_fd_);
-        socket_fd_ = -1;
+        LOG_INFO("Server disconnected.");
+        client_.reset();
     } else {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            std::cerr << "[NetworkClient] Recv error: " << strerror(errno) << std::endl;
-            connected_ = false;
-            close(socket_fd_);
-            socket_fd_ = -1;
+            LOG_ERROR("Recv error: " + std::string(strerror(errno)));
+            client_.reset();
         }
     }
 }

@@ -2,6 +2,7 @@
 #include "Janela.hpp"
 #include "GerenciadorFontes.hpp"
 #include "GerenciadorImagens.hpp"
+#include "GerenciadorAudio.hpp"
 #include "Utils.hpp" 
 #include "Theme.hpp"
 #include "GraphicsUtils.hpp"
@@ -16,7 +17,7 @@ using namespace MeuProjeto;
 
 extern GerenciadorImagens gerImg;
 extern GerenciadorJogos gerenciadorJogos;
-static GerenciadorFontes gerenciadorFontesBotoes; 
+extern GerenciadorFontes gerFontes;
 
 // --- Construtores e Destrutor ---
 
@@ -30,11 +31,13 @@ static GerenciadorFontes gerenciadorFontesBotoes;
  * @param texto O texto a ser exibido no botão (opcional).
  */
 Botao::Botao(int x, int y, int largura, int altura, const std::string& texto) 
-    : area{x, y, largura, altura}, texturaImagem(nullptr), texto(texto), 
+    : area{x, y, largura, altura}, 
       corPadrao({59, 59, 61, 255}), corHover({96, 97, 99, 255}), corPressionado({131, 131, 133, 255}),
-      hover(false), pressionado(false), parentJanela(nullptr), nomeJogo(""), descJogo(""), 
-      isRound(false), isDestaque(false),
-      tipoFonte(TipoFonte::NEGRITO), tamanhoFonte(32) 
+      texto(texto),
+      texturaImagem(nullptr), hover(false), pressionado(false),
+      tipoFonte(TipoFonte::NEGRITO), tamanhoFonte(32),
+      imagemPath(""), parentJanela(nullptr), nomeJogo(""), descJogo(""), 
+      isRound(false), isDestaque(false), cornerRadius(10), iconText("")
 {
  
 }
@@ -55,12 +58,14 @@ Botao::Botao(int x, int y, int largura, int altura, const std::string& texto)
 Botao::Botao(SDL_Renderer* renderer, int x, int y, int largura, int altura,
              const std::string& imagemPath, const std::string& nome,
              const std::string& desc, bool isDestaque)
-    : area{x, y, largura, altura}, texturaImagem(nullptr), texto(""),
+    : area{x, y, largura, altura}, 
       corPadrao({0,0,0,0}), corHover({96, 97, 99, 255}), corPressionado({131, 131, 133, 255}),
-      hover(false), pressionado(false), parentJanela(nullptr),
-      nomeJogo(nome), descJogo(desc), imagemPath(imagemPath), 
-      isRound(false), isDestaque(isDestaque),
-      tipoFonte(TipoFonte::NEGRITO), tamanhoFonte(32) 
+      texto(""),
+      texturaImagem(nullptr), hover(false), pressionado(false),
+      tipoFonte(TipoFonte::NEGRITO), tamanhoFonte(32),
+      imagemPath(imagemPath), parentJanela(nullptr),
+      nomeJogo(nome), descJogo(desc), 
+      isRound(false), isDestaque(isDestaque), cornerRadius(10), iconText("")
 {
     if (renderer && !imagemPath.empty()) {
         texturaImagem = gerImg.carregar(renderer, imagemPath);
@@ -116,6 +121,7 @@ bool Botao::handleMouseMotion(SDL_Event& evento, int offsetX, int offsetY) {
     bool abriuPopup = false;
 
     if (mouseDentro && !hover) { 
+        gerAudio.tocarSom("nav.wav");
         if (parentJanela && !nomeJogo.empty() && texto.empty()) {
             parentJanela->abrirPopup(nomeJogo, texturaImagem, descJogo, area.x, area.y, area.w, area.h);
             abriuPopup = true;
@@ -265,18 +271,24 @@ SDL_Color Botao::determineCurrentColor() {
  * @param area A área retangular ajustada do botão.
  */
 void Botao::renderizarTextoCentralizado(SDL_Renderer* renderer, const SDL_Rect& area) {
-    static GerenciadorFontes gerenciadorFontesBotoes;
-
     // *** USA A FONTE E TAMANHO CONFIGURADOS NO BOTÃO ***
     const std::string& fontePath = ConfigFontes::obterCaminho(tipoFonte);
-    TTF_Font* font = gerenciadorFontesBotoes.carregar(fontePath, tamanhoFonte);
+    TTF_Font* font = gerFontes.carregar(fontePath, tamanhoFonte);
     
     if (!font) {
         std::cerr << "[ERRO] Falha ao carregar fonte de botão: " << fontePath << std::endl;
         return;
     }
 
-    // Cor do texto branca
+    // Preparar texto do ícone (se houver)
+    int iconWidth = 0;
+    int iconGap = 10;
+    
+    if (!iconText.empty()) {
+        iconWidth = 32; // Tamanho fixo do círculo do ícone
+    }
+
+    // Renderizar Texto Principal
     SDL_Surface* surface = TTF_RenderUTF8_Blended(font, texto.c_str(), {255, 255, 255, 255});
     if (!surface) return;
 
@@ -288,9 +300,50 @@ void Botao::renderizarTextoCentralizado(SDL_Renderer* renderer, const SDL_Rect& 
 
     int texW = surface->w, texH = surface->h;
     
+    // Calcular largura total (Ícone + Gap + Texto)
+    int totalContentWidth = texW;
+    if (!iconText.empty()) totalContentWidth += iconWidth + iconGap;
+
+    // Posição de início (centralizado)
+    int startX = area.x + (area.w - totalContentWidth) / 2;
+    int centerY = area.y + area.h / 2;
+
+    // --- DESENHAR ÍCONE ---
+    if (!iconText.empty()) {
+        int iconX = startX;
+        int iconY = centerY - (iconWidth / 2);
+        int radius = iconWidth / 2;
+
+        // Círculo Branco
+        filledCircleRGBA(renderer, iconX + radius, iconY + radius, radius, 255, 255, 255, 255);
+        
+        // Letra do Ícone (Preta)
+        SDL_Color black = {20, 20, 20, 255};
+        // Usa uma fonte um pouco menor para a letra dentro do círculo
+        TTF_Font* fontIcon = gerFontes.carregar(fontePath, 20); 
+        if (fontIcon) {
+            SDL_Surface* sIcon = TTF_RenderUTF8_Blended(fontIcon, iconText.c_str(), black);
+            if (sIcon) {
+                SDL_Texture* tIcon = SDL_CreateTextureFromSurface(renderer, sIcon);
+                SDL_Rect rIcon = {
+                    iconX + radius - sIcon->w/2, 
+                    iconY + radius - sIcon->h/2, 
+                    sIcon->w, sIcon->h
+                };
+                SDL_RenderCopy(renderer, tIcon, nullptr, &rIcon);
+                SDL_FreeSurface(sIcon);
+                SDL_DestroyTexture(tIcon);
+            }
+        }
+        
+        // Avançar X para o texto
+        startX += iconWidth + iconGap;
+    }
+
+    // --- DESENHAR TEXTO PRINCIPAL ---
     SDL_Rect rectTexto = {
-        area.x + (area.w - texW) / 2, // Centraliza horizontalmente
-        area.y + (area.h - texH) / 2, // Centraliza verticalmente
+        startX, 
+        centerY - texH / 2, 
         texW,
         texH
     };
@@ -347,6 +400,10 @@ void Botao::setIsRound(bool round) {
 
 void Botao::setCornerRadius(int radius) {
     cornerRadius = radius;
+}
+
+void Botao::setIcon(const std::string& iconChar) {
+    iconText = iconChar;
 }
 
 /**

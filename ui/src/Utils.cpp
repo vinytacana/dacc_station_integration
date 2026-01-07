@@ -4,6 +4,9 @@
 #include <iostream>
 #include <string>
 
+// Declaração externa (definida em main.cpp no escopo global)
+extern MeuProjeto::GerenciadorFontes gerFontes;
+
 namespace MeuProjeto {
 
 // DEFINIÇÃO DAS FONTES (CONFIGURE AQUI OS CAMINHOS)
@@ -103,10 +106,9 @@ void desenharTexto(SDL_Renderer* renderer,
                    SDL_Color cor, 
                    int tamanhoFonte,
                    TipoFonte tipoFonte) {
-    static GerenciadorFontes gerenciador;
 
     const std::string& caminhoFonte = ConfigFontes::obterCaminho(tipoFonte);
-    TTF_Font* font = gerenciador.carregar(caminhoFonte, tamanhoFonte);
+    TTF_Font* font = gerFontes.carregar(caminhoFonte, tamanhoFonte);
     
     if (!font) {
         std::cerr << "[ERRO] Falha ao carregar fonte: " << caminhoFonte << std::endl;

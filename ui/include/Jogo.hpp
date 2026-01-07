@@ -33,7 +33,10 @@ public:
          const std::string& codigo, 
          const std::string& capa,
          const std::vector<std::string>& capturas,
-         const std::string& executavel = "");
+         const std::string& executavel = "",
+         int ano = 0,
+         int players = 1,
+         const std::string& genero = "Geral");
 
     // --- Getters ---
     /**
@@ -41,6 +44,10 @@ public:
      * @return O nome do jogo.
      */
     std::string getNome() const;
+
+    int getAno() const;
+    int getPlayers() const;
+    std::string getGenero() const;
 
     /**
      * @brief Obtém a descrição do jogo.
@@ -132,12 +139,20 @@ public:
      * @param imagens O vetor contendo todos os caminhos de imagem.
      */
     void setImagens(const std::vector<std::string>& imagens);
+    
+    void setAno(int ano);
+    void setPlayers(int players);
+    void setGenero(const std::string& genero);
 
 private:
     /**
      * @brief Nome do jogo.
      */
     std::string nome;
+
+    int ano;
+    int players;
+    std::string genero;
 
     /**
      * @brief Descrição do jogo.

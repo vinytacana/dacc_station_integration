@@ -1,14 +1,14 @@
 CXX := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -I../process-manager/third-party
-LDFLAGS := -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx
+CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -I../process-manager/third-party -I../logs/include -I../config-dacc
+LDFLAGS := -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer -L../logs -ldacc-logs -L../config-dacc -ldacc-config
 
 # Diretórios
-BIN_DIR := .
+BIN_DIR := ../bin
 BUILD_DIR := build
 SRC_DIR := src
 
 # Alvo
-TARGET := $(BIN_DIR)/gerenciador
+TARGET := $(BIN_DIR)/dacc-ui
 
 # Fontes e Objetos
 SRCS := $(wildcard $(SRC_DIR)/*.cpp)

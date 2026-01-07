@@ -182,6 +182,12 @@ public:
     int getCornerRadius() const { return cornerRadius; }
 
     /**
+     * @brief Define um ícone de input (letra) para aparecer à esquerda do texto.
+     * Ex: "A" desenhará um círculo com "A" dentro.
+     */
+    void setIcon(const std::string& iconChar);
+
+    /**
      * @brief A área retangular do botão.
      */
     SDL_Rect area;
@@ -333,6 +339,11 @@ private:
     bool isDestaque = false;
 
     int cornerRadius = 10;
+
+    /**
+     * @brief Texto do ícone (ex: "A"). Se vazio, não desenha ícone.
+     */
+    std::string iconText = "";
 };
 
 } // namespace MeuProjeto

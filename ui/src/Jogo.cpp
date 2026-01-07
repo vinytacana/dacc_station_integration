@@ -17,8 +17,11 @@ Jogo::Jogo(const std::string& nome,
            const std::string& codigo, 
            const std::string& capa,
            const std::vector<std::string>& capturas,
-           const std::string& executavel)
-    : nome(nome), descricao(descricao), codigo(codigo), capa(capa), capturas(capturas), executavel(executavel), id("")
+           const std::string& executavel,
+           int ano,
+           int players,
+           const std::string& genero)
+    : nome(nome), ano(ano), players(players), genero(genero), descricao(descricao), codigo(codigo), id(""), capa(capa), capturas(capturas), executavel(executavel)
 {
 }
 
@@ -32,6 +35,10 @@ std::string Jogo::getNome() const
 {
     return nome;
 }
+
+int Jogo::getAno() const { return ano; }
+int Jogo::getPlayers() const { return players; }
+std::string Jogo::getGenero() const { return genero; }
 
 /**
  * @brief Obtém a descrição do jogo.
@@ -161,3 +168,7 @@ void Jogo::setImagens(const std::vector<std::string>& imagens)
         this->capturas.clear();
     }
 }
+
+void Jogo::setAno(int ano) { this->ano = ano; }
+void Jogo::setPlayers(int players) { this->players = players; }
+void Jogo::setGenero(const std::string& genero) { this->genero = genero; }

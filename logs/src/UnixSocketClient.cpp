@@ -1,10 +1,12 @@
 #include "UnixSocketClient.hpp"
 #include "LogManager.hpp"
+#include "UnixSocketUtils.hpp"
 
 #include <unistd.h> 
 #include <sys/un.h>
 #include <sys/socket.h>
-
+#include <fcntl.h>
+#include <cstring>
 #include <stdexcept>
 
 UnixSocketClient::UnixSocketClient(const std::string& path){
@@ -16,8 +18,7 @@ UnixSocketClient::UnixSocketClient(const std::string& path){
     }
 
     sockaddr_un addr{};
-    addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
+    UnixSocketUtils::prepareAddress(addr, path);
     
     int ret = connect(fd_, (sockaddr*)&addr, sizeof(addr));
     
@@ -41,5 +42,24 @@ void UnixSocketClient::send(const std::string& data) {
     if (n < 0) {
         LOG_ERROR("UnixSocketClient::send write()");        
     }
+}
+
+void UnixSocketClient::setNonBlocking(bool enable) {
+    if (fd_ < 0) return;
+    int flags = fcntl(fd_, F_GETFL, 0);
+    if (enable) {
+        fcntl(fd_, F_SETFL, flags | O_NONBLOCK);
+    } else {
+        fcntl(fd_, F_SETFL, flags & ~O_NONBLOCK);
+    }
+}
+
+ssize_t UnixSocketClient::receive(void* buffer, size_t size) {
+    if (fd_ < 0) return -1;
+    return recv(fd_, buffer, size, 0);
+}
+
+bool UnixSocketClient::isConnected() const {
+    return fd_ >= 0;
 }
 
