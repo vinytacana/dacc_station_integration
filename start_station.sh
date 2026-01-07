@@ -4,8 +4,8 @@
 # Inicia o Servidor de Log, o Process Manager e a Interface Gráfica
 
 echo "[1/3] Iniciando Servidor de Logs (gameman-log)..."
-if [ -f "./process-manager/bin/log-server" ]; then
-    ./process-manager/bin/log-server &
+if [ -f "./bin/log-server" ]; then
+    ./bin/log-server &
     PID_LOG=$!
     echo "    Log Server iniciado com PID $PID_LOG"
 else
@@ -14,8 +14,8 @@ fi
 
 echo "[2/3] Iniciando Process Manager (gameman-pm)..."
 # Certifique-se de que o diretório bin existe e o executável está lá
-if [ -f "./process-manager/bin/process-manager" ]; then
-    ./process-manager/bin/process-manager &
+if [ -f "./bin/process-manager" ]; then
+    ./bin/process-manager &
     PID_PM=$!
     echo "    Process Manager iniciado com PID $PID_PM"
 else
@@ -24,12 +24,12 @@ else
 fi
 
 # Aguarda um momento para o socket ser criado
-sleep 1
+sleep 3
 
 echo "[3/3] Iniciando Interface Gráfica (UI)..."
 cd ui
-if [ -f "./gerenciador" ]; then
-    ./gerenciador
+if [ -f "../bin/dacc-ui" ]; then
+    ../bin/dacc-ui
 else
     echo "    ERRO: Executável da UI não encontrado!"
     # Mata o PM antes de sair
