@@ -1,0 +1,173 @@
+#ifndef CONFIG_LAYOUT_HPP
+#define CONFIG_LAYOUT_HPP
+
+#pragma once
+
+#include <iostream>
+#include <algorithm> // Para std::min
+
+namespace MeuProjeto {
+
+struct ConfigLayout {
+    // =============================================================
+    // VARIÁVEIS DE ESTADO (Dinâmicas)
+    // =============================================================
+    static int larguraTela;
+    static int alturaTela;
+    static float escalaGlobal; 
+    static int offsetX;        
+    static int offsetY;        
+
+    // =============================================================
+    // CONSTANTES DE DESIGN (Base: 1920x1280)
+    // =============================================================
+
+    static constexpr int LARGURA_NATIVA = 1920;
+    static constexpr int ALTURA_NATIVA  = 1280;
+
+    static constexpr int MARGEM_TELA_X = 35;
+    static constexpr int MARGEM_TELA_Y = 30;
+    
+    // Espaçamentos Genéricos
+    static constexpr int ESPACO_PEQUENO = 20;
+    static constexpr int ESPACO_MEDIO   = 50;
+    static constexpr int ESPACO_GRANDE  = 80;
+
+    // -------------------------------------------------------------
+    // 1. CABEÇALHO
+    // -------------------------------------------------------------
+    
+    static constexpr int BOTAO_CONFIG_POS_X   = MARGEM_TELA_X;
+    static constexpr int BOTAO_CONFIG_POS_Y   = 5;
+    static constexpr int BOTAO_CONFIG_LARGURA = 130;
+    static constexpr int BOTAO_CONFIG_ALTURA  = 180;
+
+    // Distância entre o botão de config e a barra de pesquisa
+    static constexpr int DISTANCIA_CONFIG_PESQUISA = 290; 
+    
+    static constexpr int PESQUISA_POS_X   = BOTAO_CONFIG_POS_X + BOTAO_CONFIG_LARGURA + DISTANCIA_CONFIG_PESQUISA;
+    static constexpr int PESQUISA_POS_Y   = 37;
+    static constexpr int PESQUISA_LARGURA = 1008;
+    static constexpr int PESQUISA_ALTURA  = 98;
+
+    // Ícone da Lupa (Dentro da pesquisa)
+    static constexpr int MARGEM_LUPA        = 14; 
+    static constexpr int ICONE_LUPA_TAMANHO = 100;
+    static constexpr int ICONE_LUPA_POS_X   = PESQUISA_POS_X + PESQUISA_LARGURA - ICONE_LUPA_TAMANHO - MARGEM_LUPA;
+    static constexpr int ICONE_LUPA_POS_Y   = PESQUISA_POS_Y + (PESQUISA_ALTURA - ICONE_LUPA_TAMANHO)/2 + 3;
+
+    // Distância entre pesquisa e botão de tema
+    static constexpr int DISTANCIA_PESQUISA_TEMA = 266; 
+    
+    static constexpr int BOTAO_TEMA_POS_X   = PESQUISA_POS_X + PESQUISA_LARGURA + DISTANCIA_PESQUISA_TEMA;
+    static constexpr int BOTAO_TEMA_POS_Y   = 27;
+    static constexpr int BOTAO_TEMA_LARGURA = 120;
+    static constexpr int BOTAO_TEMA_ALTURA  = 120;
+
+    // -------------------------------------------------------------
+    // 2. ÁREA DE DESTAQUE (HERO)
+    // -------------------------------------------------------------
+    
+    static constexpr int DESTAQUE_PRINCIPAL_X       = 30;
+    static constexpr int DESTAQUE_PRINCIPAL_Y       = 180; 
+    static constexpr int DESTAQUE_PRINCIPAL_LARGURA = 1862;
+    static constexpr int DESTAQUE_PRINCIPAL_ALTURA  = 597;
+
+    // Miniaturas
+    static constexpr int DESTAQUE_MINI_X_INICIAL = 70;
+    static constexpr int DESTAQUE_MINI_Y         = 597;
+    static constexpr int DESTAQUE_MINI_TAMANHO   = 300;
+    static constexpr int DESTAQUE_MINI_ESPACO    = 72; // Espaço entre um quadrado e outro
+    
+    // Passo total (Largura + Espaço)
+    static constexpr int DESTAQUE_MINI_PASSO_TOTAL = DESTAQUE_MINI_TAMANHO + DESTAQUE_MINI_ESPACO;
+
+    // -------------------------------------------------------------
+    // 3. CATEGORIAS E BOTÃO ALEATÓRIO
+    // -------------------------------------------------------------
+
+    static constexpr int DISTANCIA_HERO_CATEGORIA = 23;
+
+    static constexpr int PAINEL_CATEGORIA_X       = 30;
+    // O painel fica logo abaixo da área dos mini destaques
+    static constexpr int PAINEL_CATEGORIA_Y       = DESTAQUE_MINI_Y + DESTAQUE_MINI_TAMANHO + DISTANCIA_HERO_CATEGORIA;
+    static constexpr int PAINEL_CATEGORIA_LARGURA = 980;
+    static constexpr int PAINEL_CATEGORIA_ALTURA  = 100;
+
+    // Botões de Categoria Individuais
+    static constexpr int ITEM_CATEGORIA_LARGURA = 140;
+    static constexpr int ITEM_CATEGORIA_ALTURA  = 80;
+    static constexpr int ITEM_CATEGORIA_ESPACO  = 6;
+    static constexpr int ITEM_CATEGORIA_PASSO   = ITEM_CATEGORIA_LARGURA + ITEM_CATEGORIA_ESPACO;
+    
+    // Centralização dentro do painel
+    static constexpr int ITEM_CATEGORIA_POS_Y   = PAINEL_CATEGORIA_Y + (PAINEL_CATEGORIA_ALTURA - ITEM_CATEGORIA_ALTURA)/2;
+    static constexpr int ITEM_CATEGORIA_POS_X_BASE = 320; // Onde começa a lista
+    static constexpr int CATEGORIA_QTD_VISIVEL  = 4;
+
+    static constexpr int TITULO_CATEGORIA_X = PAINEL_CATEGORIA_X + 10;
+    static constexpr int TITULO_CATEGORIA_Y = PAINEL_CATEGORIA_Y + 30;
+
+    // Botão Aleatório (Dado)
+    static constexpr int DISTANCIA_CATEGORIA_ALEATORIO = 190;
+    
+    static constexpr int BOTAO_ALEATORIO_X = PAINEL_CATEGORIA_X + PAINEL_CATEGORIA_LARGURA + DISTANCIA_CATEGORIA_ALEATORIO;
+    static constexpr int BOTAO_ALEATORIO_Y = PAINEL_CATEGORIA_Y;
+    static constexpr int BOTAO_ALEATORIO_LARGURA = 600;
+    static constexpr int BOTAO_ALEATORIO_ALTURA  = 100;
+
+    // -------------------------------------------------------------
+    // 4. GRADE DE JOGOS
+    // -------------------------------------------------------------
+
+    static constexpr int DISTANCIA_CATEGORIA_GRADE = 60;
+    static constexpr int GRADE_JOGOS_Y_INICIAL = PAINEL_CATEGORIA_Y + PAINEL_CATEGORIA_ALTURA + DISTANCIA_CATEGORIA_GRADE;
+    
+    static constexpr int GRADE_JOGOS_LARGURA_ITEM = 384;
+    static constexpr int GRADE_JOGOS_ALTURA_ITEM  = 328;
+    static constexpr int GRADE_JOGOS_ESPACO_X     = 76;
+    static constexpr int GRADE_JOGOS_ESPACO_Y     = 50;
+    static constexpr int GRADE_JOGOS_COLUNAS      = 4;
+
+    // -------------------------------------------------------------
+    // 5. JANELA DE JOGO (POPUP) & TECLADO
+    // -------------------------------------------------------------
+    static constexpr int JANELA_JOGO_BOTAO_JOGAR_X = 1080;
+    static constexpr int JANELA_JOGO_BOTAO_JOGAR_Y = 450;
+    static constexpr int JANELA_JOGO_BOTAO_JOGAR_W = 770;
+    static constexpr int JANELA_JOGO_BOTAO_JOGAR_H = 120;
+
+    static constexpr int TECLADO_BASE_X = 460;
+    static constexpr int TECLADO_BASE_Y = 600;
+    static constexpr int TECLADO_TECLA_TAMANHO = 60;
+    static constexpr int TECLADO_TECLA_ESPACAMENTO = 10;
+
+    // =============================================================
+    // FUNÇÕES DE CÁLCULO
+    // =============================================================
+    
+    static void inicializar(int larguraAtual, int alturaAtual) {
+        larguraTela = larguraAtual;
+        alturaTela = alturaAtual;
+        
+        float ratioX = (float)larguraAtual / LARGURA_NATIVA;
+        float ratioY = (float)alturaAtual / ALTURA_NATIVA;
+        escalaGlobal = std::min(ratioX, ratioY);
+        
+        int larguraOcupada = (int)(LARGURA_NATIVA * escalaGlobal);
+        int alturaOcupada  = (int)(ALTURA_NATIVA * escalaGlobal);
+        
+        offsetX = (larguraAtual - larguraOcupada) / 2;
+        offsetY = (alturaAtual - alturaOcupada) / 2;
+
+        std::cout << "[LAYOUT] Escala: " << escalaGlobal << " Offset: " << offsetX << "," << offsetY << std::endl;
+    }
+
+    static int X(int valorNativo) { return (int)(valorNativo * escalaGlobal) + offsetX; }
+    static int Y(int valorNativo) { return (int)(valorNativo * escalaGlobal) + offsetY; }
+    static int F(int tamanhoNativo) { return (int)(tamanhoNativo * escalaGlobal); }
+};
+
+} // namespace MeuProjeto
+
+#endif

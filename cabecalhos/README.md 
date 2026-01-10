@@ -1,55 +1,60 @@
-Organização dos Arquivos
+# Documentação dos Cabeçalhos (.hpp)
 
-Os cabeçalhos estão divididos logicamente em quatro camadas:
+Os arquivos de cabeçalho deste projeto foram reorganizados em módulos lógicos para facilitar a manutenção e a escalabilidade. Abaixo está a descrição de cada arquivo, agrupado por sua subpasta correspondente.
 
-1. Núcleo e Hardware (Core)
+---
 
-GerenciarSDL.hpp: Centraliza a inicialização e finalização dos subsistemas SDL2 (Video, Joysticks, IMG, TTF).
+## 1. Principais (Core)
+Responsável pelas configurações globais, inicialização do sistema e utilitários essenciais.
 
-GerenciarInputs.hpp: O "cérebro" de interações. Traduz eventos brutos de teclado, mouse e gamepad em comandos de interface.
+* **`GerenciarSDL.hpp`**: Centraliza a inicialização e finalização dos subsistemas SDL2 (Vídeo, Joysticks, IMG, TTF).
+* **`ConfigLayout.hpp`**: Define todas as constantes de design (tamanhos, posições, margens) e funções de escala responsiva para adaptar a interface a diferentes resoluções.
+* **`Utils.hpp`**: Funções auxiliares de uso geral, como desenho rápido de texto e gerenciamento de caminhos de fontes.
 
-GerenciarScroll.hpp: Estrutura que mantém o estado global de navegação, posição da câmera e controle de janelas ativas.
+---
 
-2. Gerenciamento de Recursos (Managers)
+## 2. Gerenciadores (Managers)
+Sistemas que controlam recursos compartilhados, entradas e estados globais.
 
-GerenciadorImagens.hpp: Sistema de cache (Flyweight) para texturas. Garante que cada imagem seja carregada apenas uma vez na VRAM.
+* **`GerenciarInputs.hpp`**: O "cérebro" das interações. Traduz eventos brutos de teclado, mouse e gamepad em comandos lógicos para a interface.
+* **`GerenciadorImagens.hpp`**: Sistema de cache (Flyweight) para texturas. Garante que cada imagem seja carregada apenas uma vez na VRAM.
+* **`GerenciadorFontes.hpp`**: Gerencia o ciclo de vida de objetos `TTF_Font`, com suporte a cache por tamanho e limpeza automática (RAII).
+* **`GerenciadorTemas.hpp`**: Singleton que armazena as paletas de cores e permite a troca em tempo real entre os modos Claro e Escuro.
+* **`GerenciadorTexturasTexto.hpp`**: Otimização que armazena texturas de strings já renderizadas para evitar o custo de recriar superfícies de texto a cada frame.
 
-GerenciadorFontes.hpp: Gerencia o ciclo de vida de objetos TTF_Font com suporte a diferentes tamanhos e limpeza automática (RAII).
+---
 
-GerenciadorTemas.hpp: Singleton que armazena as paletas de cores. Permite a troca em tempo real entre o Modo Claro e Modo Escuro.
+## 3. GerenciadoresJogos (Lógica)
+Modelagem de dados e regras de negócio da biblioteca de jogos.
 
-3. Lógica de Dados (Model)
+* **`Jogo.hpp`**: Define o objeto de dados que representa um game (metadados, caminhos de capas, fundos e capturas de tela).
+* **`GerenciadorJogos.hpp`**: Atua como o banco de dados em memória. Provê métodos de adição e filtros de busca por nome, categoria e ID.
 
-Jogo.hpp: Define o objeto de dados que representa um game (metadados, caminhos de capas e capturas de tela).
+---
 
-GerenciadorJogos.hpp: Atua como o banco de dados em memória. Provê filtros de busca por nome, categoria e ID.
+## 4. Arquivos (Persistência)
+Camada responsável por ler e escrever dados no disco.
 
-Arquivos.hpp: Utilitário estático para persistência de dados (leitura e escrita de arquivos .txt de configuração dos jogos).
+* **`Arquivos.hpp`**: Utilitário estático para persistência de dados (leitura e escrita de arquivos `.txt` de configuração e carregamento da biblioteca).
 
-4. Componentes de Interface (UI)
+---
 
-Botao.hpp: Classe base para todos os elementos interativos. Suporta estados de hover, clique e foco por controle.
+## 5. Interface (UI)
+Componentes visuais e janelas do sistema.
 
-BotaoPesquisa.hpp: Especialização do botão para busca dinâmica, com dropdown de resultados e integração com o banco de dados.
+### 5.1 Componentes
+Elementos reutilizáveis que compõem a interface.
 
-Forma.hpp: Primitivas gráficas (retângulos, círculos) para construção de painéis e fundos.
+* **`Botao.hpp`**: Classe base para elementos interativos. Suporta estados de *hover*, clique e sistema de foco via controle.
+* **`BotaoPesquisa.hpp`**: Especialização do botão para busca dinâmica, contendo lógica de input de texto e dropdown de resultados.
+* **`TecladoVirtual.hpp`**: Componente de acessibilidade que exibe um teclado em tela navegável via gamepad.
+* **`Forma.hpp`**: Primitivas gráficas (retângulos, círculos) para construção de fundos e painéis simples.
 
-Janela.hpp: Sistema de popups informativos simples.
+### 5.2 Janelas
+Gerenciadores de telas e containers complexos.
 
-JanelaJogo.hpp: Interface complexa de detalhes do jogo (página do produto), com carrossel de fotos e lógica de lançamento do executável.
-
-JanelaConfiguracao.hpp: Gerencia uma segunda janela SDL física para ajustes de sistema.
-
-TecladoVirtual.hpp: Componente de acessibilidade para entrada de texto usando Gamepads.
-
-Utils.hpp: Funções auxiliares de desenho de texto e definições globais de tipografia.
-
-Padrões Utilizados
-
-RAII (Resource Acquisition Is Initialization): Gerenciamento automático de recursos SDL através de destruidores e Smart Pointers.
-
-Singleton: Utilizado no GerenciadorTemas para garantir consistência visual única em toda a aplicação.
-
-Cache/Flyweight: Implementado nos gerenciadores de ativos para otimizar o uso de memória RAM e GPU.
-
-Hibridismo de Input: Quase todos os cabeçalhos de UI preveem suporte simultâneo para Mouse (Coordenadas) e Gamepad (Índice de Foco).
+* **`GerenciarInterface.hpp`**: O orquestrador central da UI. Instancia e posiciona todos os botões, grades e menus na tela.
+* **`GerenciarScroll.hpp`**: Estrutura que mantém o estado global de navegação, posição da câmera (scroll) e índices de seleção.
+* **`JanelaJogo.hpp`**: A "Página do Produto". Exibe detalhes complexos, carrossel de capturas e botão de lançamento.
+* **`JanelaConfiguracao.hpp`**: Gerencia uma janela SDL física secundária para ajustes de sistema.
+* **`Janela.hpp`**: Sistema de popups informativos simples e rápidos.

@@ -11,6 +11,8 @@ O **Botão de Configurações**, localizado no canto superior esquerdo (ex: Conf
 
 Para os ícones funcionais, a **Lupa de Pesquisa**, que é renderizada dentro da barra de busca, deve ter **100 pixels por 100 pixels**. O ícone do **Dado (Aleatório)**, exibido ao lado do botão de escolha aleatória, deve ter **150 pixels por 150 pixels**. A imagem de **Overlay de Botões** (explicacaoBotoesClaro.jpg), que aparece no rodapé centralizado, tem um tamanho sugerido de aproximadamente **1000 pixels de largura por 150 pixels de altura**.
 
+As Janelas Pop-up (utilizadas para exibir os Detalhes do Jogo e o menu de Configurações) possuem uma dimensão total de 1525 pixels de largura por 1116 pixels de altura.
+
 **Ativos dos Jogos:**
 Para os jogos em destaque no topo da tela, a **Capa de Destaque** deve ser quadrada, com **300 pixels por 300 pixels**. O **Fundo de Destaque**, que é o wallpaper panorâmico exibido atrás dos menus, deve ter a resolução de **1862 pixels de largura por 597 pixels de altura**.
 

@@ -1,0 +1,7 @@
+@Star Wars
+#Uma jornada em um universo épico de ficção científica, repleta de conflitos, tecnologia avançada e histórias marcantes
+$Aventura, Esportes
+*arquivos/Jogos/Jogo4/jogo4CapaTelaPrincipal.jpeg.jpeg
+&arquivos/Jogos/Jogo4/jogo4FundoDestaque.jpeg
++arquivos/Jogos/Jogo4/jogo4CapaJanelaJogo.jpeg.jpeg
+%arquivos/Jogos/Jogo4/Capturas de Tela/captura1.jpeg;arquivos/Jogos/Jogo4/Capturas de Tela/captura2.jpeg;arquivos/Jogos/Jogo4/Capturas de Tela/captura3.jpeg;arquivos/Jogos/Jogo4/Capturas de Tela/captura4.jpeg
