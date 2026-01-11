@@ -1,5 +1,7 @@
-@MINECRAFT
-#Descrição2
+@Minecraft
+#Um mundo aberto onde a criatividade não tem limites, permitindo construir, explorar e sobreviver do seu próprio jeito.
 $Acao, Estrategia
-*assets/textures/jogo2.jpeg
-%assets/textures/captura1.jpeg;assets/textures/captura2.jpeg;assets/textures/captura3.jpeg;assets/textures/captura4.jpeg
+*assets/images/games/jogo2CapaTelaPrincipal.jpeg.jpeg
+&assets/images/games/jogo2FundoDestaque.jpeg
++assets/images/games/jogo2CapaJanelaJogo.jpeg.jpeg
+%assets/images/games/Capturas de Tela/captura1.jpeg;assets/images/games/Capturas de Tela/captura2.jpeg;assets/images/games/Capturas de Tela/captura3.jpeg;assets/images/games/Capturas de Tela/captura4.jpeg

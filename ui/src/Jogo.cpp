@@ -1,174 +1,132 @@
+/**
+ * @file Jogo.cpp
+ * @brief Implementação dos métodos da classe Jogo.
+ * 
+ * Este arquivo contém a lógica dos construtores, seletores (getters) e 
+ * modificadores (setters) para a classe Jogo, gerenciando as informações 
+ * textuais e os caminhos de ativos visuais de cada título.
+ */
+
 #include "Jogo.hpp"
 
 using namespace MeuProjeto;
 
 /**
- * @brief Construtor completo da classe Jogo.
- *
- * @param nome O nome do jogo.
- * @param descricao A descrição do jogo.
- * @param codigo O código.
- * @param capa O caminho da capa.
- * @param capturas O vetor de caminhos das capturas.
- * @param executavel O caminho do executável.
+ * @brief Construtor da classe Jogo.
+ * 
+ * Inicializa todos os campos do jogo através de uma lista de inicialização
+ * para maior eficiência.
+ * 
+ * @param nome Nome do jogo.
+ * @param descricao Descrição detalhada.
+ * @param codigo Código identificador único.
+ * @param capaTelaPrincipal Caminho da imagem para a grade principal.
+ * @param fundoDestaque Caminho da imagem de fundo (background).
+ * @param capaJanelaJogo Caminho da imagem para a interface interna da janela.
+ * @param capturas Vetor contendo os caminhos das capturas de tela (screenshots).
  */
 Jogo::Jogo(const std::string& nome, 
            const std::string& descricao, 
            const std::string& codigo, 
-           const std::string& capa,
-           const std::vector<std::string>& capturas,
-           const std::string& executavel,
-           int ano,
-           int players,
-           const std::string& genero)
-    : nome(nome), ano(ano), players(players), genero(genero), descricao(descricao), codigo(codigo), id(""), capa(capa), capturas(capturas), executavel(executavel)
+           const std::string& capaTelaPrincipal,
+           const std::string& fundoDestaque,
+           const std::string& capaJanelaJogo,
+           const std::vector<std::string>& capturas)
+    : nome(nome), descricao(descricao), codigo(codigo), 
+      capaTelaPrincipal(capaTelaPrincipal), 
+      fundoDestaque(fundoDestaque), 
+      capaJanelaJogo(capaJanelaJogo), 
+      capturas(capturas)
 {
 }
 
-// Implementação dos Getters
+// Getters
 
-/**
- * @brief Obtém o nome do jogo.
- * @return O nome do jogo.
+/** @brief Retorna o nome do jogo. */
+std::string Jogo::getNome() const { return nome; }
+
+/** @brief Retorna a descrição do jogo. */
+std::string Jogo::getDescricao() const { return descricao; }
+
+/** @brief Retorna o código único do jogo. */
+std::string Jogo::getCodigo() const { return codigo; }
+
+/** @brief Retorna o caminho da imagem da capa na tela principal. */
+std::string Jogo::getCapaTelaPrincipal() const { return capaTelaPrincipal; }
+
+/** @brief Retorna o caminho da imagem de fundo de destaque. */
+std::string Jogo::getFundoDestaque() const { return fundoDestaque; }
+
+/** @brief Retorna o caminho da imagem da capa dentro da janela do jogo. */
+std::string Jogo::getCapaJanelaJogo() const { return capaJanelaJogo; }
+
+/** 
+ * @brief Método de compatibilidade para obter a capa.
+ * @return O mesmo que getCapaTelaPrincipal().
  */
-std::string Jogo::getNome() const
-{
-    return nome;
-}
+std::string Jogo::getCapa() const { return capaTelaPrincipal; }
 
-int Jogo::getAno() const { return ano; }
-int Jogo::getPlayers() const { return players; }
-std::string Jogo::getGenero() const { return genero; }
+/** @brief Retorna o vetor com os caminhos de todas as capturas de tela. */
+std::vector<std::string> Jogo::getCapturas() const { return capturas; }
 
-/**
- * @brief Obtém a descrição do jogo.
- * @return A descrição do jogo.
- */
-std::string Jogo::getDescricao() const
-{
-    return descricao;
-}
-
-std::string Jogo::getCodigo() const {
-    return codigo;
-}
-
-std::string Jogo::getId() const {
-    return id;
-}
-
-std::string Jogo::getCapa() const {
-    return capa;
-}
-
-/**
- * @brief Obtém os caminhos das capturas de tela adicionais.
- * @return Um vetor de caminhos das capturas.
- */
-std::vector<std::string> Jogo::getCapturas() const
-{
-    return capturas;
-}
-
-/**
- * @brief Obtém o caminho do executável do jogo.
- * @return O caminho do script ou binário.
- */
-std::string Jogo::getExecutavel() const
-{
-    return executavel;
-}
-
-/**
- * @brief Obtém todos os caminhos de imagem (capa seguida pelas capturas) para compatibilidade.
- * @return Um vetor contendo a capa e todas as capturas.
+/** 
+ * @brief Agrega todos os caminhos de imagens em um único vetor.
+ * 
+ * Este método é útil para processamento em lote de ativos ou para sistemas 
+ * legados que esperam uma lista única de strings de imagem.
+ * 
+ * @return std::vector<std::string> Lista contendo capa, fundo, imagem interna e capturas.
  */
 std::vector<std::string> Jogo::getImagens() const
 {
     std::vector<std::string> todasImagens;
-    
-    // Adiciona a capa primeiro
-    if (!capa.empty()) {
-        todasImagens.push_back(capa);
-    }
-    
-    // Adiciona todas as capturas
-    for (const auto& captura : capturas) {
-        todasImagens.push_back(captura);
-    }
-    
+    if (!capaTelaPrincipal.empty()) todasImagens.push_back(capaTelaPrincipal);
+    if (!fundoDestaque.empty()) todasImagens.push_back(fundoDestaque);
+    if (!capaJanelaJogo.empty()) todasImagens.push_back(capaJanelaJogo);
+    for (const auto& cap : capturas) todasImagens.push_back(cap);
     return todasImagens;
 }
 
-// Implementação dos Setters
+// Setters
 
-/**
- * @brief Define o nome do jogo.
- * @param nome O novo nome.
- */
-void Jogo::setNome(const std::string& nome)
-{
-    this->nome = nome;
-}
+/** @brief Define o nome do jogo. */
+void Jogo::setNome(const std::string& nome) { this->nome = nome; }
 
-/**
- * @brief Define a descrição do jogo.
- * @param descricao A nova descrição.
- */
-void Jogo::setDescricao(const std::string& descricao)
-{
-    this->descricao = descricao;
-}
+/** @brief Define a descrição do jogo. */
+void Jogo::setDescricao(const std::string& descricao) { this->descricao = descricao; }
 
-void Jogo::setCodigo(const std::string& codigo) {
-    this->codigo = codigo;
-}
+/** @brief Define o código identificador. */
+void Jogo::setCodigo(const std::string& codigo) { this->codigo = codigo; }
 
-void Jogo::setId(const std::string& id) {
-    this->id = id;
-}
+/** @brief Define o caminho da imagem da capa principal. */
+void Jogo::setCapaTelaPrincipal(const std::string& caminho) { this->capaTelaPrincipal = caminho; }
 
-void Jogo::setCapa(const std::string& capa) {
-    this->capa = capa;
-}
+/** @brief Define o caminho da imagem de fundo. */
+void Jogo::setFundoDestaque(const std::string& caminho) { this->fundoDestaque = caminho; }
 
-/**
- * @brief Define os caminhos das capturas de tela adicionais.
- * @param capturas O novo vetor de caminhos de capturas.
- */
-void Jogo::setCapturas(const std::vector<std::string>& capturas)
-{
-    this->capturas = capturas;
-}
+/** @brief Define o caminho da imagem da capa interna. */
+void Jogo::setCapaJanelaJogo(const std::string& caminho) { this->capaJanelaJogo = caminho; }
 
-/**
- * @brief Define o caminho do executável.
- * @param executavel O novo caminho.
- */
-void Jogo::setExecutavel(const std::string& executavel)
-{
-    this->executavel = executavel;
-}
+/** @brief Define o vetor de caminhos para as capturas de tela. */
+void Jogo::setCapturas(const std::vector<std::string>& capturas) { this->capturas = capturas; }
 
-/**
- * @brief Define todas as imagens. A primeira imagem se torna a capa e o resto as capturas.
- * @param imagens O vetor contendo todos os caminhos de imagem.
+/** 
+ * @brief Método de compatibilidade para definir imagens através de uma lista única.
+ * 
+ * Implementa a seguinte lógica de mapeamento:
+ * - O índice 0 é atribuído à Capa Principal.
+ * - Os índices de 1 em diante são atribuídos ao vetor de Capturas.
+ * - Fundo e Capa Interna não são alterados por este método.
+ * 
+ * @param imagens Vetor de strings com os caminhos das imagens.
  */
 void Jogo::setImagens(const std::vector<std::string>& imagens)
 {
-    // Para compatibilidade: primeira imagem vira capa, resto vira capturas
     if (!imagens.empty()) {
-        this->capa = imagens[0];
+        this->capaTelaPrincipal = imagens[0];
         this->capturas.clear();
         for (size_t i = 1; i < imagens.size(); i++) {
             this->capturas.push_back(imagens[i]);
         }
-    } else {
-        this->capa.clear();
-        this->capturas.clear();
     }
 }
-
-void Jogo::setAno(int ano) { this->ano = ano; }
-void Jogo::setPlayers(int players) { this->players = players; }
-void Jogo::setGenero(const std::string& genero) { this->genero = genero; }

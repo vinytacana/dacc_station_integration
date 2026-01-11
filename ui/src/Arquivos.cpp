@@ -1,3 +1,12 @@
+/**
+ * @file Arquivos.cpp
+ * @brief Implementação dos métodos da classe Arquivos.
+ * 
+ * Este arquivo contém a lógica detalhada para persistência de dados em disco,
+ * utilizando um formato de arquivo de texto proprietário baseado em prefixos
+ * de caracteres para identificar os atributos dos objetos Jogo.
+ */
+
 #include "Arquivos.hpp"
 #include <fstream>   
 #include <sstream>   
@@ -6,10 +15,14 @@ using namespace MeuProjeto;
 using namespace std;
 
 /**
- * @brief Verifica se um arquivo existe no caminho especificado.
- *
- * @param caminho O caminho completo para o arquivo.
- * @return Retorna @c true se o arquivo existir e for bom (good), @c false caso contrário.
+ * @brief Verifica a existência de um arquivo no disco.
+ * 
+ * A implementação utiliza a tentativa de abertura de um fluxo de entrada (ifstream).
+ * Se o fluxo for considerado 'bom' (good), significa que o arquivo existe e o
+ * sistema possui permissões de leitura.
+ * 
+ * @param caminho String contendo o caminho do arquivo.
+ * @return true se o arquivo puder ser acessado, false caso contrário.
  */
 bool Arquivos::arquivoExiste(const string& caminho)
 {
@@ -18,52 +31,46 @@ bool Arquivos::arquivoExiste(const string& caminho)
 }
 
 /**
- * @brief Salva uma coleção de jogos em um arquivo de texto.
- *
- * @param caminho O caminho completo onde o arquivo de jogos será salvo.
- * @param jogos Uma referência constante para o vetor de objetos @c Jogo.
- * @return Retorna @c true em caso de sucesso, @c false se a abertura do arquivo falhar.
+ * @brief Serializa a lista de jogos para um arquivo de texto.
+ * 
+ * A implementação segue o seguinte protocolo de gravação:
+ * - @ : Nome do Jogo
+ * - # : Descrição
+ * - $ : Código Identificador
+ * - * : Caminho da Capa Principal
+ * - & : Caminho do Fundo de Destaque
+ * - + : Caminho da Capa da Janela Interna
+ * - % : Lista de capturas de tela separadas por ponto e vírgula (;)
+ * 
+ * @param caminho Destino do arquivo de salvamento.
+ * @param jogos Vetor de objetos Jogo a serem persistidos.
+ * @return true se a gravação ocorrer sem erros, false se o arquivo não puder ser aberto.
  */
 bool Arquivos::salvarJogos(const string& caminho, const vector<Jogo>& jogos)
 {
     ofstream arquivo(caminho);
-    if (!arquivo.is_open())
-    {
-        return false;
-    }
+    if (!arquivo.is_open()) return false;
 
     for (const auto& jogo : jogos)
     {
-        // Campos obrigatórios: Nome (@), Descrição (#), Código ($)
         arquivo << "@" << jogo.getNome() << "\n";
         arquivo << "#" << jogo.getDescricao() << "\n";
         arquivo << "$" << jogo.getCodigo() << "\n";
         
-        // Executável (campo &)
-        if (!jogo.getExecutavel().empty()) {
-            arquivo << "&" << jogo.getExecutavel() << "\n";
-        }
+        // Imagens de interface
+        arquivo << "*" << jogo.getCapaTelaPrincipal() << "\n";
+        arquivo << "&" << jogo.getFundoDestaque() << "\n";
+        arquivo << "+" << jogo.getCapaJanelaJogo() << "\n";
         
-        // Capa (campo *)
-        arquivo << "*" << jogo.getCapa() << "\n";
-
-        // Novos campos (Metadata)
-        if (jogo.getAno() > 0) arquivo << "^" << jogo.getAno() << "\n";
-        if (jogo.getPlayers() > 0) arquivo << "!" << jogo.getPlayers() << "\n";
-        if (!jogo.getGenero().empty()) arquivo << "~" << jogo.getGenero() << "\n";
-        
-        // Capturas (campo %)
+        // Serialização do vetor de capturas
         arquivo << "%";
         const auto& capturas = jogo.getCapturas();
         for (size_t i = 0; i < capturas.size(); ++i)
         {
             arquivo << capturas[i];
-            if (i < capturas.size() - 1)
-            {
-                arquivo << ";"; // Separa as capturas por ponto e vírgula
-            }
+            if (i < capturas.size() - 1) arquivo << ";";
         }
-        arquivo << "\n\n"; // Duas quebras de linha para separar os registros
+        arquivo << "\n\n";
     }
 
     arquivo.close();
@@ -71,74 +78,50 @@ bool Arquivos::salvarJogos(const string& caminho, const vector<Jogo>& jogos)
 }
 
 /**
- * @brief Carrega dados de jogos de um arquivo e os adiciona ao gerenciador.
- *
- * @param caminho O caminho completo do arquivo de jogos.
- * @param gerenciador Uma referência para o objeto @c GerenciadorJogos.
- * @return Retorna @c true em caso de sucesso, @c false se a abertura do arquivo falhar.
+ * @brief Carrega jogos de um arquivo e os insere no Gerenciador de Jogos.
+ * 
+ * A implementação utiliza um analisador (parser) baseado em linhas. Cada linha é
+ * lida, o primeiro caractere é extraído como delimitador e o restante da string
+ * é processado como o valor do atributo. Quando o delimitador de capturas (%)
+ * é encontrado, o objeto Jogo é instanciado com os dados acumulados e adicionado
+ * ao gerenciador.
+ * 
+ * @param caminho Origem do arquivo de dados.
+ * @param gerenciador Referência para o objeto que armazenará os jogos carregados.
+ * @return true se a leitura for concluída, false se houver falha ao abrir o arquivo.
  */
 bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciador)
 {
     ifstream arquivo(caminho);
-    if (!arquivo.is_open())
-    {
-        return false;
-    }
+    if (!arquivo.is_open()) return false;
 
-    string linha, nome, descricao, codigo, capa, executavel, genero;
-    int ano = 0, players = 1;
+    string linha;
+    // Variáveis temporárias para acumular dados durante o parsing do bloco
+    string nome, descricao, codigo;
+    string capaPrincipal, fundoDestaque, capaJanela;
     vector<string> capturas;
 
     while (getline(arquivo, linha))
     {
-        if (linha.empty())
-        {
-            continue;
-        }
+        if (linha.empty()) continue;
 
-        // Pega o delimitador e o conteúdo
         char delimitador = linha[0];
         string conteudo = linha.substr(1);
 
         switch (delimitador)
         {
-                // Nome do jogo
-            case '@':
-                nome = conteudo;
-                break;
-                // Descrição do jogo
-            case '#':
-                descricao = conteudo;
-                break;
-                // Categorias do jogo
-            case '$':
-                codigo = conteudo;
-                break;
-                
-            case '&':
-                // Caminho do executável
-                executavel = conteudo;
-                break;
-
-            case '^':
-                try { ano = stoi(conteudo); } catch(...) { ano = 0; }
-                break;
-            case '!':
-                try { players = stoi(conteudo); } catch(...) { players = 1; }
-                break;
-            case '~':
-                genero = conteudo;
-                break;
-
-            case '*':
-                // Capa principal (apenas 1 imagem)
-                capa = conteudo;
-                break;
-                
+            case '@': nome = conteudo; break;
+            case '#': descricao = conteudo; break;
+            case '$': codigo = conteudo; break;
+            
+            case '*': capaPrincipal = conteudo; break;
+            case '&': fundoDestaque = conteudo; break; 
+            case '+': capaJanela = conteudo; break;   
+            
             case '%':
-                // Capturas de tela (múltiplas, separadas por ;)
                 capturas.clear();
                 {
+                    // Quebra a string de capturas usando o delimitador ';'
                     stringstream ss(conteudo);
                     string captura_path;
                     while (getline(ss, captura_path, ';'))
@@ -147,31 +130,14 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                     }
                 }
                 
-                // Adicionar jogo ao gerenciador após coletar todos os campos
-                {
-                    Jogo novoJogo(nome, descricao, codigo, capa, capturas, executavel, ano, players, genero);
-                    
-                    // Extrair ID do nome do arquivo (ex: "assets/data/jogo1.txt" -> "jogo1")
-                    string id = caminho;
-                    // Remove diretorio
-                    size_t lastSlash = id.find_last_of("/\\");
-                    if (lastSlash != string::npos) {
-                        id = id.substr(lastSlash + 1);
-                    }
-                    // Remove extensao
-                    size_t lastDot = id.find_last_of(".");
-                    if (lastDot != string::npos) {
-                        id = id.substr(0, lastDot);
-                    }
-                    novoJogo.setId(id);
-                    
-                    gerenciador.adicionarJogo(novoJogo);
-                }
-                // Limpar variáveis para o próximo jogo
-                executavel = ""; 
-                genero = "";
-                ano = 0;
-                players = 1;
+                // Finaliza a leitura do bloco do jogo e o registra no sistema
+                gerenciador.adicionarJogo(Jogo(nome, descricao, codigo, 
+                                             capaPrincipal, fundoDestaque, capaJanela, 
+                                             capturas));
+                
+                // Reinicialização para garantir integridade no próximo bloco de dados
+                nome = ""; descricao = ""; codigo = "";
+                capaPrincipal = ""; fundoDestaque = ""; capaJanela = "";
                 break;
         }
     }

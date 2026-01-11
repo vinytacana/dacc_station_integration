@@ -1,29 +1,49 @@
+/**
+ * @file GerenciadorImagens.cpp
+ * @brief Implementação do sistema de cache de texturas para a interface.
+ * 
+ * Este arquivo contém a lógica para evitar carregamentos redundantes de arquivos
+ * de imagem, gerenciando a memória de vídeo (VRAM) de forma eficiente através
+ * de um mapeamento de caminhos para objetos de textura.
+ */
+
 #include "GerenciadorImagens.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h> 
-#include <string>
 
 using namespace MeuProjeto;
+
 using namespace std;
 
 /**
- * @brief Construtor padrão.
+ * @brief Construtor padrão da classe GerenciadorImagens.
+ * 
+ * Utiliza a implementação padrão do compilador para inicializar o mapa de cache.
  */
 GerenciadorImagens::GerenciadorImagens() = default;
 
 /**
- * @brief Destrutor. Chama liberarTudo() para destruir todas as texturas.
+ * @brief Destrutor da classe GerenciadorImagens.
+ * 
+ * Invoca automaticamente o método liberarTudo() para garantir que, ao final do 
+ * ciclo de vida do objeto, nenhuma textura permaneça alocada na memória de vídeo.
  */
 GerenciadorImagens::~GerenciadorImagens() {
     liberarTudo();
 }
 
 /**
- * @brief Carrega uma textura do disco ou a recupera do cache.
- *
- * @param renderer O renderizador SDL.
- * @param caminho O caminho completo para o arquivo de imagem.
- * @return Um ponteiro para a SDL_Texture, ou @c nullptr em caso de falha.
+ * @brief Gerencia a obtenção de texturas de forma otimizada.
+ * 
+ * O método opera em duas fases:
+ * 1. **Busca no Cache**: Verifica se a string do caminho já é uma chave no mapa. 
+ *    Se for, retorna o ponteiro existente imediatamente, evitando IO de disco.
+ * 2. **Carregamento e Registro**: Se não estiver no cache, carrega a imagem do disco,
+ *    armazena o novo ponteiro no mapa para uso futuro e o retorna.
+ * 
+ * @param renderer O renderizador SDL onde a textura será vinculada.
+ * @param caminho String contendo o caminho para o arquivo de imagem (ex: "Assets/capa.png").
+ * @return SDL_Texture* Ponteiro para a textura pronta para renderização, ou nullptr em caso de erro.
  */
 SDL_Texture* GerenciadorImagens::carregar(SDL_Renderer* renderer, const string& caminho) {
     if (!renderer) {
@@ -31,123 +51,52 @@ SDL_Texture* GerenciadorImagens::carregar(SDL_Renderer* renderer, const string& 
         return nullptr;
     }
 
-    // Passo 1: Verificar cache
+    // Passo 1: Verificar se a imagem já foi carregada anteriormente
     auto it = cache.find(caminho);
     if (it != cache.end()) {
-        return it->second;
+        return it->second; // Retorna a textura existente no cache
     }
 
-    // Passo 2: Carregar do disco
+    // Passo 2: Se não estiver no cache, carregar do disco
     SDL_Texture* textura = carregarDoDisco(renderer, caminho);
     if (textura) {
-        // Passo 3: Armazenar no cache se o carregamento foi bem-sucedido
-        cache[caminho] = textura;
+        cache[caminho] = textura; // Registra no cache para otimizar chamadas futuras
     }
 
     return textura;
 }
 
-#include <fstream>
-
-// ... (existing includes)
-
 /**
- * @brief Helper simples para verificar existência de arquivo
- */
-static bool arquivoExiste(const string& caminho) {
-    ifstream f(caminho.c_str());
-    return f.good();
-}
-
-SDL_Texture* GerenciadorImagens::getWallpaper(SDL_Renderer* renderer, const std::string& jogoId) {
-    // 1. Tentar estrutura oficial: /dacc/games/[ID]/assets/hero_bg.jpg
-    // Nota: Como estamos em dev, vamos assumir caminhos relativos ou absolutos mapeados
-    // Se o jogoId for "jogo1", tentamos um caminho simulado ou mapeado se a estrutura completa nao existir
-    
-    // Caminho ideal (Produção/Target)
-    // string path1 = "/dacc/games/" + jogoId + "/assets/hero_bg.jpg"; 
-    
-    // Caminho adaptado para o ambiente de desenvolvimento atual (assets/textures/jogoX...)
-    // Mas o TODO 06 pede a estrutura nova. Vamos tentar suportar ambas ou priorizar a nova.
-    // Vamos tentar construir o caminho baseando-se no ID.
-    
-    string paths[] = {
-        "/dacc/games/" + jogoId + "/assets/hero_bg.jpg",
-        "assets/textures/" + jogoId + "_hero.jpg", // Alternativa dev
-        "assets/textures/" + jogoId + ".jpeg"      // Fallback para capa (existente)
-    };
-
-    for (const auto& path : paths) {
-        if (arquivoExiste(path)) {
-            return carregar(renderer, path);
-        }
-    }
-
-    // Fallback final: Placeholder ou vazio
-    // Se tivermos um placeholder global
-    // return carregar(renderer, "assets/textures/placeholder.png");
-    
-    return nullptr;
-}
-
-SDL_Texture* GerenciadorImagens::getCapa(SDL_Renderer* renderer, const std::string& jogoId) {
-    // 1. Tentar estrutura oficial
-    string paths[] = {
-        "/dacc/games/" + jogoId + "/assets/cover_portrait.jpg",
-        "assets/textures/" + jogoId + ".jpeg", // Estrutura atual
-        "assets/textures/" + jogoId + ".png"
-    };
-
-    for (const auto& path : paths) {
-        if (arquivoExiste(path)) {
-            return carregar(renderer, path);
-        }
-    }
-
-    return nullptr;
-}
-
-SDL_Texture* GerenciadorImagens::getLogo(SDL_Renderer* renderer, const std::string& jogoId) {
-    // 1. Tentar estrutura oficial e dev
-    string paths[] = {
-        "/dacc/games/" + jogoId + "/assets/logo.png",
-        "assets/logos/" + jogoId + ".png"
-    };
-
-    for (const auto& path : paths) {
-        if (arquivoExiste(path)) {
-            return carregar(renderer, path);
-        }
-    }
-
-    return nullptr;
-}
-
-/**
- * @brief Função auxiliar para carregar a imagem diretamente do disco usando IMG_LoadTexture.
- *
- * @param renderer O renderizador SDL.
- * @param caminho O caminho para o arquivo de imagem.
- * @return Um ponteiro para a SDL_Texture, ou @c nullptr em caso de falha.
+ * @brief Encapsula a chamada à biblioteca SDL_image para leitura de arquivos.
+ * 
+ * Utiliza `IMG_LoadTexture`, que suporta nativamente diversos formatos (PNG, JPG, etc)
+ * e já converte a superfície diretamente para uma textura acelerada por hardware.
+ * 
+ * @param renderer O renderizador SDL associado.
+ * @param caminho Caminho físico do arquivo no sistema de arquivos.
+ * @return SDL_Texture* Ponteiro para a nova textura ou nullptr se o arquivo for inválido/inexistente.
  */
 SDL_Texture* GerenciadorImagens::carregarDoDisco(SDL_Renderer* renderer, const string& caminho) {
     SDL_Texture* textura = IMG_LoadTexture(renderer, caminho.c_str());
     if (!textura) {
+        // Log de erro formatado para auxílio no debug de ativos faltando
         SDL_Log("Falha ao carregar imagem '%s': %s", caminho.c_str(), IMG_GetError());
     }
     return textura;
 }
 
 /**
- * @brief Libera (destrói) todas as texturas armazenadas no cache.
+ * @brief Realiza a limpeza completa do cache e liberação de memória.
+ * 
+ * Itera por todos os pares do mapa de cache, chamando a função da API SDL 
+ * `SDL_DestroyTexture` para cada valor. Ao final, limpa o mapa para 
+ * permitir que novos carregamentos iniciem do zero, se necessário.
  */
 void GerenciadorImagens::liberarTudo() {
     for (auto& par : cache) {
         if (par.second) {
             SDL_DestroyTexture(par.second);
-            // Definir o ponteiro para nullptr é opcional aqui, mas pode ajudar a evitar
-            // uso indevido caso o ponteiro fosse acessado após o clear().
-            par.second = nullptr; 
+            par.second = nullptr;
         }
     }
     cache.clear();

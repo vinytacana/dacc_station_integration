@@ -1,38 +1,38 @@
-CXX := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -I../process-manager/third-party -I../logs/include -I../config-dacc
-LDFLAGS := -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer -L../logs -ldacc-logs -L../config-dacc -ldacc-config
+# Makefile para dacc-ui
+# Padronizado para o ecossistema DACC Station
+
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -g -Iinclude -I../logs/include -I../process-manager/third-party -I../logs/third-party/spdlog/include
+LDFLAGS = -L../logs -ldacc-logs -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer
 
 # Diretórios
-BIN_DIR := ../bin
-BUILD_DIR := build
-SRC_DIR := src
+SRC_DIR = src
+OBJ_DIR = build
+BIN_DIR = ../bin
+BIN = $(BIN_DIR)/dacc-ui
 
-# Alvo
-TARGET := $(BIN_DIR)/dacc-ui
+# Arquivos
+SRCS = $(wildcard $(SRC_DIR)/*.cpp)
+OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
-# Fontes e Objetos
-SRCS := $(wildcard $(SRC_DIR)/*.cpp)
-OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
+# Regras
+all: directories $(BIN)
 
-# Regra padrão
-all: $(TARGET)
-
-# Linkagem
-$(TARGET): $(OBJS)
-	@echo "==> Ligando UI: $@"
+$(BIN): $(OBJS)
+	@echo "Linking $@"
 	$(CXX) $(OBJS) -o $@ $(LDFLAGS)
 
-# Compilação
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@echo "==> Compilando: $<"
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@ -MMD -MP
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@echo "Compiling $<"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Include de dependências (.d)
--include $(BUILD_DIR)/*.d
-
-.PHONY: clean all
+directories:
+	@mkdir -p $(OBJ_DIR)
+	@mkdir -p $(BIN_DIR)
 
 clean:
-	@echo "==> Limpando UI..."
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(OBJ_DIR) $(BIN)
+
+rebuild: clean all
+
+.PHONY: all clean rebuild directories

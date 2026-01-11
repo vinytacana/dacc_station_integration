@@ -1,9 +1,9 @@
 {
   "server": {
-    "socket_path": "/tmp/game_logger.sock"
+    "socket_path": "/tmp/dacc-station.sock"
   },
   "output": {
     "type": "file",
-    "filepath": "system.log.txt"
+    "filepath": "data/logs/dacc-system.log"
   }
 }

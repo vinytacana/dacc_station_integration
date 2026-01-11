@@ -2,33 +2,38 @@
 
 #include <string>
 #include <memory>
-#include "ILogger.hpp"
+#include <spdlog/spdlog.h>
 
 class LogManager {
 public:
     static LogManager& getInstance();
 
+    // Inicializa o spdlog com UnixSocketSink e (opcionalmente) ConsoleSink
     void initialize(const std::string& appName, const std::string& socketPath);
-    std::shared_ptr<ILogger> getLogger();
+    
+    // Retorna o logger principal configurado
+    std::shared_ptr<spdlog::logger> getLogger();
 
-    // Legacy static method (can be deprecated or kept for convenience)
+    // Método estático de conveniência para erros de sistema
     static void logError(const std::string& context, bool includeErrno = true);
 
 private:
     LogManager() = default;
-    std::shared_ptr<ILogger> logger_;
+    std::shared_ptr<spdlog::logger> logger_;
     std::string appName_;
 };
 
+// Macros de conveniência mantidas para compatibilidade (mas agora usam spdlog)
+// AVISO: spdlog suporta formatação "{}", então evite concatenação manual de strings dentro da macro se possível.
+
 #define LOG_ERROR(what) \
-    LogManager::getInstance().getLogger()->error(std::string(__func__) + " -> " + what)
+    LogManager::getInstance().getLogger()->error("{} -> {}", __func__, what)
 
 #define LOG_INFO(what) \
     LogManager::getInstance().getLogger()->info(what)
 
 #define LOG_WARNING(what) \
-    LogManager::getInstance().getLogger()->warning(what)
+    LogManager::getInstance().getLogger()->warn(what)
 
 #define LOG_DEBUG(what) \
     LogManager::getInstance().getLogger()->debug(what)
-

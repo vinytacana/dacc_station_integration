@@ -1,22 +1,27 @@
 #include "LogManager.hpp"
-#include "ILogWriter.hpp"
-#include "FileWriter.hpp"
-#include "ConsoleWriter.hpp"
 #include "UnixSocketUtils.hpp"
 #include "json.hpp"
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <csignal>
 #include <atomic>
+#include <filesystem>
 
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <memory>
 #include <stdexcept>
+
+namespace fs = std::filesystem;
 
 std::atomic<bool> shutdown_flag{false};
 
@@ -33,15 +38,15 @@ int main(){
     int stream_socket_fd = -1;
     int epoll_fd = -1;
     std::string socket_path;
+    std::shared_ptr<spdlog::logger> server_logger;
 
     try {
-        std::ifstream config_file("config.json");
-        if (!config_file.is_open()) {
-            config_file.open("../config.json");
-        }
-        if (!config_file.is_open()) {
-            config_file.open("process-manager/config.json");
-        }
+        std::string config_path = "config.json";
+
+        if (!fs::exists(config_path)) config_path = "../config.json";
+        if (!fs::exists(config_path)) config_path = "process-manager/config.json";
+
+        std::ifstream config_file(config_path);
 
         if (not config_file.is_open()) {
             throw std::runtime_error("Could not open config.json");
@@ -52,46 +57,54 @@ int main(){
         socket_path = config["server"]["socket_path"];
         const std::string output_type = config["output"]["type"];
 
-        std::unique_ptr<ILogWriter> writer;
         if (output_type == "file") {
-            const std::string filepath = config["output"]["filepath"];
-            writer = std::make_unique<FileWriter>(filepath);
+            std::string filepath = config["output"]["filepath"];
+            
+            fs::path p(filepath);
+            if (p.has_parent_path() && !fs::exists(p.parent_path())) {
+                fs::create_directories(p.parent_path());
+            }
 
-            std::cout << "LogServer: Configured to write to file -> " << filepath << std::endl;
+            auto rotating_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+                filepath, 1024 * 1024 * 5, 3
+            );
+            
+            server_logger = std::make_shared<spdlog::logger>("server_logger", rotating_sink);
+            
         } else if (output_type == "console") {
-            writer = std::make_unique<ConsoleWriter>();
-
-            std::cout << "LogServer: Configured to write to console." << std::endl;
+            server_logger = spdlog::stdout_color_mt("server_logger");
         } else {
             throw std::runtime_error("Invalid output type in config: " + output_type);
         }
+
+        server_logger->set_pattern("%v");
+        server_logger->flush_on(spdlog::level::info);
 
         sockaddr_un addr {};
         UnixSocketUtils::prepareAddress(addr, socket_path);
 
         stream_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0); 
         if (stream_socket_fd < 0) {
-            LOG_ERROR("socket()"); return 1;
+            std::cerr << "[LogServer] CRITICAL: socket() failed" << std::endl; return 1;
         }
 
         unlink(socket_path.c_str());  
 
         if (bind(stream_socket_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-            LOG_ERROR("bind()");
+            std::cerr << "[LogServer] CRITICAL: bind() failed" << std::endl;
             close(stream_socket_fd);
             return 1;
         }
         
         if (listen(stream_socket_fd, 5) < 0) {
-            LOG_ERROR("listen()");
+            std::cerr << "[LogServer] CRITICAL: listen() failed" << std::endl;
             close(stream_socket_fd);
             return 1;
         }
 
-        // Configurar epoll para esperar por conexões de forma não-bloqueante
         epoll_fd = epoll_create1(EPOLL_CLOEXEC);
         if (epoll_fd < 0) {
-            LOG_ERROR("epoll_create1()");
+            std::cerr << "[LogServer] CRITICAL: epoll_create1() failed" << std::endl;
             throw std::runtime_error("Failed to create epoll instance");
         }
 
@@ -100,46 +113,66 @@ int main(){
         event.data.fd = stream_socket_fd;
 
         if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, stream_socket_fd, &event) < 0) {
-            LOG_ERROR("epoll_ctl()");
+            std::cerr << "[LogServer] CRITICAL: epoll_ctl() failed" << std::endl;
             throw std::runtime_error("Failed to add server socket to epoll");
         }
         
-        std::cout << "LogServer: Waiting for connections on " << socket_path << "..." << std::endl;
-
         while (!shutdown_flag) {
-            epoll_event events[1];
-            // Esperar por eventos com um timeout de 1 segundo
-            int n_events = epoll_wait(epoll_fd, events, 1, 1000);
+            epoll_event events[10];
+            int n_events = epoll_wait(epoll_fd, events, 10, 1000);
 
             if (n_events < 0) {
-                // Se interrompido por um sinal, o loop continuará e verificará a flag
                 if (errno == EINTR) continue;
-                LOG_ERROR("epoll_wait()");
+                std::cerr << "[LogServer] epoll_wait() failed" << std::endl;
                 break;
             }
 
-            if (n_events == 0) {
-                // Timeout, nenhuma conexão. O loop continua e verifica a flag.
-                continue;
-            }
+            for (int i = 0; i < n_events; ++i) {
+                if (events[i].data.fd == stream_socket_fd) {
+                    int client_fd = accept(stream_socket_fd, nullptr, nullptr);
+                    if (client_fd < 0) {
+                        continue;
+                    }
+                    int flags = fcntl(client_fd, F_GETFL, 0);
+                    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
 
-            // Se houver um evento, é uma nova conexão
-            int client_fd = accept(stream_socket_fd, nullptr, nullptr);
-            if (client_fd < 0) {
-                LOG_ERROR("accept()");
-                continue;
-            }
+                    epoll_event ev_client{};
+                    ev_client.events = EPOLLIN;
+                    ev_client.data.fd = client_fd;
+                    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev_client);
+                } else {
+                    int client_fd = events[i].data.fd;
+                    char buf[4096]; 
+                    ssize_t n;
+                    bool closed = false;
 
-            char buf[1024];
-            ssize_t n;
-            while ((n = read(client_fd, buf, sizeof(buf))) > 0) {
-                writer->write(std::string(buf, n));
+                    while (true) {
+                        n = read(client_fd, buf, sizeof(buf));
+                        if (n > 0) {
+                            server_logger->info(std::string_view(buf, n));
+                        } else if (n == 0) {
+                            closed = true;
+                            break;
+                        } else {
+                            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                                break;
+                            } else {
+                                closed = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (closed) {
+                        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
+                        close(client_fd);
+                    }
+                }
             }
-            close(client_fd);
         }    
     
     } catch (const std::exception& e) {
-        LOG_ERROR(e.what());
+        std::cerr << "[LogServer] Exception: " << e.what() << std::endl;
         
         if (epoll_fd >= 0) close(epoll_fd);
         if (stream_socket_fd >= 0) close(stream_socket_fd);
@@ -147,12 +180,9 @@ int main(){
         return 1;
     }
     
-
-    std::cout << "\nLogServer: Shutdown signal received. Cleaning up..." << std::endl;
     if (epoll_fd >= 0) close(epoll_fd);
     if (stream_socket_fd >= 0) close(stream_socket_fd);
     if (!socket_path.empty()) unlink(socket_path.c_str());
-    std::cout << "LogServer: Cleanup complete. Exiting." << std::endl;
 
     return 0;
 }

@@ -17,7 +17,7 @@
 #include <memory>
 #include <mutex>
 
-#include "ILogger.hpp"
+#include <spdlog/spdlog.h>
 
 #define MAX_EVENTS 10
 #define SOCKET_PATH "/tmp/gameman.sock"
@@ -29,7 +29,7 @@ using TimePoint = std::chrono::steady_clock::time_point;
 class ProcessManager{
 private:
     pid_t createProcess();
-    std::unique_ptr<ILogger> logger_;   
+    std::shared_ptr<spdlog::logger> logger_;   
 
     std::unordered_map<pid_t, TimePoint> running_processes_;
     std::set<int> connected_clients_;
@@ -53,7 +53,7 @@ private:
     void handleClientMessage(int client_fd);
 
 public:
-    explicit ProcessManager(std::unique_ptr<ILogger> logger);
+    explicit ProcessManager(std::shared_ptr<spdlog::logger> logger);
     ~ProcessManager(); 
     pid_t startApplication(ApplicationDefinition& app);
     bool isAppValid(const ApplicationDefinition& app) const;
@@ -84,4 +84,3 @@ public:
     const std::string& getPath() const { return executable_path_; }
     const std::string& getType() const { return type_; }
 };
-

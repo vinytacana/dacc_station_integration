@@ -23,8 +23,9 @@ UnixSocketClient::UnixSocketClient(const std::string& path){
     int ret = connect(fd_, (sockaddr*)&addr, sizeof(addr));
     
     if( ret < 0 ){
+        std::string error_msg = strerror(errno);
         close(fd_);
-        throw std::runtime_error("UnixSocketClient: connect() failed for path: " + path);
+        throw std::runtime_error("UnixSocketClient: connect() failed for path: " + path + " (" + error_msg + ")");
     }
 
 }

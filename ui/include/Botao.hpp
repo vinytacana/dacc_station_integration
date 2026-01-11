@@ -1,349 +1,245 @@
+/**
+ * @file Botao.hpp
+ * @brief Definição da classe base Botao para elementos interativos da interface.
+ * 
+ * Este arquivo contém a estrutura de um componente de interface genérico que pode
+ * ser renderizado como um botão de texto ou um botão de imagem (capa de jogo),
+ * suportando estados de hover, clique e foco via controle.
+ */
+
 #ifndef BOTAO_HPP
 #define BOTAO_HPP
 
-#pragma once
-
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 #include <string>
-#include "Utils.hpp" // Para TipoFonte
+#include <functional>
+#include "Utils.hpp"
 
-// Declaração antecipada (Forward Declaration) para evitar inclusão cíclica
+/**
+ * @namespace MeuProjeto
+ * @brief Namespace principal do projeto da interface de biblioteca de jogos.
+ */
 namespace MeuProjeto {
-    class Janela; 
-}
 
-#include "GerenciadorImagens.hpp"
-
-namespace MeuProjeto {
+class Janela; 
 
 /**
  * @class Botao
- * @brief Classe que representa um botão interativo na interface gráfica SDL.
- *
- * O botão pode ser baseado em texto ou imagem, suporta diferentes estados
- * (padrão, hover, pressionado) e pode acionar popups de descrição.
+ * @brief Classe base para botões interativos na interface gráfica.
+ * 
+ * A classe Botao gerencia o ciclo de vida de um elemento clicável, lidando com
+ * a detecção de colisões, troca de estados visuais (normal, hover, focado) e
+ * a execução de funções de retorno (callbacks). É projetada para ser estendida
+ * por componentes mais específicos, como barras de pesquisa.
  */
 class Botao {
 public:
     /**
-     * @brief Construtor padrão para um botão baseado em texto ou cor.
-     *
-     * @param x Coordenada X superior esquerda.
-     * @param y Coordenada Y superior esquerda.
+     * @brief Construtor para botões baseados apenas em texto.
+     * 
+     * Geralmente utilizado para menus de navegação ou botões de confirmação.
+     * Por padrão, segue as cores definidas no GerenciadorTemas.
+     * 
+     * @param x Coordenada X na tela.
+     * @param y Coordenada Y na tela.
      * @param largura Largura do botão.
      * @param altura Altura do botão.
-     * @param texto O texto a ser exibido no botão (opcional).
+     * @param texto String a ser exibida dentro do botão.
      */
-    Botao(int x, int y, int largura, int altura, const std::string& texto = "");
-
-    /**
-     * @brief Construtor para um botão baseado em imagem.
-     *
-     * @param renderer O renderizador SDL.
-     * @param x Coordenada X superior esquerda.
-     * @param y Coordenada Y superior esquerda.
-     * @param largura Largura do botão.
-     * @param altura Altura do botão.
-     * @param imagemPath O caminho para o arquivo de imagem.
-     * @param nome O nome associado ao jogo (para o popup).
-     * @param desc A descrição associada ao jogo (para o popup).
-     * @param isDestaque Indica se o botão é um destaque (muda a transparência).
-     */
-    Botao(SDL_Renderer* renderer, int x, int y, int largura, int altura, 
-          const std::string& imagemPath, const std::string& nome = "", 
-          const std::string& desc = "", bool isDestaque = false);
+    Botao(int x, int y, int largura, int altura, const std::string& texto);
     
     /**
-     * @brief Destrutor virtual.
+     * @brief Construtor para botões baseados em imagens (Ícones ou Capas de Jogos).
+     * 
+     * Utilizado para representar os jogos na biblioteca ou banners de destaque.
+     * 
+     * @param renderer Ponteiro para o renderizador SDL para carregar texturas.
+     * @param x Coordenada X.
+     * @param y Coordenada Y.
+     * @param largura Largura.
+     * @param altura Altura.
+     * @param imagemPath Caminho para o arquivo de imagem no disco.
+     * @param nome Nome do jogo associado ao botão.
+     * @param desc Descrição ou metadados do jogo.
+     * @param isDestaque Define se o botão deve ser tratado como um banner principal.
+     */
+    Botao(SDL_Renderer* renderer, int x, int y, int largura, int altura,
+          const std::string& imagemPath, const std::string& nome,
+          const std::string& desc, bool isDestaque);
+    
+    /**
+     * @brief Destrutor virtual para permitir polimorfismo seguro.
      */
     virtual ~Botao();
 
     /**
-     * @brief Trata eventos de mouse (movimento, clique) para atualizar o estado do botão.
-     *
-     * @param evento A estrutura SDL_Event a ser tratada.
-     * @param offsetX Deslocamento X da área de desenho (útil para botões em rolagem).
-     * @param offsetY Deslocamento Y da área de desenho.
-     * @return Retorna @c true se o evento foi consumido pelo botão, @c false caso contrário.
+     * @brief Processa eventos de hardware direcionados ao botão.
+     * 
+     * Detecta movimentos do mouse para hover, cliques e interações de controle.
+     * 
+     * @param evento Referência ao evento capturado pela SDL.
+     * @param offsetX Deslocamento horizontal do container do botão.
+     * @param offsetY Deslocamento vertical do container do botão.
+     * @return true se o botão capturou e processou o evento.
      */
     virtual bool tratarEvento(SDL_Event& evento, int offsetX, int offsetY);
-    
+
     /**
-     * @brief Desenha o botão na posição absoluta (sem offset).
-     *
-     * @param renderer O renderizador SDL.
-     */
-    virtual void desenhar(SDL_Renderer* renderer); 
-    
-    /**
-     * @brief Desenha o botão com um deslocamento (offset) aplicado.
-     *
-     * @param renderer O renderizador SDL.
-     * @param offsetX Deslocamento X.
-     * @param offsetY Deslocamento Y.
+     * @brief Renderiza o botão considerando deslocamentos (offsets).
+     * 
+     * @param renderer Renderizador SDL.
+     * @param offsetX Deslocamento horizontal (scroll).
+     * @param offsetY Deslocamento vertical (scroll).
      */
     virtual void desenhar(SDL_Renderer* renderer, int offsetX, int offsetY);
 
     /**
-     * @brief Define a textura da imagem do botão.
-     *
-     * @param textura O ponteiro para a textura SDL.
+     * @brief Renderiza o botão em sua posição absoluta (sem scroll).
+     * @param renderer Renderizador SDL.
      */
+    virtual void desenhar(SDL_Renderer* renderer);
+
+    /** @brief Define uma cor personalizada para o texto, ignorando o tema atual. */
+    void setCorTexto(const SDL_Color& cor); 
+
+    /** @brief Atualiza a textura de imagem do botão. */
     void setTexturaImagem(SDL_Texture* textura);
-
-    /**
-     * @brief Define as cores dos estados do botão.
-     *
-     * @param corPadrao Cor normal.
-     * @param corHover Cor quando o mouse está sobre o botão.
-     * @param corPressionado Cor quando o botão está pressionado.
-     */
-    void setCor(const SDL_Color& corPadrao, const SDL_Color& corHover, const SDL_Color& corPressionado);
-
-    /**
-     * @brief Define a janela pai para manipulação de popups.
-     *
-     * @param janela O ponteiro para a janela pai.
-     */
-    void setParentJanela(Janela* janela);
-
-    /**
-     * @brief Define se o botão deve ser desenhado como um círculo (arredondado).
-     *
-     * @param round Se @c true, o botão é desenhado como um círculo.
-     */
-    void setIsRound(bool round);
     
     /**
-     * @brief Define o tipo de fonte para o texto do botão.
-     *
-     * @param tipo O enumerador @c TipoFonte.
+     * @brief Define cores manuais para os estados do botão.
+     * @note Ao chamar este método, o botão deixará de seguir o tema global automaticamente.
+     * @param padrao Cor em estado ocioso.
+     * @param hover Cor ao passar o mouse.
+     * @param press Cor ao clicar.
      */
+    void setCor(const SDL_Color& padrao, const SDL_Color& hover, const SDL_Color& press);
+    
+    /** @brief Define o estilo da fonte (Normal/Negrito). */
     void setFonte(TipoFonte tipo) { tipoFonte = tipo; }
-    
-    /**
-     * @brief Define o tamanho da fonte para o texto do botão.
-     *
-     * @param tamanho O tamanho em pontos (pt).
-     */
+
+    /** @brief Define o tamanho da fonte em pixels. */
     void setTamanhoFonte(int tamanho) { tamanhoFonte = tamanho; }
     
-    /**
-     * @brief Obtém o tipo de fonte atual.
-     *
-     * @return O enumerador @c TipoFonte.
-     */
-    TipoFonte getFonte() const { return tipoFonte; }
+    /** @brief Associa este botão a uma Janela pai (para controle de foco/popups). */
+    void setParentJanela(Janela* janela);
+
+    /** @brief Define se o botão deve ser desenhado com bordas arredondadas. */
+    void setIsRound(bool round);
+
+    /** @brief Define se o botão é um item de destaque (Banner). */
+    void setDestaque(bool destaque) { isDestaque = destaque; }
     
     /**
-     * @brief Obtém o tamanho da fonte atual.
-     *
-     * @return O tamanho da fonte.
+     * @brief Define a ação a ser executada quando o botão é clicado.
+     * @param callback Função lambda ou ponteiro de função sem retorno.
      */
-    int getTamanhoFonte() const { return tamanhoFonte; }
+    void setOnClick(std::function<void()> callback) { onClickCallback = callback; }
     
+    // Métodos de Navegação por Controle
+
+    /** @brief Define se o botão está selecionado pelo cursor do gamepad. */
+    void setFocado(bool focado);
+
+    /** @brief Ativa visualmente o estado de foco do controle. */
+    void ativarPorControle();
+
+    /** @brief Desativa o estado de foco do controle. */
+    void desativarPorControle();
+
     /**
-     * @brief Verifica se o botão está no estado pressionado.
-     *
-     * @return Retorna @c true se o botão estiver pressionado, @c false caso contrário.
+     * @brief Simula um clique no botão via comando do controle (ex: Botão A).
+     * @return true se uma ação foi executada.
      */
-    bool isPressed() const { return pressionado; }
+    bool executarAcaoPorControle();
     
-    /**
-     * @brief Obtém a textura de imagem associada ao botão.
-     *
-     * @return O ponteiro para a textura SDL.
-     */
+    // Getters
+
+    /** @brief Verifica se o botão está sendo pressionado pelo mouse ou controle. */
+    bool isPressionado() const { return pressionado; }
+
+    /** @brief Verifica se o mouse está sobre o botão. */
+    bool isHover() const { return hover; }
+
+    /** @brief Verifica se o botão detém o foco atual da navegação por controle. */
+    bool isFocado() const { return focadoPorControle; }
+
+    /** @brief Retorna o retângulo de colisão/área do botão. */
+    SDL_Rect getArea() const { return area; }
+    
+    /** @brief Retorna o nome do jogo caso seja um botão de capa. */
+    std::string getNomeJogo() const { return nomeJogo; }
+
+    /** @brief Retorna o path do arquivo de imagem associado. */
+    std::string getImagemPath() const { return imagemPath; }
+
+    /** @brief Retorna o ponteiro para a textura SDL carregada. */
     SDL_Texture* getTexturaImagem() const { return texturaImagem; }
 
     /**
-     * @brief Verifica se um ponto (x, y) está contido na área do botão.
-     *
+     * @brief Verifica se um ponto (x,y) do mouse está dentro da área do botão.
      * @param x Coordenada X do ponto.
      * @param y Coordenada Y do ponto.
-     * @return Retorna @c true se o ponto estiver dentro da área, @c false caso contrário.
+     * @return true se o ponto colidir com a área.
      */
     bool contemPonto(int x, int y);
-    
-    /**
-     * @brief Define manualmente o estado de seleção (hover) do botão.
-     * Útil para navegação via teclado/controle.
-     * @param selecionado true para ativar o visual de hover.
-     */
-    void setSelecionado(bool selecionado);
 
-    /**
-     * @brief Verifica se o botão está manualmente selecionado.
-     */
-    bool estaSelecionado() const;
-
-    void setCornerRadius(int radius);
-    int getCornerRadius() const { return cornerRadius; }
-
-    /**
-     * @brief Define um ícone de input (letra) para aparecer à esquerda do texto.
-     * Ex: "A" desenhará um círculo com "A" dentro.
-     */
-    void setIcon(const std::string& iconChar);
-
-    /**
-     * @brief A área retangular do botão.
-     */
-    SDL_Rect area;
-
-    /**
-     * @brief A cor padrão do botão.
-     */
-    SDL_Color corPadrao;
-
-    /**
-     * @brief A cor do botão no estado hover.
-     */
-    SDL_Color corHover;
-
-    /**
-     * @brief A cor do botão no estado pressionado.
-     */
-    SDL_Color corPressionado;
-
-    /**
-     * @brief O texto a ser exibido no botão.
-     */
-    std::string texto;
-    
-    /**
-     * @brief Define o texto a ser exibido no botão.
-     *
-     * @param txt O novo texto.
-     */
-    void setTexto(const std::string& txt) { texto = txt; }
-    
-    /**
-     * @brief Define o caminho da imagem (útil para recarregar).
-     *
-     * @param path O novo caminho da imagem.
-     */
-    void setImagemPath(const std::string& path) { imagemPath = path; }
-
-    /**
-     * @brief Obtém o nome do jogo/item associado.
-     *
-     * @return O nome do jogo/item.
-     */
-    const std::string& getNomeJogo() const { return nomeJogo; }
-
-    /**
-     * @brief Obtém a descrição do jogo/item associado.
-     *
-     * @return A descrição do jogo/item.
-     */
-    const std::string& getDescJogo() const { return descJogo; }
-
-    /**
-     * @brief Obtém o caminho da imagem atual.
-     *
-     * @return O caminho da imagem.
-     */
-    const std::string& getImagemPath() const { return imagemPath; }
-
-    /**
-     * @brief Obtém a área do botão.
-     *
-     * @return A estrutura @c SDL_Rect.
-     */
-    const SDL_Rect& getArea() const { return area; }
+    SDL_Rect area; /**< Geometria e posição do botão. */
 
 protected:
-    /**
-     * @brief Textura da imagem do botão.
-     */
-    SDL_Texture* texturaImagem;
-
-    /**
-     * @brief Estado de hover (mouse sobre o botão).
-     */
-    bool hover;
-
-    /**
-     * @brief Estado de pressionado (botão esquerdo do mouse clicado).
-     */
-    bool pressionado;
+    SDL_Texture* texturaImagem; /**< Ativo gráfico do botão. */
+    std::string texto;          /**< Rótulo textual do botão. */
     
-    /**
-     * @brief Tipo de fonte selecionado para o texto.
-     */
-    TipoFonte tipoFonte;
+    SDL_Color corPadrao;        /**< Cor de fundo normal. */
+    SDL_Color corHover;         /**< Cor de fundo em hover. */
+    SDL_Color corPressionado;   /**< Cor de fundo em clique. */
+    
+    // Variáveis de controle de tema e cor
+    bool usaTemaPadrao;         /**< Se true, as cores vêm do GerenciadorTemas. */
+    bool usaCorTextoCustom = false; /**< Indica se o usuário definiu uma cor de texto específica. */
+    SDL_Color corTextoCustom = {255, 255, 255, 255}; /**< Valor da cor de texto customizada. */
+
+    bool hover;                 /**< Estado interno: mouse sobre o componente. */
+    bool pressionado;           /**< Estado interno: botão sendo clicado. */
+    bool focadoPorControle;     /**< Estado interno: seleção ativa via gamepad. */
+    
+    Janela* parentJanela;       /**< Ponteiro para a janela que contém este botão. */
+    std::string nomeJogo;       /**< Metadado: Nome do jogo vinculado. */
+    std::string descJogo;       /**< Metadado: Descrição do jogo vinculado. */
+    std::string imagemPath;     /**< Caminho original da imagem carregada. */
+    
+    bool isRound;               /**< Flag para estilo de bordas. */
+    bool isDestaque;            /**< Flag para tratamento visual prioritário. */
+    
+    TipoFonte tipoFonte;        /**< Estilo da fonte utilizada no texto. */
+    int tamanhoFonte;           /**< Tamanho da fonte utilizada no texto. */
+    
+    /** @brief Objeto de função que armazena a lógica disparada no clique. */
+    std::function<void()> onClickCallback;
 
     /**
-     * @brief Tamanho da fonte selecionado para o texto.
-     */
-    int tamanhoFonte;
-
-    /**
-     * @brief Determina a cor de fundo atual com base nos estados (pressionado/hover).
-     *
-     * @return A estrutura @c SDL_Color.
-     */
-    SDL_Color determineCurrentColor();
-
-private:
-    /**
-     * @brief Trata o evento de movimento do mouse (atualiza hover e popups).
-     */
-    bool handleMouseMotion(SDL_Event& evento, int offsetX, int offsetY);
-
-    /**
-     * @brief Trata o evento de botão do mouse para baixo (atualiza pressionado).
-     */
-    bool handleMouseButtonDown(SDL_Event& evento, int offsetX, int offsetY);
-
-    /**
-     * @brief Trata o evento de botão do mouse para cima (finaliza o clique).
-     */
-    bool handleMouseButtonUp(SDL_Event& evento, int offsetX, int offsetY);
-
-    /**
-     * @brief Renderiza o texto centralizado na área do botão.
+     * @brief Auxiliar para calcular e desenhar o texto centralizado no botão.
      */
     void renderizarTextoCentralizado(SDL_Renderer* renderer, const SDL_Rect& area);
+
+    /**
+     * @brief Resolve qual cor deve ser usada no frame atual baseada nos estados.
+     * @return SDL_Color resultante (Normal, Hover ou Pressionado).
+     */
+    SDL_Color determineCurrentColor();
     
-    /**
-     * @brief O caminho do arquivo de imagem.
-     */
-    std::string imagemPath;
+    // Lógica interna de eventos segmentada
 
-    /**
-     * @brief Ponteiro para a janela pai (para popups).
-     */
-    Janela* parentJanela;
+    /** @brief Lida com movimento do mouse. */
+    bool handleMouseMotion(SDL_Event& evento, int offsetX, int offsetY);
 
-    /**
-     * @brief Nome do jogo associado.
-     */
-    std::string nomeJogo;
+    /** @brief Lida com o pressionamento do botão do mouse. */
+    bool handleMouseButtonDown(SDL_Event& evento, int offsetX, int offsetY);
 
-    /**
-     * @brief Descrição do jogo associado.
-     */
-    std::string descJogo;
+    /** @brief Lida com a soltura do botão do mouse. */
+    bool handleMouseButtonUp(SDL_Event& evento, int offsetX, int offsetY);
 
-    /**
-     * @brief Indica se o botão é circular.
-     */
-    bool isRound = false;
-
-    /**
-     * @brief Indica se o botão é um destaque.
-     */
-    bool isDestaque = false;
-
-    int cornerRadius = 10;
-
-    /**
-     * @brief Texto do ícone (ex: "A"). Se vazio, não desenha ícone.
-     */
-    std::string iconText = "";
+    /** @brief Lida com a confirmação via botão de gamepad. */
+    bool handleGamepadButton(SDL_Event& evento);
 };
 
 } // namespace MeuProjeto

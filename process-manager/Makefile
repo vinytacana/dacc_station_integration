@@ -4,58 +4,39 @@ CXX := g++
 # -Iinclude: Local headers
 # -Ithird-party: External libraries (json.hpp)
 # -I../logs/include: Logging system headers
-CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -Ithird-party -I../logs/include
-LDFLAGS := -pthread
+CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -Ithird-party -I../logs/include -I../logs/third-party/spdlog/include
+LDFLAGS := -pthread -L../logs -ldacc-logs
 
 # Directories
-BIN_DIR := bin
+BIN_DIR := ../bin
 BUILD_DIR := build
 SRC_DIR := src
-LOGS_SRC_DIR := ../logs/src
 
 # Targets
 TARGET_PM := $(BIN_DIR)/process-manager
-TARGET_LOG_SERVER := $(BIN_DIR)/log-server
 
 # Sources for Process Manager
 PM_SRCS := \
     $(SRC_DIR)/main.cpp \
-    $(SRC_DIR)/ProcessManager.cpp \
-    $(LOGS_SRC_DIR)/SocketLogger.cpp \
-    $(LOGS_SRC_DIR)/UnixSocketClient.cpp \
-    $(LOGS_SRC_DIR)/LogManager.cpp
-
-# Sources for Log Server
-LOG_SERVER_SRCS := \
-    $(LOGS_SRC_DIR)/LogServer.cpp \
-    $(LOGS_SRC_DIR)/LogManager.cpp
+    $(SRC_DIR)/ProcessManager.cpp
 
 # Object Files
-# We use notdir to flatten the object file structure into build/
-# This requires VPATH to locate the source files
 PM_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(PM_SRCS)))
-LOG_SERVER_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(LOG_SERVER_SRCS)))
 
-# VPATH tells make where to look for .cpp files if they aren't in the current dir
-VPATH := $(SRC_DIR):$(LOGS_SRC_DIR)
+# VPATH
+VPATH := $(SRC_DIR)
 
 # --- Rules ---
 
 .PHONY: all clean
 
-all: $(TARGET_PM) $(TARGET_LOG_SERVER)
+all: $(TARGET_PM)
 
 # Link Process Manager
 $(TARGET_PM): $(PM_OBJS)
 	@echo "==> Linking: $@"
-	@mkdir -p $(@D)
+	@mkdir -p $(BIN_DIR)
 	$(CXX) $(PM_OBJS) -o $@ $(LDFLAGS)
-
-# Link Log Server
-$(TARGET_LOG_SERVER): $(LOG_SERVER_OBJS)
-	@echo "==> Linking: $@"
-	@mkdir -p $(@D)
-	$(CXX) $(LOG_SERVER_OBJS) -o $@ $(LDFLAGS)
 
 # Compile C++ Source Files
 $(BUILD_DIR)/%.o: %.cpp
@@ -68,4 +49,4 @@ $(BUILD_DIR)/%.o: %.cpp
 
 clean:
 	@echo "==> Cleaning build artifacts..."
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -rf $(BUILD_DIR) $(TARGET_PM)

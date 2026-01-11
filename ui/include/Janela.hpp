@@ -1,3 +1,13 @@
+/**
+ * @file Janela.hpp
+ * @brief Definição da classe Janela.
+ *
+ * Este arquivo estabelece a interface para o gerenciamento de janelas modais (popups)
+ * dentro da interface gráfica. A classe é projetada para exibir informações detalhadas 
+ * de um jogo, como título, imagem de capa e descrição, utilizando o sistema de 
+ * renderização da SDL2.
+ */
+
 #ifndef JANELA_HPP
 #define JANELA_HPP
 
@@ -15,62 +25,90 @@ namespace MeuProjeto {
 
 /**
  * @class Janela
- * @brief Gerencia popups e interfaces de janela na aplicação
- * 
- * Esta classe fornece funcionalidades para criar, exibir e gerenciar
- * popups com informações, imagens e descrições textuais
+ * @brief Responsável pela criação e exibição de componentes modais informativos.
+ *
+ * A classe Janela atua como um container visual sobreposto à interface principal.
+ * Ela gerencia o estado de visibilidade, armazena os metadados do conteúdo a ser
+ * exibido e calcula as proporções visuais baseando-se em variáveis de layout 
+ * responsivo para garantir a integridade estética em diferentes resoluções.
  */
-class Janela 
-{
+class Janela {
 public:
     /**
-     * @brief Construtor da classe Janela
-     * @param renderer Renderizador SDL usado para desenhar a janela
+     * @brief Construtor da classe Janela.
+     * 
+     * Inicializa a instância da janela vinculando-a a um renderizador e configurando
+     * os estados iniciais de visibilidade e dimensões.
+     * 
+     * @param renderer Ponteiro para o SDL_Renderer que será utilizado para a renderização do popup.
      */
     Janela(SDL_Renderer* renderer);
-    
+
     /**
-     * @brief Destrutor da classe Janela
+     * @brief Destrutor da classe Janela.
+     * 
+     * Realiza a limpeza de referências e garante que nenhum recurso pendente comprometa
+     * a integridade da memória ao destruir a instância da janela.
      */
     ~Janela();
 
     /**
-     * @brief Abre um popup com informações específicas
-     * @param nome Nome/título do popup
-     * @param textura Textura SDL para exibir no popup
-     * @param desc Descrição textual do conteúdo
-     * @param x Posição X de referência para posicionamento
-     * @param y Posição Y de referência para posicionamento
-     * @param w Largura de referência para posicionamento
-     * @param h Altura de referência para posicionamento
+     * @brief Configura e ativa a exibição de uma janela popup.
+     * 
+     * Este método define as informações que serão renderizadas, incluindo metadados 
+     * textuais e visuais, além de determinar a área de ocupação inicial.
+     * 
+     * @param nome String contendo o título ou nome do jogo a ser exibido.
+     * @param textura Ponteiro para a textura SDL_Texture contendo a imagem de capa.
+     * @param desc String contendo a descrição detalhada do conteúdo.
+     * @param x Coordenada horizontal para o posicionamento da janela.
+     * @param y Coordenada vertical para o posicionamento da janela.
+     * @param w Largura inicial da janela.
+     * @param h Altura inicial da janela.
      */
     void abrirPopup(const std::string& nome, SDL_Texture* textura, const std::string& desc, int x, int y, int w, int h);
-    
+
     /**
-     * @brief Fecha o popup atualmente aberto
+     * @brief Desativa a visibilidade da janela popup.
+     * 
+     * Altera o estado interno para fechado, interrompendo o ciclo de renderização
+     * do componente modal.
      */
     void fecharPopup();
-    
+
     /**
-     * @brief Desenha o popup na tela
-     * @param offsetX Deslocamento horizontal para aplicação de câmera
-     * @param offsetY Deslocamento vertical para aplicação de câmera
+     * @brief Realiza o desenho da janela e seus subcomponentes no renderizador.
+     * 
+     * Renderiza o fundo da janela, a imagem, o título e a descrição textual, 
+     * aplicando os deslocamentos fornecidos.
+     * 
+     * @param offsetX Valor de deslocamento horizontal para ajuste de posição.
+     * @param offsetY Valor de deslocamento vertical para ajuste de posição.
      */
     void desenharPopup(int offsetX = 0, int offsetY = 0);
-    
+
     /**
-     * @brief Verifica se há um popup aberto atualmente
-     * @return true se um popup está aberto, false caso contrário
+     * @brief Consulta o estado de visibilidade da janela.
+     * 
+     * @return true se a janela estiver aberta e visível, false caso contrário.
      */
     bool isPopupOpen() const { return isPopupAberto; }
 
 private:
-    SDL_Renderer* renderer;         ///< Renderizador SDL para desenho
-    bool isPopupAberto;             ///< Flag indicando se um popup está aberto
-    SDL_Rect popupArea;             ///< Área retangular do popup na tela
-    std::string popupNome;          ///< Nome/título do popup atual
-    SDL_Texture* popupTextura;      ///< Textura exibida no popup
-    std::string popupDesc;          ///< Descrição textual do popup
+    SDL_Renderer* renderer; /**< Ponteiro para o renderizador SDL associado à janela. */
+    bool isPopupAberto;     /**< Estado booleano que indica se o popup está ativo. */
+    SDL_Rect popupArea;     /**< Estrutura que define a geometria (posição e tamanho) da janela. */
+    std::string popupNome;  /**< Armazena o texto do título exibido na janela. */
+    SDL_Texture* popupTextura; /**< Referência para a textura da imagem principal do popup. */
+    std::string popupDesc;  /**< Armazena o corpo de texto descritivo do popup. */
+
+    int larguraPadrao;   /**< Dimensão horizontal base definida para o layout da janela. */
+    int alturaPadrao;    /**< Dimensão vertical base definida para o layout da janela. */
+    int paddingExterno;  /**< Espaçamento de segurança entre a borda da janela e o limite da tela. */
+    int paddingInterno;  /**< Espaçamento interno entre a borda da janela e seus elementos filhos. */
+    int alturaImagem;    /**< Dimensão vertical reservada exclusivamente para a exibição da imagem de capa. */
+    int espacoTitulo;    /**< Margem vertical entre o término da imagem e o início do título. */
+    int espacoDesc;      /**< Margem vertical entre o título e o bloco de texto de descrição. */
 };
 
 } // namespace MeuProjeto

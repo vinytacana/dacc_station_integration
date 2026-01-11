@@ -1,170 +1,222 @@
+/**
+ * @file BotaoPesquisa.hpp
+ * @brief Definição da classe BotaoPesquisa.
+ *
+ * Este arquivo contém a especificação da classe BotaoPesquisa, que integra
+ * funcionalidades de entrada de texto e exibição dinâmica de resultados de busca
+ * para a interface da biblioteca de jogos, utilizando SDL2.
+ */
+
 #ifndef BOTAOPESQUISA_HPP
 #define BOTAOPESQUISA_HPP
 
 #pragma once
 
 #include "Botao.hpp"
-#include "Utils.hpp"  // Para TipoFonte
+#include "Utils.hpp"
+#include "Jogo.hpp"
 #include <SDL2/SDL.h>
 #include <string>
 #include <vector>
-#include "Jogo.hpp"
-#include "GerenciadorJogos.hpp"
 
 namespace MeuProjeto {
 
 /**
  * @class BotaoPesquisa
- * @brief Estende a classe Botao para criar um campo de input e exibir resultados de pesquisa dinamicamente.
+ * @brief Componente de interface para pesquisa de jogos com suporte a layout responsivo.
  *
- * Esta classe gerencia a entrada de texto, lida com a busca de jogos e
- * renderiza os resultados abaixo do campo de input principal.
+ * A classe BotaoPesquisa herda de Botao e implementa uma caixa de busca interativa.
+ * Além da captura de texto, ela gerencia uma lista de resultados (objetos Jogo),
+ * lida com estados de foco, interação via teclado e renderização de uma interface
+ * de sugestões suspensa (dropdown).
  */
 class BotaoPesquisa : public Botao {
 public:
     /**
-     * @brief Construtor do BotaoPesquisa.
-     *
-     * @param renderer O renderizador SDL necessário para carregar texturas e iniciar input.
-     * @param x Coordenada X superior esquerda.
-     * @param y Coordenada Y superior esquerda.
-     * @param largura Largura do campo de input.
-     * @param altura Altura do campo de input.
-     * @param texto Texto placeholder inicial (opcional).
+     * @brief Construtor da classe BotaoPesquisa.
+     * 
+     * @param renderer Ponteiro para o renderizador SDL_Renderer utilizado para desenhar o componente.
+     * @param x Coordenada horizontal da posição inicial.
+     * @param y Coordenada vertical da posição inicial.
+     * @param largura Dimensão horizontal inicial do componente.
+     * @param altura Dimensão vertical inicial do componente.
+     * @param texto String inicial opcional a ser exibida na caixa de pesquisa.
      */
     BotaoPesquisa(SDL_Renderer* renderer, int x, int y, int largura, int altura, const std::string& texto = "");
 
     /**
-     * @brief Destrutor. Para a entrada de texto do SDL.
+     * @brief Destrutor da classe BotaoPesquisa.
+     * 
+     * Realiza a liberação de recursos alocados internamente pela instância.
      */
     ~BotaoPesquisa();
 
     /**
-     * @brief Trata eventos de mouse, teclado e entrada de texto.
-     *
-     * @param evento A estrutura SDL_Event a ser tratada.
-     * @param offsetX Deslocamento X da área de desenho.
-     * @param offsetY Deslocamento Y da área de desenho.
-     * @return Retorna @c true se o evento foi consumido.
+     * @brief Processa eventos de entrada do SDL para a caixa de pesquisa.
+     * 
+     * Trata interações como cliques do mouse, pressionamento de teclas para entrada de texto
+     * e navegação pelos resultados.
+     * 
+     * @param evento Referência para a estrutura SDL_Event contendo o evento capturado.
+     * @param offsetX Deslocamento horizontal aplicado à posição do componente.
+     * @param offsetY Deslocamento vertical aplicado à posição do componente.
+     * @return true se o evento foi consumido pelo componente, false caso contrário.
      */
     bool tratarEvento(SDL_Event& evento, int offsetX, int offsetY) override;
 
     /**
-     * @brief Desenha o campo de input e os resultados de pesquisa.
-     *
-     * @param renderer O renderizador SDL.
-     * @param offsetX Deslocamento X.
-     * @param offsetY Deslocamento Y.
+     * @brief Renderiza o componente na tela.
+     * 
+     * Desenha a caixa de entrada de texto e, se houver resultados ativos, a lista
+     * de sugestões suspensa.
+     * 
+     * @param renderer Ponteiro para o renderizador SDL_Renderer.
+     * @param offsetX Deslocamento horizontal para renderização.
+     * @param offsetY Deslocamento vertical para renderização.
      */
     void desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) override;
 
-    // --- Funções Públicas ---
     /**
-     * @brief Retorna o jogo que foi clicado na lista de resultados.
-     *
-     * @return Ponteiro para o objeto @c Jogo, ou @c nullptr se nenhum foi clicado.
+     * @brief Adiciona caracteres ao texto de entrada atual.
+     * 
+     * @param txt String contendo os caracteres a serem concatenados ao texto de pesquisa.
+     */
+    void adicionarTexto(const std::string& txt);
+
+    /**
+     * @brief Remove o último caractere do texto de entrada atual (Backspace).
+     */
+    void apagarTexto();
+
+    /**
+     * @brief Limpa integralmente o conteúdo do texto de entrada.
+     */
+    void limparTexto();
+
+    /**
+     * @brief Obtém o ponteiro para o jogo que foi selecionado via clique.
+     * 
+     * @return Ponteiro para o objeto Jogo selecionado, ou nullptr se nenhum jogo foi clicado.
      */
     Jogo* getJogoClicado() const { return jogoClicado; }
 
     /**
-     * @brief Limpa o sinal de clique no jogo (para o main loop não abrir a janela repetidamente).
+     * @brief Reseta o estado do jogo clicado para nulo.
      */
     void resetarJogoClicado() { jogoClicado = nullptr; }
 
     /**
-     * @brief Define o tipo de fonte para o texto placeholder e de input.
-     *
-     * @param tipo O enumerador @c TipoFonte.
+     * @brief Realiza a navegação entre os resultados da pesquisa via teclado.
+     * 
+     * @param direcao Valor inteiro indicando a direção da navegação (ex: 1 para baixo, -1 para cima).
+     * @return true se a navegação foi realizada com sucesso, false caso contrário.
+     */
+    bool navegarResultados(int direcao); 
+
+    /**
+     * @brief Verifica se algum resultado da lista possui o foco atual.
+     * 
+     * @return true se houver um item focado, false caso contrário.
+     */
+    bool temResultadoFocado() const;
+
+    /**
+     * @brief Obtém o ponteiro para o jogo que está atualmente com foco de navegação.
+     * 
+     * @return Ponteiro para o objeto Jogo focado.
+     */
+    Jogo* getJogoResultadoFocado();
+
+    /**
+     * @brief Reseta o índice de foco dos resultados para o estado inicial (sem foco).
+     */
+    void resetarFocoResultados();
+
+    /**
+     * @brief Verifica se o componente está solicitando a abertura do teclado (interação).
+     * 
+     * @return true se houver solicitação ativa, false caso contrário.
+     */
+    bool getSolicitaTeclado() { return solicitaTeclado; }
+
+    /**
+     * @brief Reseta o sinalizador de solicitação de teclado.
+     */
+    void resetarSolicitacaoTeclado() { solicitaTeclado = false; }
+
+    /**
+     * @brief Define o tipo de fonte utilizado para o texto de placeholder.
+     * 
+     * @param tipo Valor da enumeração TipoFonte.
      */
     void setFontePlaceholder(TipoFonte tipo) { fontePlaceholder = tipo; }
 
     /**
-     * @brief Define o tamanho da fonte para o texto placeholder e de input.
-     *
-     * @param tamanho O tamanho em pontos (pt).
+     * @brief Define o tamanho da fonte utilizado para o texto de placeholder.
+     * 
+     * @param tamanho Valor inteiro representando o tamanho da fonte.
      */
     void setTamanhoFontePlaceholder(int tamanho) { tamanhoPlaceholder = tamanho; }
 
     /**
-     * @brief Define o tipo de fonte para os resultados da pesquisa.
-     *
-     * @param tipo O enumerador @c TipoFonte.
+     * @brief Define o tipo de fonte utilizado na exibição dos resultados da busca.
+     * 
+     * @param tipo Valor da enumeração TipoFonte.
      */
     void setFonteResultados(TipoFonte tipo) { fonteResultados = tipo; }
 
     /**
-     * @brief Define o tamanho da fonte para os resultados da pesquisa.
-     *
-     * @param tamanho O tamanho em pontos (pt).
+     * @brief Define o tamanho da fonte utilizado na exibição dos resultados da busca.
+     * 
+     * @param tamanho Valor inteiro representando o tamanho da fonte.
      */
     void setTamanhoFonteResultados(int tamanho) { tamanhoResultados = tamanho; }
 
 private:
-    /**
-     * @brief Ponteiro para o renderizador SDL.
-     */
-    SDL_Renderer* renderer;
+    SDL_Renderer* renderer; /**< Ponteiro para o renderizador SDL. */
+    std::string textoInput; /**< Armazena a string de texto digitada pelo usuário. */
+    bool inputAtivo;        /**< Indica se a caixa de pesquisa está em estado de edição ativa. */
+    
+    std::vector<Jogo> resultadosAtuais; /**< Vetor contendo os objetos Jogo filtrados pela pesquisa. */
+    
+    int indiceFocoResultado = -1; /**< Índice do item que possui foco de navegação via teclado. */
+    int resultadoHoverIndex = -1; /**< Índice do item que possui foco de mouse (hover). */
+    Jogo* jogoClicado = nullptr;  /**< Ponteiro para o último jogo que sofreu uma ação de clique. */
 
-    /**
-     * @brief O texto atual digitado no campo de input.
-     */
-    std::string textoInput;
+    TipoFonte fontePlaceholder = TipoFonte::NORMAL; /**< Estilo da fonte para o placeholder. */
+    int tamanhoPlaceholder; /**< Dimensão da fonte para o placeholder. */
+    TipoFonte fonteResultados = TipoFonte::NEGRITO; /**< Estilo da fonte para os itens de resultado. */
+    int tamanhoResultados;  /**< Dimensão da fonte para os itens de resultado. */
 
-    /**
-     * @brief Flag que indica se o campo de input está ativo e recebendo entrada.
-     */
-    bool inputAtivo;
+    int itemHeight;    /**< Altura individual de cada item na lista de resultados. */
+    int itemPadding;   /**< Espaçamento interno entre os elementos de um item de resultado. */
+    int imgSize;       /**< Dimensão da imagem (ícone) exibida nos resultados. */
+    int imgOffsetY;    /**< Deslocamento vertical da imagem dentro do item. */
+    int imgOffsetX;    /**< Deslocamento horizontal da imagem dentro do item. */
+    int textOffsetX;   /**< Deslocamento horizontal do texto em relação à imagem. */
+    int raioBorda;     /**< Raio de arredondamento da borda da caixa de pesquisa. */
+    int raioDestaque;  /**< Raio de arredondamento para o destaque de seleção/foco. */
     
     /**
-     * @brief Índice do resultado de pesquisa atualmente sob o mouse (hover).
+     * @brief Quantidade máxima de resultados exibidos simultaneamente no dropdown.
      */
-    int resultadoSelecionado;
+    static constexpr int MAX_RESULTADOS = 3;
+    
+    bool solicitaTeclado = false; /**< Sinalizador para indicar necessidade de entrada de texto externa. */
 
     /**
-     * @brief Cor atual do botão (mantida por compatibilidade, mas a cor é determinada em desenhar).
-     */
-    SDL_Color corAtual;
-
-    /**
-     * @brief Ponteiro para sinalizar qual jogo foi clicado na lista de resultados.
-     */
-    Jogo* jogoClicado = nullptr; 
-
-    // *** CONFIGURAÇÕES DE FONTE ***
-    TipoFonte fontePlaceholder = TipoFonte::NORMAL;
-    int tamanhoPlaceholder = 28;
-    TipoFonte fonteResultados = TipoFonte::NEGRITO;
-    int tamanhoResultados = 32;
-
-    // Constantes de Layout
-    const int ITEM_HEIGHT = 120; ///< Altura de cada item de resultado.
-    const int ITEM_PADDING = 6;  ///< Espaçamento entre os itens de resultado.
-    const int IMG_SIZE = 90;     ///< Tamanho da imagem de capa nos resultados.
-    const int IMG_OFFSET_Y = (ITEM_HEIGHT - IMG_SIZE) / 2; ///< Offset Y para centralizar a imagem.
-    const int IMG_OFFSET_X = 15; ///< Offset X da imagem.
-    const int TEXT_OFFSET_Y = 10;  ///< Offset Y do texto.
-    const int TEXT_OFFSET_X = IMG_OFFSET_X + IMG_SIZE + 20; ///< Offset X do texto.
-    const int MAX_RESULTADOS = 3; ///< Número máximo de resultados a serem exibidos.
-
-    /**
-     * @brief Desenha a lista de resultados de pesquisa abaixo do campo de input.
-     *
-     * @param adjustedArea A área ajustada do campo de input principal.
+     * @brief Realiza o desenho técnico da lista de resultados suspensa.
+     * 
+     * @param adjustedArea Área retangular calculada e ajustada para a exibição dos resultados.
      */
     void desenharResultados(const SDL_Rect& adjustedArea);
 
     /**
-     * @brief Conta quantos jogos correspondem ao input atual.
-     *
-     * @param input O texto de busca.
-     * @return O número de resultados encontrados.
+     * @brief Atualiza a lista interna de resultados baseando-se no textoInput atual.
+     * 
+     * Este método filtra os jogos disponíveis e atualiza o vetor resultadosAtuais.
      */
-    int contarResultados(const std::string& input);
-    
-    // Funções de handle (não usadas na implementação atual, mas mantidas por convenção)
-    bool handleMouseClick(SDL_Event& evento, int offsetX, int offsetY);
-    void handleTextInput(SDL_Event& evento);
-    bool handleKeyDown(SDL_Event& evento);
+    void atualizarResultados();
 };
 
 } // namespace MeuProjeto

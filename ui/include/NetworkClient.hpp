@@ -14,8 +14,10 @@ public:
     static NetworkClient& getInstance();
 
     bool connectToManager();
+    // Updated signature to support graphics options
     void sendStartGame(const std::string& id, const std::string& path, 
-                      int width, int height, int fps, bool useGamescope);
+                      int width = 1280, int height = 720, int fps = 60, bool useGamescope = true);
+                      
     void checkEvents(); // Call this in the main loop
     
     // State Getters

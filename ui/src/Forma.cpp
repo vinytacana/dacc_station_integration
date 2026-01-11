@@ -1,3 +1,12 @@
+/**
+ * @file Forma.cpp
+ * @brief Implementação dos métodos da classe Forma para renderização de primitivas.
+ * 
+ * Este arquivo contém a lógica de desenho para diferentes formas geométricas,
+ * permitindo a criação de elementos visuais básicos que compõem a interface 
+ * do launcher de jogos.
+ */
+
 #include "Forma.hpp"
 #include <SDL2/SDL2_gfxPrimitives.h>
 
@@ -5,17 +14,16 @@ using namespace MeuProjeto;
 using namespace std;
 
 /**
- * @brief Construtor da classe Forma
+ * @brief Construtor da classe Forma.
  * 
- * Inicializa uma forma geométrica com posição, dimensões, cor e tipo especificados.
- * Utiliza lista de inicialização para membros e define a área retangular da forma.
+ * Inicializa as propriedades de estilo e geometria da forma.
  * 
- * @param x Posição X do canto superior esquerdo da forma
- * @param y Posição Y do canto superior esquerdo da forma
- * @param largura Largura da forma em pixels
- * @param altura Altura da forma em pixels
- * @param cor Cor da forma no formato SDL_Color (RGBA)
- * @param tipoForma Tipo da forma geométrica ("quadrado", "retangulo", "circulo", "triangulo")
+ * @param x Coordenada horizontal inicial.
+ * @param y Coordenada vertical inicial.
+ * @param largura Largura da área da forma.
+ * @param altura Altura da área da forma.
+ * @param cor Cor inicial no formato SDL_Color (RGBA).
+ * @param tipoForma String identificadora ("retangulo", "quadrado", "circulo", "triangulo").
  */
 Forma::Forma(int x, int y, int largura, int altura, SDL_Color cor, const std::string& tipoForma)
     : cor(cor), tipo(tipoForma)
@@ -24,83 +32,73 @@ Forma::Forma(int x, int y, int largura, int altura, SDL_Color cor, const std::st
 }
 
 /**
- * @brief Desenha a forma na tela sem deslocamento
+ * @brief Renderiza a forma na sua posição original.
  * 
- * Método sobrecarregado que chama a versão com deslocamento usando valores zero.
+ * Este método atua como um wrapper para a função de desenho com offset,
+ * passando deslocamento zero por padrão.
  * 
- * @param render Ponteiro para o renderizador SDL onde a forma será desenhada
+ * @param render O ponteiro para o SDL_Renderer onde a forma será desenhada.
  */
-void Forma::desenhar(SDL_Renderer* render) 
-{
-    desenhar(render, 0, 0); // Chama o método com deslocamento padrão
+void Forma::desenhar(SDL_Renderer* render) {
+    desenhar(render, 0, 0); 
 }
 
 /**
- * @brief Desenha a forma na tela com deslocamento aplicado
+ * @brief Renderiza a forma na tela aplicando cálculos de geometria baseados no tipo.
  * 
- * Renderiza a forma geométrica baseada no seu tipo, aplicando um deslocamento
- * nas coordenadas. Suporta quadrados, retângulos, círculos e triângulos.
+ * A função aplica um deslocamento (offset) às coordenadas originais e executa a 
+ * lógica de desenho específica:
+ * - **quadrado**: Calcula o menor lado para garantir a proporção 1:1.
+ * - **retangulo**: Preenche a área total definida por SDL_Rect.
+ * - **circulo**: Calcula o centro e o raio máximo permitido, utilizando a biblioteca SDL2_gfx.
+ * - **triangulo**: Define três vértices baseados na área e utiliza SDL2_gfx para preenchimento.
  * 
- * @param render Ponteiro para o renderizador SDL onde a forma será desenhada
- * @param offsetX Deslocamento horizontal a ser aplicado na posição X
- * @param offsetY Deslocamento vertical a ser aplicado na posição Y
+ * @param render O ponteiro para o SDL_Renderer.
+ * @param offsetX Deslocamento horizontal para renderização relativa.
+ * @param offsetY Deslocamento vertical para renderização relativa.
  */
-void Forma::desenhar(SDL_Renderer* render, int offsetX, int offsetY) 
-{
-    // Define a cor de desenho no renderizador
+void Forma::desenhar(SDL_Renderer* render, int offsetX, int offsetY) {
+    // Define a cor de desenho no renderer para as funções nativas da SDL
     SDL_SetRenderDrawColor(render, cor.r, cor.g, cor.b, cor.a);
 
-    // Aplica o deslocamento à área da forma
+    // Calcula a área ajustada com base nos deslocamentos fornecidos (scroll/posicionamento relativo)
     SDL_Rect adjustedArea = {area.x + offsetX, area.y + offsetY, area.w, area.h};
-    
-    // Desenha a forma baseada no tipo especificado
+
     if (tipo == "quadrado")
     {
-        // Para quadrado, usa o menor lado entre largura e altura
+        // Garante que a forma seja um quadrado perfeito usando a menor dimensão disponível
         int lado = (area.w < area.h) ? area.w : area.h;
         SDL_Rect quadrado = {adjustedArea.x, adjustedArea.y, lado, lado};
         SDL_RenderFillRect(render, &quadrado);
     }
     else if (tipo == "retangulo")
     {
-        // Desenha retângulo preenchendo toda a área
         SDL_RenderFillRect(render, &adjustedArea);
     }
     else if (tipo == "circulo")
     {
-        // Calcula centro e raio do círculo
+        // Cálculos para centralização e definição do raio
         int centroX = adjustedArea.x + adjustedArea.w / 2;
         int centroY = adjustedArea.y + adjustedArea.h / 2;
         int raio = (adjustedArea.w < adjustedArea.h ? adjustedArea.w : adjustedArea.h) / 2;
         
-        // Usa função da SDL2_gfx para desenhar círculo preenchido
+        // Uso da biblioteca SDL2_gfx para desenho de círculos suavizados e preenchidos
         filledCircleRGBA(render, centroX, centroY, raio, cor.r, cor.g, cor.b, cor.a);
     }
     else if (tipo == "triangulo")
     {
-        // Define os vértices do triângulo (base na parte inferior)
-        Sint16 vx[3] = {
-            (Sint16)adjustedArea.x, 
-            (Sint16)(adjustedArea.x + adjustedArea.w), 
-            (Sint16)(adjustedArea.x + adjustedArea.w / 2)
-        };
-        Sint16 vy[3] = {
-            (Sint16)(adjustedArea.y + adjustedArea.h), 
-            (Sint16)(adjustedArea.y + adjustedArea.h), 
-            (Sint16)adjustedArea.y
-        };
+        // Define os três pontos do triângulo (Base esquerda, Base direita, Topo central)
+        Sint16 vx[3] = {(Sint16)adjustedArea.x, (Sint16)(adjustedArea.x + adjustedArea.w), (Sint16)(adjustedArea.x + adjustedArea.w / 2)};
+        Sint16 vy[3] = {(Sint16)(adjustedArea.y + adjustedArea.h), (Sint16)(adjustedArea.y + adjustedArea.h), (Sint16)adjustedArea.y};
         
-        // Usa função da SDL2_gfx para desenhar polígono preenchido
+        // Uso da biblioteca SDL2_gfx para renderizar o polígono preenchido
         filledPolygonRGBA(render, vx, vy, 3, cor.r, cor.g, cor.b, cor.a);
     }
 }
 
 /**
- * @brief Altera a cor da forma
- * 
- * Permite modificar a cor de renderização da forma geometrica.
- * 
- * @param novaCor Nova cor a ser aplicada à forma, no formato SDL_Color
+ * @brief Atualiza a cor interna da forma.
+ * @param novaCor O novo struct SDL_Color a ser aplicado.
  */
 void Forma::mudarCor(SDL_Color novaCor)
 {
@@ -108,12 +106,9 @@ void Forma::mudarCor(SDL_Color novaCor)
 }
 
 /**
- * @brief Move a forma para uma nova posição
- * 
- * Atualiza as coordenadas X e Y da forma sem alterar suas dimensões.
- * 
- * @param novoX Nova coordenada X para a posição da forma
- * @param novoY Nova coordenada Y para a posição da forma
+ * @brief Altera a posição absoluta da forma no sistema de coordenadas.
+ * @param novoX Nova coordenada horizontal.
+ * @param novoY Nova coordenada vertical.
  */
 void Forma::mover(int novoX, int novoY)
 {

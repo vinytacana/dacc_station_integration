@@ -1,6 +1,9 @@
-@Guardiões da galaxia
-#Descrição1
+@Em um mundo digital cheio de ideias curiosas, esta
+#Em um mundo digital cheio de ideias curiosas, esta descricao aleatoria surge apenas para preencher espaco com palavras simples, frases comuns e um ritmo tranquilo. Ela nao conta uma historia profunda, mas cria uma sensacao leve de leitura continua, quase como um
+
+ pensamento solto. O objetivo aqui nao e informar algo especifico, e sim existir como texto, ocupando caracteres de forma precisa, mantendo coesao, clareza e um tom neutro que poderia se encaixar em qualquer contexto generico. Assim, o leitor apenas segue adiante, sem expectativas, ate o final tranquilo. Texto extra apenas para fechar.!
 $Aventura, RPG
-&bin/guardioes.sh
-*assets/textures/jogo1.jpeg
-%assets/textures/captura1.jpeg;assets/textures/captura2.jpeg;assets/textures/captura3.jpeg;assets/textures/captura4.jpeg
+*assets/images/games/jogo1CapaTelaPrincipal.jpeg
+&assets/images/games/jogo1FundoDestaque.jpeg
++assets/images/games/jogo1CapaJanelaJogo.jpeg
+%assets/images/games/Capturas de Tela/captura1.jpeg;assets/images/games/Capturas de Tela/captura2.jpeg;assets/images/games/Capturas de Tela/captura3.jpeg;assets/images/games/Capturas de Tela/captura4.jpeg

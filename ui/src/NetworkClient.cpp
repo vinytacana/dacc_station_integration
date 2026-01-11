@@ -43,13 +43,6 @@ void NetworkClient::sendStartGame(const std::string& id, const std::string& path
     j["id"] = id;
     j["path"] = path;
 
-    json graphics;
-    graphics["use_gamescope"] = useGamescope;
-    graphics["width"] = width;
-    graphics["height"] = height;
-    graphics["fps"] = fps;
-    j["graphics"] = graphics;
-
     std::string msg = j.dump();
     client_->send(msg); // UnixSocketClient::send uses mutex and handles writing
     

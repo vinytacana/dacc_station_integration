@@ -1,351 +1,247 @@
+/**
+ * @file Botao.cpp
+ * @brief Implementação detalhada da classe Botao.
+ * 
+ * Este arquivo gerencia a lógica de estados (hover, clique, foco), a integração
+ * com o motor de temas e a renderização híbrida de texto e imagem.
+ */
+
 #include "Botao.hpp"
 #include "Janela.hpp"
 #include "GerenciadorFontes.hpp"
 #include "GerenciadorImagens.hpp"
-#include "GerenciadorAudio.hpp"
 #include "Utils.hpp" 
-#include "Theme.hpp"
-#include "GraphicsUtils.hpp"
+#include "GerenciadorTemas.hpp"
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
-#include <SDL2/SDL2_gfxPrimitives.h> // Para filledCircleRGBA
+#include <SDL2/SDL2_gfxPrimitives.h>
 #include <iostream>
-#include <ostream>  
-#include "GerenciadorJogos.hpp"
 
 using namespace MeuProjeto;
 
+/** 
+ * @brief Referência ao gerenciador global de imagens definido no main.cpp. 
+ * Utilizado para evitar o recarregamento de texturas idênticas.
+ */
 extern GerenciadorImagens gerImg;
-extern GerenciadorJogos gerenciadorJogos;
-extern GerenciadorFontes gerFontes;
-
-// --- Construtores e Destrutor ---
 
 /**
- * @brief Construtor padrão para um botão baseado em texto ou cor.
- *
- * @param x Coordenada X superior esquerda.
- * @param y Coordenada Y superior esquerda.
- * @param largura Largura do botão.
- * @param altura Altura do botão.
- * @param texto O texto a ser exibido no botão (opcional).
+ * @brief Construtor para Botão de Texto.
+ * 
+ * Inicializa um botão focado em exibir rótulos textuais. 
+ * @note Este construtor define @a usaTemaPadrao como @b true, o que significa que
+ * as cores do botão mudarão automaticamente quando o usuário alternar entre o tema Claro e Escuro.
+ * 
+ * @param x Posição X absoluta.
+ * @param y Posição Y absoluta.
+ * @param largura Dimensão horizontal.
+ * @param altura Dimensão vertical.
+ * @param texto Conteúdo textual do botão.
  */
 Botao::Botao(int x, int y, int largura, int altura, const std::string& texto) 
-    : area{x, y, largura, altura}, 
-      corPadrao({59, 59, 61, 255}), corHover({96, 97, 99, 255}), corPressionado({131, 131, 133, 255}),
-      texto(texto),
-      texturaImagem(nullptr), hover(false), pressionado(false),
+    : area{x, y, largura, altura}, texturaImagem(nullptr), texto(texto), 
+      corPadrao({0,0,0,0}), corHover({0,0,0,0}), corPressionado({0,0,0,0}),
+      usaTemaPadrao(true), 
+      hover(false), pressionado(false), focadoPorControle(false), parentJanela(nullptr), nomeJogo(""), descJogo(""), 
+      isRound(false), isDestaque(false),
       tipoFonte(TipoFonte::NEGRITO), tamanhoFonte(32),
-      imagemPath(""), parentJanela(nullptr), nomeJogo(""), descJogo(""), 
-      isRound(false), isDestaque(false), cornerRadius(10), iconText("")
+      onClickCallback(nullptr)
 {
- 
 }
 
 /**
- * @brief Construtor para um botão baseado em imagem.
- *
+ * @brief Construtor para Botão de Imagem (Capas/Banners).
+ * 
+ * Inicializa um botão que exibe uma textura. Por padrão, o fundo é transparente
+ * para não interferir na arte do jogo.
+ * @note Este construtor define @a usaTemaPadrao como @b false, pois botões de imagem
+ * geralmente possuem identidade visual fixa ou dependem da arte do jogo.
+ * 
  * @param renderer O renderizador SDL.
- * @param x Coordenada X superior esquerda.
- * @param y Coordenada Y superior esquerda.
- * @param largura Largura do botão.
- * @param altura Altura do botão.
- * @param imagemPath O caminho para o arquivo de imagem.
- * @param nome O nome associado ao jogo.
- * @param desc A descrição associada ao jogo.
- * @param isDestaque Indica se o botão é um destaque.
+ * @param x Posição X.
+ * @param y Posição Y.
+ * @param largura Largura.
+ * @param altura Altura.
+ * @param imagemPath Caminho do arquivo de imagem.
+ * @param nome Nome do jogo (usado no popup).
+ * @param desc Descrição do jogo (usada no popup).
+ * @param isDestaque Se true, aplica transparência especial de banner.
  */
 Botao::Botao(SDL_Renderer* renderer, int x, int y, int largura, int altura,
              const std::string& imagemPath, const std::string& nome,
              const std::string& desc, bool isDestaque)
-    : area{x, y, largura, altura}, 
+    : area{x, y, largura, altura}, texturaImagem(nullptr), texto(""),
       corPadrao({0,0,0,0}), corHover({96, 97, 99, 255}), corPressionado({131, 131, 133, 255}),
-      texto(""),
-      texturaImagem(nullptr), hover(false), pressionado(false),
+      usaTemaPadrao(false), 
+      hover(false), pressionado(false), focadoPorControle(false), parentJanela(nullptr),
+      nomeJogo(nome), descJogo(desc), imagemPath(imagemPath), 
+      isRound(false), isDestaque(isDestaque),
       tipoFonte(TipoFonte::NEGRITO), tamanhoFonte(32),
-      imagemPath(imagemPath), parentJanela(nullptr),
-      nomeJogo(nome), descJogo(desc), 
-      isRound(false), isDestaque(isDestaque), cornerRadius(10), iconText("")
+      onClickCallback(nullptr)
 {
     if (renderer && !imagemPath.empty()) {
+        // Solicita a textura ao cache global
         texturaImagem = gerImg.carregar(renderer, imagemPath);
         if (texturaImagem) {
+            // Habilita canal alpha para transparências
             SDL_SetTextureBlendMode(texturaImagem, SDL_BLENDMODE_BLEND);
         }
     }
 }
 
-/**
- * @brief Destrutor virtual.
- */
 Botao::~Botao() {
-}
-
-// --- Tratamento de Eventos ---
-
-/**
- * @brief Trata eventos de mouse (movimento, clique) para atualizar o estado do botão.
- *
- * @param evento A estrutura SDL_Event a ser tratada.
- * @param offsetX Deslocamento X da área de desenho.
- * @param offsetY Deslocamento Y da área de desenho.
- * @return Retorna @c true se o evento foi consumido pelo botão.
- */
-bool Botao::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
-    bool eventoConsumido = false;
-
-    if (evento.type == SDL_MOUSEMOTION) {
-        eventoConsumido = handleMouseMotion(evento, offsetX, offsetY);
-    } else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
-        eventoConsumido = handleMouseButtonDown(evento, offsetX, offsetY);
-    } else if (evento.type == SDL_MOUSEBUTTONUP && evento.button.button == SDL_BUTTON_LEFT) {
-        eventoConsumido = handleMouseButtonUp(evento, offsetX, offsetY);
-    }
-
-    return eventoConsumido;
+    // A textura não é destruída aqui pois pertence ao cache global (gerImg)
 }
 
 /**
- * @brief Trata o evento de movimento do mouse (atualiza hover e popups).
- *
- * @param evento O evento de movimento do mouse.
- * @param offsetX Deslocamento X.
- * @param offsetY Deslocamento Y.
- * @return Retorna @c true se um popup foi aberto.
+ * @brief Define uma cor de texto que ignora o tema.
  */
-bool Botao::handleMouseMotion(SDL_Event& evento, int offsetX, int offsetY) {
-    int x = evento.motion.x - offsetX; 
-    int y = evento.motion.y - offsetY;
-
-    bool mouseDentro = contemPonto(x, y);
-    bool abriuPopup = false;
-
-    if (mouseDentro && !hover) { 
-        gerAudio.tocarSom("nav.wav");
-        if (parentJanela && !nomeJogo.empty() && texto.empty()) {
-            parentJanela->abrirPopup(nomeJogo, texturaImagem, descJogo, area.x, area.y, area.w, area.h);
-            abriuPopup = true;
-        }
-    } else if (!mouseDentro && hover) { 
-        if (parentJanela) {
-            parentJanela->fecharPopup();
-        }
-    }
-    
-    hover = mouseDentro; 
-    return abriuPopup;
+void Botao::setCorTexto(const SDL_Color& cor) {
+    corTextoCustom = cor;
+    usaCorTextoCustom = true;
 }
 
 /**
- * @brief Trata o evento de botão do mouse para baixo (atualiza pressionado).
- *
- * @param evento O evento de clique do mouse.
- * @param offsetX Deslocamento X.
- * @param offsetY Deslocamento Y.
- * @return Retorna @c true se o botão foi pressionado.
+ * @brief Define manualmente as cores dos estados do botão.
+ * 
+ * @important Ao chamar esta função, a flag @a usaTemaPadrao é desativada. O botão 
+ * manterá estas cores permanentemente, ignorando mudanças globais de tema.
  */
-bool Botao::handleMouseButtonDown(SDL_Event& evento, int offsetX, int offsetY) {
-    int x = evento.button.x - offsetX;
-    int y = evento.button.y - offsetY;
-
-    if (contemPonto(x, y)) {
-        pressionado = true;
-        return true;
-    }
-    return false;
+void Botao::setCor(const SDL_Color& padrao, const SDL_Color& hover, const SDL_Color& press) { 
+    corPadrao = padrao; 
+    corHover = hover; 
+    corPressionado = press; 
+    usaTemaPadrao = false; 
 }
 
-/**
- * @brief Trata o evento de botão do mouse para cima (finaliza o clique).
- *
- * @param evento O evento de soltura do mouse.
- * @param offsetX Deslocamento X.
- * @param offsetY Deslocamento Y.
- * @return Retorna @c true se o botão foi solto após estar pressionado.
- */
-bool Botao::handleMouseButtonUp(SDL_Event& evento, int offsetX, int offsetY) {
-    int x = evento.button.x - offsetX;
-    int y = evento.button.y - offsetY;
-
-    if (contemPonto(x, y) && pressionado) {
-        pressionado = false;
-        return true;
-    }
-    pressionado = false;
-    return false;
-}
-
-// --- Funções de Desenho ---
-
-/**
- * @brief Desenha o botão na posição absoluta (sem offset).
- *
- * @param renderer O renderizador SDL.
- */
 void Botao::desenhar(SDL_Renderer* renderer) {
     desenhar(renderer, 0, 0);
 }
 
 /**
- * @brief Desenha o botão com um deslocamento (offset) aplicado.
- *
+ * @brief Método principal de renderização do Botão.
+ * 
+ * A lógica de desenho segue esta ordem de camadas:
+ * 1. **Sincronização de Tema**: Se o tema estiver ativo, busca as cores do Singleton.
+ * 2. **Fundo Geométrica**: Desenha um retângulo ou um círculo preenchido.
+ * 3. **Imagem/Arte**: Se houver textura, aplica modulação de Alpha (transparência) 
+ *    baseada no estado (hover, focado ou destaque).
+ * 4. **Texto**: Renderiza o rótulo centralizado.
+ * 5. **Feedback de Controle**: Se focado por gamepad, desenha uma borda externa vibrante.
+ * 
  * @param renderer O renderizador SDL.
- * @param offsetX Deslocamento X.
- * @param offsetY Deslocamento Y.
+ * @param offsetX Deslocamento horizontal (scroll).
+ * @param offsetY Deslocamento vertical (scroll).
  */
 void Botao::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
     if (!renderer) return;
 
+    // Lógica de Temas: Atualiza cores em tempo real se não houver override manual
+    if (usaTemaPadrao) {
+        auto& tema = GerenciadorTemas::getInstance();
+        corPadrao = tema.getCorBotaoNormal();
+        corHover = tema.getCorBotaoHover();
+        corPressionado = tema.getCorBotaoPressionado();
+    }
+
+    // Aplica o deslocamento de scroll à área física
     SDL_Rect adjustedArea = {area.x + offsetX, area.y + offsetY, area.w, area.h};
     SDL_Color corAtual = determineCurrentColor();
 
-    // Desenha o overlay de cor PRIMEIRO (antes da imagem)
+    // 1. Renderização do Fundo (Background)
     if (corAtual.a > 0) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
         
         if (isRound) {
-            // Desenha um círculo preenchido
+            // Cálculos para botões circulares (ex: ícones redondos)
             int centroX = adjustedArea.x + adjustedArea.w / 2;
             int centroY = adjustedArea.y + adjustedArea.h / 2;
             int raio = (adjustedArea.w < adjustedArea.h) ? (adjustedArea.w / 2) : (adjustedArea.h / 2);
             filledCircleRGBA(renderer, centroX, centroY, raio, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
-            
-            // Highlight circular se hover
-            if (hover) {
-                aacircleRGBA(renderer, centroX, centroY, raio, 255, 255, 255, 255);
-            }
         } else {
-            // Desenha um retângulo ARREDONDADO
-            GraphicsUtils::drawRoundedRect(renderer, adjustedArea, cornerRadius, corAtual);
-            
-            // Efeito de Borda (Highlight) quando selecionado
-            if (hover) {
-                GraphicsUtils::drawRoundedRectOutline(renderer, adjustedArea, cornerRadius, {255, 255, 255, 100});
-            }
+            SDL_RenderFillRect(renderer, &adjustedArea);
         }
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
 
-    // Desenha a textura da imagem POR CIMA do overlay
+    // 2. Renderização da Imagem (Arte do Jogo)
     if (texturaImagem) {
-        SDL_SetTextureBlendMode(texturaImagem, SDL_BLENDMODE_BLEND);
-        
-        // Aplica transparência baseada no estado (hover/pressionado)
-        Uint8 alphaValue;
-        if (isDestaque) {
-            alphaValue = 128; // Destaques sempre 50% transparentes
-        } else if (hover || pressionado) {
-            alphaValue = 180; // ~70% opaco quando hover/pressionado para ver o overlay
-        } else {
-            alphaValue = 255; // Totalmente opaco no estado normal
-        }
-        
+        /**
+         * @section Modulação_Alpha
+         * O Alpha é ajustado conforme o estado para dar feedback visual:
+         * - Destaque (Banner): 128 (50% de transparência).
+         * - Hover/Focado/Pressionado: 180 (Escurece levemente).
+         * - Normal: 255 (Opaco).
+         */
+        Uint8 alphaValue = (isDestaque) ? 128 : ((hover || pressionado || focadoPorControle) ? 180 : 255);
         SDL_SetTextureAlphaMod(texturaImagem, alphaValue);
         SDL_RenderCopy(renderer, texturaImagem, nullptr, &adjustedArea);
-        SDL_SetTextureAlphaMod(texturaImagem, 255); // Restaura
+        SDL_SetTextureAlphaMod(texturaImagem, 255); // Reseta para não afetar outros desenhos
     }
+    // 3. Renderização do Texto (se não houver imagem)
     else if (!texto.empty()) {
-        // Se não tem imagem, mas tem texto, renderiza o texto
         renderizarTextoCentralizado(renderer, adjustedArea);
+    }
+    
+    // 4. Borda de Destaque do Controle (Gamepad Focus)
+    if (focadoPorControle) {
+        SDL_Color corDestaque = GerenciadorTemas::getInstance().getCorDestaque();
+        if (isRound) {
+            int centroX = adjustedArea.x + adjustedArea.w / 2;
+            int centroY = adjustedArea.y + adjustedArea.h / 2;
+            int raio = (adjustedArea.w < adjustedArea.h) ? (adjustedArea.w / 2) : (adjustedArea.h / 2);
+            // Desenha 3 círculos com raios incrementais para simular uma borda espessa e suave (anti-aliasing)
+            aacircleRGBA(renderer, centroX, centroY, raio, corDestaque.r, corDestaque.g, corDestaque.b, 255);
+            aacircleRGBA(renderer, centroX, centroY, raio + 1, corDestaque.r, corDestaque.g, corDestaque.b, 255);
+            aacircleRGBA(renderer, centroX, centroY, raio + 2, corDestaque.r, corDestaque.g, corDestaque.b, 255);
+        } else {
+            // Desenha dois retângulos arredondados para criar uma borda dupla de destaque
+            roundedRectangleRGBA(renderer, adjustedArea.x - 3, adjustedArea.y - 3, adjustedArea.x + adjustedArea.w + 3, adjustedArea.y + adjustedArea.h + 3, 5, corDestaque.r, corDestaque.g, corDestaque.b, 255);
+            roundedRectangleRGBA(renderer, adjustedArea.x - 2, adjustedArea.y - 2, adjustedArea.x + adjustedArea.w + 2, adjustedArea.y + adjustedArea.h + 2, 4, corDestaque.r, corDestaque.g, corDestaque.b, 255);
+        }
     }
 }
 
 /**
- * @brief Determina a cor de fundo atual com base nos estados.
- *
- * @return A estrutura @c SDL_Color.
+ * @brief Máquina de estados para determinar a cor de renderização no frame atual.
+ * @return SDL_Color priorizando o estado Pressionado > Hover/Foco > Normal.
  */
 SDL_Color Botao::determineCurrentColor() {
-    if (pressionado) {
-        return corPressionado;
-    } else if (hover) {
-        return corHover;
-    }
+    if (pressionado) return corPressionado;
+    else if (hover || focadoPorControle) return corHover;
     return corPadrao;
 }
 
 /**
- * @brief Renderiza o texto centralizado na área do botão.
- *
- * @param renderer O renderizador SDL.
- * @param area A área retangular ajustada do botão.
+ * @brief Renderiza o texto exatamente no centro da área do botão.
+ * 
+ * Realiza cálculos de ancoragem: 
+ * X = PosicaoBotaoX + (LarguraBotao - LarguraTexto) / 2
  */
 void Botao::renderizarTextoCentralizado(SDL_Renderer* renderer, const SDL_Rect& area) {
-    // *** USA A FONTE E TAMANHO CONFIGURADOS NO BOTÃO ***
+    static GerenciadorFontes gerenciadorFontesBotoes;
+
     const std::string& fontePath = ConfigFontes::obterCaminho(tipoFonte);
-    TTF_Font* font = gerFontes.carregar(fontePath, tamanhoFonte);
-    
-    if (!font) {
-        std::cerr << "[ERRO] Falha ao carregar fonte de botão: " << fontePath << std::endl;
-        return;
-    }
+    TTF_Font* font = gerenciadorFontesBotoes.carregar(fontePath, tamanhoFonte);
+    if (!font) return;
 
-    // Preparar texto do ícone (se houver)
-    int iconWidth = 0;
-    int iconGap = 10;
-    
-    if (!iconText.empty()) {
-        iconWidth = 32; // Tamanho fixo do círculo do ícone
-    }
+    // Seleção de cor: Manual ou automática via tema
+    SDL_Color corTexto = (usaCorTextoCustom) ? corTextoCustom : GerenciadorTemas::getInstance().getCorTextoNegrito();
 
-    // Renderizar Texto Principal
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, texto.c_str(), {255, 255, 255, 255});
+    // Renderização Blended para alta qualidade (UTF8 suportado)
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, texto.c_str(), corTexto);
     if (!surface) return;
 
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (!texture) {
-        SDL_FreeSurface(surface);
-        return;
-    }
+    if (!texture) { SDL_FreeSurface(surface); return; }
 
     int texW = surface->w, texH = surface->h;
-    
-    // Calcular largura total (Ícone + Gap + Texto)
-    int totalContentWidth = texW;
-    if (!iconText.empty()) totalContentWidth += iconWidth + iconGap;
-
-    // Posição de início (centralizado)
-    int startX = area.x + (area.w - totalContentWidth) / 2;
-    int centerY = area.y + area.h / 2;
-
-    // --- DESENHAR ÍCONE ---
-    if (!iconText.empty()) {
-        int iconX = startX;
-        int iconY = centerY - (iconWidth / 2);
-        int radius = iconWidth / 2;
-
-        // Círculo Branco
-        filledCircleRGBA(renderer, iconX + radius, iconY + radius, radius, 255, 255, 255, 255);
-        
-        // Letra do Ícone (Preta)
-        SDL_Color black = {20, 20, 20, 255};
-        // Usa uma fonte um pouco menor para a letra dentro do círculo
-        TTF_Font* fontIcon = gerFontes.carregar(fontePath, 20); 
-        if (fontIcon) {
-            SDL_Surface* sIcon = TTF_RenderUTF8_Blended(fontIcon, iconText.c_str(), black);
-            if (sIcon) {
-                SDL_Texture* tIcon = SDL_CreateTextureFromSurface(renderer, sIcon);
-                SDL_Rect rIcon = {
-                    iconX + radius - sIcon->w/2, 
-                    iconY + radius - sIcon->h/2, 
-                    sIcon->w, sIcon->h
-                };
-                SDL_RenderCopy(renderer, tIcon, nullptr, &rIcon);
-                SDL_FreeSurface(sIcon);
-                SDL_DestroyTexture(tIcon);
-            }
-        }
-        
-        // Avançar X para o texto
-        startX += iconWidth + iconGap;
-    }
-
-    // --- DESENHAR TEXTO PRINCIPAL ---
-    SDL_Rect rectTexto = {
-        startX, 
-        centerY - texH / 2, 
-        texW,
-        texH
+    // Cálculo do retângulo de destino para centralização perfeita
+    SDL_Rect rectTexto = { 
+        area.x + (area.w - texW) / 2, 
+        area.y + (area.h - texH) / 2, 
+        texW, 
+        texH 
     };
 
     SDL_RenderCopy(renderer, texture, nullptr, &rectTexto);
@@ -353,77 +249,149 @@ void Botao::renderizarTextoCentralizado(SDL_Renderer* renderer, const SDL_Rect& 
     SDL_FreeSurface(surface);
 }
 
-// --- Funções Set/Get ---
+/**
+ * @brief Distribuidor de eventos (Event Dispatcher) para o botão.
+ * 
+ * @param evento Evento SDL capturado.
+ * @param offsetX Deslocamento horizontal do scroll.
+ * @param offsetY Deslocamento vertical do scroll.
+ * @return true se o botão interagiu com o evento e o "consumiu".
+ */
+bool Botao::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
+    bool eventoConsumido = false;
+    if (evento.type == SDL_MOUSEMOTION) 
+        eventoConsumido = handleMouseMotion(evento, offsetX, offsetY);
+    else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) 
+        eventoConsumido = handleMouseButtonDown(evento, offsetX, offsetY);
+    else if (evento.type == SDL_MOUSEBUTTONUP && evento.button.button == SDL_BUTTON_LEFT) 
+        eventoConsumido = handleMouseButtonUp(evento, offsetX, offsetY);
+    else if (evento.type == SDL_CONTROLLERBUTTONDOWN || evento.type == SDL_CONTROLLERBUTTONUP) 
+        eventoConsumido = handleGamepadButton(evento);
+    return eventoConsumido;
+}
 
 /**
- * @brief Define a textura da imagem do botão.
- *
- * @param textura O ponteiro para a textura SDL.
+ * @brief Gerencia o movimento do mouse e a lógica de POPUP.
+ * 
+ * Se o mouse entrar em um botão de jogo (sem texto), solicita à janela pai
+ * que abra um popup com os detalhes do jogo.
  */
-void Botao::setTexturaImagem(SDL_Texture* textura) {
-    texturaImagem = textura;
-    if (texturaImagem) {
-        SDL_SetTextureBlendMode(texturaImagem, SDL_BLENDMODE_BLEND);
+bool Botao::handleMouseMotion(SDL_Event& evento, int offsetX, int offsetY) {
+    // Normaliza a posição do mouse subtraindo o scroll
+    int x = evento.motion.x - offsetX; 
+    int y = evento.motion.y - offsetY;
+    
+    bool mouseDentro = contemPonto(x, y);
+    bool abriuPopup = false;
+
+    // Lógica de Entrada (Hover In)
+    if (mouseDentro && !hover) { 
+        if (parentJanela && !nomeJogo.empty() && texto.empty()) {
+            // Dispara o popup informativo
+            parentJanela->abrirPopup(nomeJogo, texturaImagem, descJogo, area.x, area.y, area.w, area.h);
+            abriuPopup = true;
+        }
+    } 
+    // Lógica de Saída (Hover Out)
+    else if (!mouseDentro && hover) { 
+        if (parentJanela) parentJanela->fecharPopup();
+    }
+    
+    hover = mouseDentro; 
+    return abriuPopup;
+}
+
+bool Botao::handleMouseButtonDown(SDL_Event& evento, int offsetX, int offsetY) {
+    int x = evento.button.x - offsetX; 
+    int y = evento.button.y - offsetY;
+    if (contemPonto(x, y)) { pressionado = true; return true; }
+    return false;
+}
+
+bool Botao::handleMouseButtonUp(SDL_Event& evento, int offsetX, int offsetY) {
+    int x = evento.button.x - offsetX; 
+    int y = evento.button.y - offsetY;
+    if (contemPonto(x, y) && pressionado) {
+        pressionado = false;
+        // Dispara a ação de callback associada
+        if (onClickCallback) onClickCallback();
+        return true;
+    }
+    pressionado = false;
+    return false;
+}
+
+/**
+ * @brief Gerencia a interação via controle (Gamepad).
+ * 
+ * Mapeia o botão 'A' do controle para a mesma ação do clique esquerdo do mouse.
+ */
+bool Botao::handleGamepadButton(SDL_Event& evento) {
+    if (!focadoPorControle) return false;
+    
+    if (evento.type == SDL_CONTROLLERBUTTONDOWN) {
+        if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_A) { pressionado = true; return true; }
+    } else if (evento.type == SDL_CONTROLLERBUTTONUP) {
+        if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
+            if (pressionado) {
+                pressionado = false;
+                if (onClickCallback) onClickCallback();
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Define o estado de foco do controle e gerencia o popup.
+ * 
+ * Funciona de forma análoga ao mouse motion, mas disparado pela navegação
+ * direcional do controle.
+ */
+void Botao::setFocado(bool focado) {
+    bool estadoAnterior = focadoPorControle;
+    focadoPorControle = focado;
+    
+    if (focado && !estadoAnterior) {
+        if (parentJanela && !nomeJogo.empty() && texto.empty()) {
+            parentJanela->abrirPopup(nomeJogo, texturaImagem, descJogo, area.x, area.y, area.w, area.h);
+        }
+    } else if (!focado && estadoAnterior) {
+        if (parentJanela) parentJanela->fecharPopup();
+        pressionado = false;
     }
 }
 
-/**
- * @brief Define as cores dos estados do botão.
- *
- * @param corPadrao Cor normal.
- * @param corHover Cor quando o mouse está sobre o botão.
- * @param corPressionado Cor quando o botão está pressionado.
- */
-void Botao::setCor(const SDL_Color& corPadrao, const SDL_Color& corHover, const SDL_Color& corPressionado) {
-    this->corPadrao = corPadrao;
-    this->corHover = corHover;
-    this->corPressionado = corPressionado;
+void Botao::ativarPorControle() { if (focadoPorControle) pressionado = true; }
+void Botao::desativarPorControle() { pressionado = false; }
+
+/** @brief Executa a ação do botão imediatamente. Útil para atalhos de hardware. */
+bool Botao::executarAcaoPorControle() {
+    if (focadoPorControle && onClickCallback) { onClickCallback(); return true; }
+    return false;
 }
+
+void Botao::setTexturaImagem(SDL_Texture* textura) { 
+    texturaImagem = textura; 
+    if(texturaImagem) SDL_SetTextureBlendMode(texturaImagem, SDL_BLENDMODE_BLEND); 
+}
+
+void Botao::setParentJanela(Janela* janela) { parentJanela = janela; }
+void Botao::setIsRound(bool round) { isRound = round; }
 
 /**
- * @brief Define a janela pai para manipulação de popups.
- *
- * @param janela O ponteiro para a janela pai.
- */
-void MeuProjeto::Botao::setParentJanela(Janela* janela) {  
-    parentJanela = janela;
-}
-
-/**
- * @brief Define se o botão deve ser desenhado como um círculo (arredondado).
- *
- * @param round Se @c true, o botão é desenhado como um círculo.
- */
-void Botao::setIsRound(bool round) {
-    isRound = round;
-}
-
-void Botao::setCornerRadius(int radius) {
-    cornerRadius = radius;
-}
-
-void Botao::setIcon(const std::string& iconChar) {
-    iconText = iconChar;
-}
-
-/**
- * @brief Verifica se um ponto (x, y) está contido na área do botão.
- *
- * @param x Coordenada X do ponto.
- * @param y Coordenada Y do ponto.
- * @return Retorna @c true se o ponto estiver dentro da área, @c false caso contrário.
+ * @brief Detecção de colisão (Hitbox).
+ * 
+ * Se o botão for redondo, utiliza a fórmula da distância Euclidiana:
+ * (dx² + dy²) <= Raio²
+ * Se for retangular, utiliza a comparação simples de limites.
  */
 bool Botao::contemPonto(int x, int y) {
-    bool contem = x >= area.x && x <= area.x + area.w &&
-                  y >= area.y && y <= area.y + area.h;
-    
-    return contem;
-}
-
-void Botao::setSelecionado(bool selecionado) {
-    this->hover = selecionado;
-}
-
-bool Botao::estaSelecionado() const {
-    return this->hover;
+    if (isRound) {
+        int cx = area.x + area.w/2, cy = area.y + area.h/2, r = area.w/2;
+        int dx = x - cx, dy = y - cy;
+        return (dx*dx + dy*dy) <= (r*r);
+    }
+    return x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h;
 }

@@ -1,3 +1,12 @@
+/**
+ * @file Jogo.hpp
+ * @brief Definição da classe Jogo que representa a entidade de um game no sistema.
+ * 
+ * Este arquivo contém a estrutura de dados necessária para armazenar todas as 
+ * informações de um jogo, incluindo metadados textuais e referências para 
+ * recursos visuais (capas, fundos e capturas de tela).
+ */
+
 #ifndef JOGO_HPP
 #define JOGO_HPP
 
@@ -6,183 +15,127 @@
 #include <string>
 #include <vector>
 
+/**
+ * @namespace MeuProjeto
+ * @brief Namespace principal do projeto da interface de biblioteca de jogos.
+ */
 namespace MeuProjeto {
 
 /**
  * @class Jogo
- * @brief Representa um jogo com suas informações básicas e caminhos para imagens.
- *
- * A classe separa explicitamente a imagem de capa (principal) das demais
- * capturas de tela, facilitando o gerenciamento de recursos.
+ * @brief Representa um jogo com suas informações básicas e imagens específicas.
+ * 
+ * A classe Jogo funciona como um modelo de dados (Data Object) que centraliza
+ * as informações de um título. Ela diferencia três tipos de imagens principais
+ * para permitir uma interface rica (estilo Steam), onde um jogo tem uma miniatura
+ * para a lista, um fundo para destaque e uma imagem interna para sua própria página.
  */
 class Jogo
 {
 public:
     /**
-     * @brief Construtor completo da classe Jogo.
-     *
-     * @param nome O nome ou título do jogo.
-     * @param descricao Uma breve descrição do jogo.
-     * @param codigo O código de identificação ou categorias do jogo.
-     * @param capa O caminho para o arquivo da imagem de capa (principal).
-     * @param capturas Um vetor de caminhos para os arquivos das capturas de tela adicionais.
-     * @param executavel O caminho para o script ou binário executável do jogo.
+     * @brief Construtor parametrizado para inicializar um jogo completo.
+     * 
+     * @param nome Nome oficial do jogo.
+     * @param descricao Breve texto descritivo ou sinopse do jogo.
+     * @param codigo Identificador único (ID) ou código de referência do jogo.
+     * @param capaTelaPrincipal Caminho do arquivo de imagem para a listagem/grid principal.
+     * @param fundoDestaque Caminho do arquivo de imagem usado como wallpaper/fundo de tela.
+     * @param capaJanelaJogo Caminho do arquivo de imagem para exibição interna na janela do jogo.
+     * @param capturas Vetor de strings contendo caminhos para screenshots (capturas de tela).
      */
     Jogo(const std::string& nome, 
          const std::string& descricao, 
          const std::string& codigo, 
-         const std::string& capa,
-         const std::vector<std::string>& capturas,
-         const std::string& executavel = "",
-         int ano = 0,
-         int players = 1,
-         const std::string& genero = "Geral");
+         const std::string& capaTelaPrincipal, 
+         const std::string& fundoDestaque,    
+         const std::string& capaJanelaJogo,    
+         const std::vector<std::string>& capturas);
 
-    // --- Getters ---
-    /**
-     * @brief Obtém o nome do jogo.
-     * @return O nome do jogo.
-     */
+    // --- Getters (Métodos de Acesso) ---
+
+    /** @brief Retorna o nome do jogo. */
     std::string getNome() const;
 
-    int getAno() const;
-    int getPlayers() const;
-    std::string getGenero() const;
-
-    /**
-     * @brief Obtém a descrição do jogo.
-     * @return A descrição do jogo.
-     */
+    /** @brief Retorna a descrição ou sinopse do jogo. */
     std::string getDescricao() const;
 
-    /**
-     * @brief Obtém o código (ou categorias) do jogo.
-     * @return O código do jogo.
-     */
+    /** @brief Retorna o código identificador do jogo. */
     std::string getCodigo() const;
-
-    /**
-     * @brief Obtém o ID único do jogo (geralmente derivado do nome do arquivo ou pasta).
-     * @return O ID do jogo.
+    
+    /** 
+     * @brief Retorna o caminho da imagem usada na lista/categoria (thumbnail).
+     * @return String com o caminho do arquivo.
      */
-    std::string getId() const;
+    std::string getCapaTelaPrincipal() const;
 
-    /**
-     * @brief Obtém o caminho da imagem de capa (principal).
-     * @return O caminho do arquivo de capa.
+    /** 
+     * @brief Retorna o caminho da imagem de fundo (Hero Image/Background).
+     * @return String com o caminho do arquivo.
      */
-    std::string getCapa() const;
+    std::string getFundoDestaque() const;
 
-    /**
-     * @brief Obtém os caminhos das capturas de tela adicionais.
-     * @return Um vetor de caminhos das capturas.
+    /** 
+     * @brief Retorna o caminho da imagem interna da janela do jogo.
+     * @return String com o caminho do arquivo.
      */
+    std::string getCapaJanelaJogo() const;
+    
+    /** 
+     * @brief Retorna a capa principal. Mantido para compatibilidade com versões anteriores.
+     * @note Internamente mapeia para getCapaTelaPrincipal().
+     * @return String com o caminho do arquivo.
+     */
+    std::string getCapa() const; 
+    
+    /** @brief Retorna o vetor contendo os caminhos de todas as capturas de tela. */
     std::vector<std::string> getCapturas() const;
 
-    /**
-     * @brief Obtém o caminho do executável do jogo.
-     * @return O caminho do script ou binário.
-     */
-    std::string getExecutavel() const;
-
-    /**
-     * @brief Obtém todos os caminhos de imagem (capa seguida pelas capturas) para compatibilidade.
-     * @return Um vetor contendo a capa e todas as capturas.
+    /** 
+     * @brief Retorna o vetor de imagens. Mantido para compatibilidade.
+     * @note Geralmente retorna a lista de capturas de tela.
      */
     std::vector<std::string> getImagens() const;
 
-    // --- Setters ---
-    /**
-     * @brief Define o nome do jogo.
-     * @param nome O novo nome.
-     */
+    // --- Setters (Métodos de Modificação) ---
+
+    /** @brief Define ou altera o nome do jogo. */
     void setNome(const std::string& nome);
 
-    /**
-     * @brief Define a descrição do jogo.
-     * @param descricao A nova descrição.
-     */
+    /** @brief Define ou altera a descrição do jogo. */
     void setDescricao(const std::string& descricao);
 
-    /**
-     * @brief Define o código (ou categorias) do jogo.
-     * @param codigo O novo código.
-     */
+    /** @brief Define ou altera o código identificador. */
     void setCodigo(const std::string& codigo);
+    
+    /** @brief Define o caminho da imagem para a grade/lista principal. */
+    void setCapaTelaPrincipal(const std::string& caminho);
 
-    /**
-     * @brief Define o ID único do jogo.
-     * @param id O novo ID.
-     */
-    void setId(const std::string& id);
+    /** @brief Define o caminho da imagem de fundo/destaque. */
+    void setFundoDestaque(const std::string& caminho);
 
-    /**
-     * @brief Define o caminho da imagem de capa.
-     * @param capa O novo caminho da capa.
-     */
-    void setCapa(const std::string& capa);
-
-    /**
-     * @brief Define os caminhos das capturas de tela adicionais.
-     * @param capturas O novo vetor de caminhos de capturas.
-     */
+    /** @brief Define o caminho da imagem interna da janela. */
+    void setCapaJanelaJogo(const std::string& caminho);
+    
+    /** @brief Define a lista de caminhos para as capturas de tela. */
     void setCapturas(const std::vector<std::string>& capturas);
 
-    /**
-     * @brief Define o caminho do executável.
-     * @param executavel O novo caminho.
-     */
-    void setExecutavel(const std::string& executavel);
-
-    /**
-     * @brief Define todas as imagens. A primeira imagem se torna a capa e o resto as capturas.
-     * @param imagens O vetor contendo todos os caminhos de imagem.
+    /** 
+     * @brief Define a lista de imagens. Mantido para compatibilidade.
+     * @param imagens Vetor de strings com os caminhos.
      */
     void setImagens(const std::vector<std::string>& imagens);
-    
-    void setAno(int ano);
-    void setPlayers(int players);
-    void setGenero(const std::string& genero);
 
 private:
-    /**
-     * @brief Nome do jogo.
-     */
-    std::string nome;
-
-    int ano;
-    int players;
-    std::string genero;
-
-    /**
-     * @brief Descrição do jogo.
-     */
-    std::string descricao;
-
-    /**
-     * @brief Código de identificação ou categorias.
-     */
-    std::string codigo;
-
-    /**
-     * @brief Identificador único do jogo (slug).
-     */
-    std::string id;
-
-    /**
-     * @brief Caminho para a imagem principal (capa).
-     */
-    std::string capa;
-
-    /**
-     * @brief Vetor de caminhos para imagens secundárias (capturas de tela).
-     */
-    std::vector<std::string> capturas;
-
-    /**
-     * @brief Caminho para o executável (script .sh ou binário).
-     */
-    std::string executavel;
+    std::string nome;               /**< Nome do título. */
+    std::string descricao;          /**< Texto de descrição. */
+    std::string codigo;             /**< Identificador (ex: ID na Steam ou SKU). */
+    
+    std::string capaTelaPrincipal;  /**< Caminho: Imagem vertical/horizontal da grade. */
+    std::string fundoDestaque;     /**< Caminho: Imagem panorâmica de fundo. */
+    std::string capaJanelaJogo;    /**< Caminho: Banner interno. */
+    
+    std::vector<std::string> capturas; /**< Coleção de paths para screenshots. */
 };
 
 } // namespace MeuProjeto
