@@ -15,6 +15,7 @@
 #include <SDL2/SDL.h>
 #include <string>
 #include <vector>
+#include <memory>
 #include "JanelaJogo.hpp"
 
 /**
@@ -31,6 +32,16 @@ namespace MeuProjeto {
  * está na interface, qual jogo ou categoria está focado e controla a lógica
  * de janelas sobrepostas (popups de detalhes de jogos).
  */
+
+
+   /** 
+     * @brief Gerenciamento inteligente da janela de detalhes.
+     * O uso de unique_ptr garante que ao abrir uma nova janela ou fechar o app,
+     * a memória da janela anterior seja limpa automaticamente.
+     */
+    extern std::unique_ptr<JanelaJogo> janelaJogoAtual; 
+
+
 struct GerenciarScroll {
     // Estado Geral do Sistema
     

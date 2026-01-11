@@ -1,10 +1,10 @@
 /**
  * @file JanelaJogo.hpp
- * @brief Definição da classe JanelaJogo, que exibe os detalhes e opções de um título específico.
- * 
- * Este arquivo contém a interface para a visualização detalhada de um jogo,
- * apresentando sua descrição, galeria de imagens (capturas de tela) e
- * opções de interação como "Jogar" ou "Fechar".
+ * @brief Definição da classe JanelaJogo.
+ *
+ * Este arquivo contém a especificação da classe JanelaJogo, responsável por gerenciar
+ * e exibir a interface detalhada de um título selecionado na biblioteca. A classe
+ * engloba a exibição de metadados, galeria de capturas de tela e controles de execução.
  */
 
 #ifndef JANELA_JOGO_HPP
@@ -17,33 +17,30 @@
 #include <vector>
 #include "Botao.hpp"
 
-/**
- * @namespace MeuProjeto
- * @brief Namespace principal do projeto da interface de biblioteca de jogos.
- */
 namespace MeuProjeto {
 
 /**
  * @class JanelaJogo
- * @brief Gerencia a interface de detalhes de um jogo selecionado.
- * 
- * Esta classe é responsável por carregar e exibir as informações completas de um jogo.
- * Ela suporta renderização de múltiplas texturas (capas e capturas), navegação 
- * por botões interativos e um sistema de carrossel de imagens com animações.
+ * @brief Gerencia a interface de visualização detalhada de um jogo específico.
+ *
+ * A classe JanelaJogo é responsável pela composição visual da página de um jogo,
+ * incluindo a renderização de texturas de capa, descrições textuais, uma galeria 
+ * iterável de capturas de tela e botões de ação. Implementa lógica de navegação 
+ * via mouse e controle, além de suportar um layout responsivo adaptável.
  */
 class JanelaJogo {
 public:
     /**
      * @brief Construtor da classe JanelaJogo.
      * 
-     * Inicializa os elementos visuais, carrega as texturas das capturas de tela
-     * e configura as áreas de layout da janela.
+     * Inicializa a interface detalhada carregando texturas, configurando áreas de 
+     * recorte e preparando os componentes de interação.
      * 
-     * @param renderer O renderizador SDL utilizado para criar as texturas.
-     * @param nomeJogo Título do jogo a ser exibido.
-     * @param imagemPath Caminho para a imagem principal (capa interna).
-     * @param descricao Texto descritivo/sinopse do jogo.
-     * @param capturasPaths Vetor de strings com os caminhos para as screenshots do jogo.
+     * @param renderer Ponteiro para o renderizador SDL_Renderer.
+     * @param nomeJogo String contendo o título do jogo.
+     * @param imagemPath Caminho do sistema de arquivos para a imagem principal.
+     * @param descricao Texto contendo as informações detalhadas do jogo.
+     * @param capturasPaths Vetor de strings com os caminhos para as capturas de tela.
      */
     JanelaJogo(SDL_Renderer* renderer, const std::string& nomeJogo, const std::string& imagemPath,
                const std::string& descricao, const std::vector<std::string>& capturasPaths);
@@ -51,99 +48,137 @@ public:
     /**
      * @brief Destrutor da classe JanelaJogo.
      * 
-     * Libera as texturas carregadas para a imagem principal e para todas as capturas de tela.
+     * Realiza a liberação das texturas carregadas para o jogo e suas capturas, 
+     * garantindo a integridade da memória de vídeo.
      */
     ~JanelaJogo();
 
     /**
-     * @brief Renderiza todos os elementos da janela de detalhes na tela.
+     * @brief Renderiza todos os elementos da janela detalhada.
      * 
-     * Chama internamente as funções de desenho do fundo, topo, descrição e carrossel.
-     * 
-     * @param offsetX Deslocamento horizontal opcional.
-     * @param offsetY Deslocamento vertical opcional.
+     * @param offsetX Deslocamento horizontal para a renderização.
+     * @param offsetY Deslocamento vertical para a renderização.
      */
     void desenhar(int offsetX = 0, int offsetY = 0);
 
     /**
-     * @brief Processa eventos de entrada do mouse e teclado comuns.
+     * @brief Processa eventos de entrada (mouse e janela) para a interface.
      * 
-     * @param evento Referência ao evento SDL capturado.
-     * @param offsetX Deslocamento X da janela no momento do evento.
-     * @param offsetY Deslocamento Y da janela no momento do evento.
-     * @return true se o evento resultou em uma ação (ex: fechar a janela).
-     * @return false caso contrário.
+     * @param evento Referência para o SDL_Event capturado.
+     * @param offsetX Deslocamento horizontal do componente.
+     * @param offsetY Deslocamento vertical do componente.
+     * @return true se o evento resultou em uma interação consumida, false caso contrário.
      */
     bool tratarEvento(SDL_Event& evento, int offsetX, int offsetY);
-    
+
     /**
-     * @brief Aciona a lógica de execução do jogo (launcher).
+     * @brief Inicia o processo de execução do título selecionado.
      */
     void executarJogo();
 
     /**
-     * @brief Processa entradas específicas de controles (Gamepads/Joysticks).
+     * @brief Processa entradas específicas de dispositivos de controle (gamepads).
      * 
-     * Lida com a navegação entre os botões "Jogar" e "Fechar", além de trocar 
-     * as capturas de tela utilizando os botões de ombro (Shoulders).
+     * Trata a navegação entre capturas de tela e o foco nos botões de ação 
+     * utilizando os botões de ombro (shoulders) e direcionais.
      * 
-     * @param evento Referência ao evento SDL de controle.
-     * @return true se o comando de fechar foi acionado via controle.
+     * @param evento Referência para o SDL_Event.
+     * @return true se a entrada do controle foi processada.
      */
     bool tratarEventoControle(SDL_Event& evento);
 
 private:
-    SDL_Renderer* renderer;                 /**< Ponteiro para o renderizador SDL. */
-    SDL_Texture* imagemJogo;                /**< Textura da imagem de destaque do jogo. */
-    std::vector<SDL_Texture*> capturasTexturas; /**< Vetor de texturas das capturas de tela. */
-    std::string nomeJogo;                   /**< Título armazenado. */
-    std::string descricao;                  /**< Texto descritivo armazenado. */
+    SDL_Renderer* renderer; /**< Referência ao renderizador SDL. */
+    SDL_Texture* imagemJogo; /**< Textura da imagem de capa/principal do jogo. */
+    std::vector<SDL_Texture*> capturasTexturas; /**< Vetor de texturas das capturas de tela da galeria. */
+    std::string nomeJogo; /**< Nome do título para exibição no topo. */
+    std::string descricao; /**< Conteúdo descritivo do título. */
     
-    Botao botaoJogar;                       /**< Objeto do botão para iniciar o jogo. */
-    Botao botaoFechar;                      /**< Objeto do botão para sair da visualização. */
+    Botao botaoJogar; /**< Componente de botão para iniciar o jogo. */
+    Botao botaoFechar; /**< Componente de botão para encerrar a visualização detalhada. */
     
-    // Áreas de Layout (Geometria)
-    SDL_Rect areaJanela;                    /**< Retângulo total da janela de detalhes. */
-    SDL_Rect areaTopo;                      /**< Área superior (geralmente para o título). */
-    SDL_Rect areaFundo;                     /**< Área de fundo geral. */
-    SDL_Rect areaImagem;                    /**< Retângulo onde a imagem principal é desenhada. */
-    SDL_Rect areaDescricao;                 /**< Retângulo destinado ao bloco de texto. */
-    SDL_Rect areaFundoCapturas;             /**< Área que abriga o carrossel de screenshots. */
+    SDL_Rect areaJanela; /**< Retângulo definindo os limites totais da janela. */
+    SDL_Rect areaTopo; /**< Retângulo definindo a região superior (título). */
+    SDL_Rect areaFundo; /**< Retângulo definindo o plano de fundo principal. */
+    SDL_Rect areaImagem; /**< Retângulo definindo o posicionamento da imagem de capa. */
+    SDL_Rect areaDescricao; /**< Retângulo definindo a zona de renderização da descrição. */
+    SDL_Rect areaFundoCapturas; /**< Retângulo definindo o contêiner da galeria de capturas. */
     
-    Botao setaEsquerda;                     /**< Botão visual para navegar para a captura anterior. */
-    Botao setaDireita;                      /**< Botão visual para navegar para a próxima captura. */
+    Botao setaEsquerda; /**< Botão de navegação para captura de tela anterior. */
+    Botao setaDireita; /**< Botão de navegação para próxima captura de tela. */
     
-    int capturaIndex;                       /**< Índice da captura de tela atualmente em foco no carrossel. */
+    int capturaIndex; /**< Índice da captura de tela atualmente visível na galeria. */
     
-    // Controle de foco e animação
-    bool botaoJogarFocado;                  /**< Indica se o foco (para controle) está no botão de play. */
-    Uint32 ultimoTempoLB;                   /**< Timestamp do último input no botão L1/LB (Debounce). */
-    Uint32 ultimoTempoRB;                   /**< Timestamp do último input no botão R1/RB (Debounce). */
+    bool botaoJogarFocado; /**< Indica se o botão de execução possui o foco de navegação. */
+    Uint32 ultimoTempoLB; /**< Marca temporal para controle de debounce do botão Left Shoulder. */
+    Uint32 ultimoTempoRB; /**< Marca temporal para controle de debounce do botão Right Shoulder. */
     
-    bool animacaoSetaEsquerda;              /**< Flag para efeito visual de clique na seta esquerda. */
-    bool animacaoSetaDireita;               /**< Flag para efeito visual de clique na seta direita. */
-    Uint32 tempoAnimacaoEsquerda;           /**< Temporizador para duração do efeito da seta esquerda. */
-    Uint32 tempoAnimacaoDireita;            /**< Temporizador para duração do efeito da seta direita. */
+    bool animacaoSetaEsquerda; /**< Sinalizador de ativação do efeito visual na seta esquerda. */
+    bool animacaoSetaDireita; /**< Sinalizador de ativação do efeito visual na seta direita. */
+    Uint32 tempoAnimacaoEsquerda; /**< Cronômetro interno para a duração da animação esquerda. */
+    Uint32 tempoAnimacaoDireita; /**< Cronômetro interno para a duração da animação direita. */
     
-    // Constantes de Layout e Comportamento
-    static constexpr int CAPTURA_LARGURA = 480;      /**< Largura padrão de cada screenshot. */
-    static constexpr int CAPTURA_ALTURA = 270;       /**< Altura padrão de cada screenshot. */
-    static constexpr int CAPTURA_POS_Y = 790;        /**< Posição vertical das screenshots na janela. */
-    static constexpr int CAPTURA_ESPACAMENTO = 520;  /**< Distância horizontal entre screenshots. */
-    static constexpr Uint32 DEBOUNCE_SHOULDER = 300; /**< Tempo de espera em ms entre trocas de imagem via controle. */
-    static constexpr Uint32 DURACAO_ANIMACAO = 200;  /**< Duração em ms do efeito visual de clique nas setas. */
+    int capturaLargura; /**< Dimensão horizontal calculada para as capturas de tela. */
+    int capturaAltura; /**< Dimensão vertical calculada para as capturas de tela. */
+    int capturaPosY; /**< Posição vertical calculada para o alinhamento da galeria. */
+    int capturaEspacamento; /**< Distância entre elementos da galeria de capturas. */
+    int margemSetas; /**< Espaçamento lateral para definição de recorte dinâmico das setas. */
 
-    // Métodos privados de auxílio à renderização
+    /**
+     * @brief Intervalo de tempo (ms) para evitar múltiplas entradas consecutivas nos gatilhos.
+     */
+    static constexpr Uint32 DEBOUNCE_SHOULDER = 300;
+
+    /**
+     * @brief Tempo total de duração (ms) para as animações de feedback visual.
+     */
+    static constexpr Uint32 DURACAO_ANIMACAO = 200;
+
+    /**
+     * @brief Renderiza a camada de fundo da interface detalhada.
+     */
     void desenharFundo();
+
+    /**
+     * @brief Renderiza a seção superior, incluindo o título do jogo.
+     */
     void desenharTopo();
+
+    /**
+     * @brief Renderiza a área de base que compõe o plano de fundo dos detalhes.
+     */
     void desenharAreaFundo();
+
+    /**
+     * @brief Renderiza a imagem principal/capa do jogo com os devidos deslocamentos.
+     * @param offsetX Deslocamento horizontal.
+     * @param offsetY Deslocamento vertical.
+     */
     void desenharImagem(int offsetX, int offsetY);
+
+    /**
+     * @brief Processa e desenha o texto de descrição do jogo.
+     * @param offsetX Deslocamento horizontal.
+     * @param offsetY Deslocamento vertical.
+     */
     void desenharDescricao(int offsetX, int offsetY);
+
+    /**
+     * @brief Renderiza a galeria de capturas de tela e gerencia o recorte visual.
+     * @param offsetX Deslocamento horizontal.
+     * @param offsetY Deslocamento vertical.
+     */
     void desenharCapturas(int offsetX, int offsetY);
+
+    /**
+     * @brief Renderiza os botões interativos (Jogar, Fechar e Setas).
+     * @param offsetX Deslocamento horizontal.
+     * @param offsetY Deslocamento vertical.
+     */
     void desenharBotoes(int offsetX, int offsetY);
 
     /**
-     * @brief Atualiza o estado das animações de feedback das setas baseado no tempo.
+     * @brief Atualiza o estado lógico das animações baseando-se no tempo decorrido.
      */
     void atualizarAnimacoes();
 };

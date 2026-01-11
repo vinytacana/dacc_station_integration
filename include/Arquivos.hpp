@@ -13,7 +13,7 @@
 
 #include <string>
 #include <vector>
-#include "GerenciadorJogos.hpp" 
+#include "GerenciadorJogos.hpp"
 
 /**
  * @namespace MeuProjeto

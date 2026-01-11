@@ -108,6 +108,12 @@ void desenharTexto(SDL_Renderer* renderer, const std::string& texto, int x, int 
 void desenharTexto(SDL_Renderer* renderer, const std::string& texto, int x, int y, int tamanhoFonte, TipoFonte tipoFonte = TipoFonte::NORMAL);
 
 /**
+ * @brief Limpa o cache global de texturas de texto.
+ * Deve ser chamado ao trocar de tela ou limpar buscas para liberar VRAM.
+ */
+void limparCacheTexto(); 
+
+/**
  * @brief Referência externa para um caminho de fonte padrão.
  * 
  * Pode ser usada como fallback caso as configurações de ConfigFontes não sejam preenchidas.

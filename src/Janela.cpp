@@ -1,15 +1,18 @@
 /**
  * @file Janela.cpp
- * @brief Implementação da classe Janela para exibição de Popups informativos.
- * 
- * Este arquivo contém a lógica de renderização de janelas flutuantes que surgem
- * ao interagir com elementos da biblioteca. Inclui sistemas de quebra de linha 
- * automática para descrições e cálculos de posicionamento relativo.
+ * @brief Implementação Responsiva da Janela de Popup.
+ *
+ * Este arquivo contém a lógica operacional para a exibição de janelas informativas 
+ * suspensas. A implementação foca no cálculo dinâmico de coordenadas para evitar 
+ * que elementos fiquem fora da área visível da tela (clamping), além de gerenciar 
+ * a renderização de componentes visuais e textuais adaptáveis.
  */
 
 #include "Janela.hpp"
 #include "GerenciadorFontes.hpp"
 #include "GerenciadorTemas.hpp"
+#include "ConfigLayout.hpp"
+#include "Utils.hpp" 
 #include <iostream>
 #include <sstream>
 
@@ -17,90 +20,101 @@ using namespace MeuProjeto;
 using namespace std;
 
 /**
- * @brief Construtor da Janela.
- * @param renderer Ponteiro para o renderizador SDL principal.
+ * @brief Construtor da classe Janela.
+ * Inicializa os parâmetros de layout baseando-se em um design de referência de 1920x1080, 
+ * utilizando a classe ConfigLayout para escalar as dimensões para a resolução atual. 
+ * Define áreas de respiro (padding), altura de imagem e espaçamentos entre blocos textuais.
+ * @param renderer Ponteiro para o renderizador SDL_Renderer.
  */
 Janela::Janela(SDL_Renderer* renderer)
     : renderer(renderer), isPopupAberto(false), popupTextura(nullptr) {
     if (!renderer) {
         cerr << "Renderizador nulo na Janela" << endl;
     }
+
+    // Inicialização de Layout Responsivo 
+    larguraPadrao = ConfigLayout::X(400);
+    alturaPadrao = ConfigLayout::Y(450);
+    paddingExterno = ConfigLayout::X(10); 
+    
+    paddingInterno = ConfigLayout::X(10);
+    alturaImagem = ConfigLayout::Y(215);
+    espacoTitulo = ConfigLayout::Y(20);
+    espacoDesc = ConfigLayout::Y(10);
 }
 
 /**
- * @brief Destrutor da Janela.
+ * @brief Destrutor da classe Janela.
  */
 Janela::~Janela() {
 }
 
 /**
- * @brief Configura os dados e calcula a posição ideal para o popup.
- * 
- * O método utiliza uma lógica de posicionamento inteligente:
- * 1. Tenta posicionar o popup centralizado acima do elemento pai (x, y, w, h).
- * 2. Se o popup for sair pelo topo da tela (y < 0), ele é invertido para baixo do elemento.
- * 3. Aplica restrições laterais (clamping) para garantir que o popup não saia pelas bordas horizontais.
- * 
- * @param nome Nome do jogo.
- * @param textura Textura da imagem de capa.
- * @param desc Texto de descrição.
- * @param x Coordenada X do elemento pai.
- * @param y Coordenada Y do elemento pai.
- * @param w Largura do elemento pai.
- * @param h Altura do elemento pai.
+ * @brief Ativa o popup e calcula sua posição ótima na tela.
+ * Implementa um algoritmo de posicionamento inteligente que:
+ * 1. Centraliza horizontalmente o popup em relação ao objeto de origem.
+ * 2. Tenta posicionar o popup acima do objeto.
+ * 3. Realiza a inversão vertical (flip) caso o popup ultrapasse o limite superior da tela.
+ * 4. Aplica "clamping" lateral para garantir que o componente permaneça dentro dos 
+ * limites horizontais da janela do sistema.
+ * @param nome String contendo o título do popup.
+ * @param textura Ponteiro para a textura da imagem de capa.
+ * @param desc String contendo a descrição do conteúdo.
+ * @param x Coordenada X do objeto que disparou o popup.
+ * @param y Coordenada Y do objeto que disparou o popup.
+ * @param w Largura do objeto que disparou o popup.
+ * @param h Altura do objeto que disparou o popup.
  */
 void Janela::abrirPopup(const string& nome, SDL_Texture* textura, const string& desc, int x, int y, int w, int h) {
     popupNome = nome;
     popupTextura = textura; 
     popupDesc = desc;
 
-    const int POPUP_LARGURA = 400;
-    const int POPUP_ALTURA = 450;
+    // Cálculo da centralização horizontal relativa ao pai
+    int popupX = x + (w / 2) - (larguraPadrao / 2); 
     
-    // Centraliza horizontalmente em relação ao objeto pai
-    int popupX = x + (w / 2) - (POPUP_LARGURA / 2); 
-    // Posiciona acima do objeto com 10px de respiro
-    int popupY = y - POPUP_ALTURA - 10; 
+    // Tentativa de posicionamento superior com margem de segurança
+    int popupY = y - alturaPadrao - paddingExterno; 
 
-    // Ajuste de segurança: Se sair pelo topo, joga para baixo do objeto
+    // Lógica de inversão vertical por colisão com o limite superior (y < 0)
     if (popupY < 0) {
-        popupY = y + h + 10; 
+        popupY = y + h + paddingExterno; 
     }
 
-    // Ajuste de segurança: Clamping lateral (limites da tela 1920px)
-    if (popupX < 10) popupX = 10;
-    if (popupX + POPUP_LARGURA > 1910) popupX = 1910 - POPUP_LARGURA;
+    // Algoritmo de clamping para limites laterais da tela
+    if (popupX < paddingExterno) popupX = paddingExterno;
+    
+    int limiteDireita = ConfigLayout::larguraTela - larguraPadrao - paddingExterno;
+    if (popupX > limiteDireita) popupX = limiteDireita;
 
-    popupArea = {popupX, popupY, POPUP_LARGURA, POPUP_ALTURA};
+    popupArea = {popupX, popupY, larguraPadrao, alturaPadrao};
     isPopupAberto = true;
 }
 
 /**
- * @brief Fecha o popup e interrompe sua renderização.
+ * @brief Desativa o estado de exibição do popup.
  */
 void Janela::fecharPopup() {
     isPopupAberto = false;
 }
 
 /**
- * @brief Renderiza o popup e todo o seu conteúdo interno.
- * 
- * A renderização segue a ordem de camadas:
- * 1. Fundo semitransparente (Retângulo preenchido).
- * 2. Imagem do jogo (Texture).
- * 3. Título centralizado (Fonte Negrito).
- * 4. Descrição com quebra automática (Fonte Normal).
- * 
- * @param offsetX Deslocamento horizontal global (scroll).
- * @param offsetY Deslocamento vertical global (scroll).
+ * @brief Renderiza a interface do popup e processa a diagramação de texto.
+ * O método realiza as seguintes operações técnicas:
+ * 1. Renderiza o fundo com transparência utilizando SDL_BLENDMODE_BLEND.
+ * 2. Aplica modulação de alfa na textura da imagem para consistência visual.
+ * 3. Calcula a centralização do título com base na largura real do texto renderizado.
+ * 4. Implementa um algoritmo de "Word Wrap" (quebra de linha) para a descrição, 
+ * utilizando estimativas de largura de glifos baseadas no tamanho da fonte escalada.
+ * 5. Garante que o texto não ultrapasse o limite vertical inferior do popup (clipping lógico).
+ * @param offsetX Deslocamento horizontal para ajuste de renderização.
+ * @param offsetY Deslocamento vertical para ajuste de renderização.
  */
 void Janela::desenharPopup(int offsetX, int offsetY) {
     if (!isPopupAberto || !renderer) return;
 
-    // Obtém a instância do tema para consistência visual
     auto& tema = GerenciadorTemas::getInstance(); 
 
-    // Aplica o scroll à área original do popup
     SDL_Rect adjustedArea = {
         popupArea.x + offsetX,
         popupArea.y + offsetY,
@@ -108,25 +122,19 @@ void Janela::desenharPopup(int offsetX, int offsetY) {
         popupArea.h
     };
 
-    // Habilita transparência para o fundo do popup
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    // Desenha o container principal
     SDL_Color corBg = tema.getCorRetangulos();
-    SDL_SetRenderDrawColor(renderer, corBg.r, corBg.g, corBg.b, 220); // Alpha 220 para leve transparência
+    SDL_SetRenderDrawColor(renderer, corBg.r, corBg.g, corBg.b, 220);
     SDL_RenderFillRect(renderer, &adjustedArea);
 
-    /**
-     * @section Padding_Imagem
-     * Padding é o espaçamento interno entre o conteúdo (imagem ou texto) e a borda do container (o popup)
-     * O padding aqui é de 10 pixels. 
-     */
+    // Renderização da imagem principal com preservação de canal alfa
     if (popupTextura) {
         SDL_Rect texRect = {
-            adjustedArea.x + 10, 
-            adjustedArea.y + 10, 
-            adjustedArea.w - 20, 
-            215 
+            adjustedArea.x + paddingInterno, 
+            adjustedArea.y + paddingInterno, 
+            adjustedArea.w - (paddingInterno * 2), 
+            alturaImagem 
         };
 
         SDL_SetTextureBlendMode(popupTextura, SDL_BLENDMODE_BLEND);
@@ -137,9 +145,9 @@ void Janela::desenharPopup(int offsetX, int offsetY) {
 
     static GerenciadorFontes gerenciadorFontes;
     
-    // Início da área de texto abaixo da imagem (215px da imagem + 20px de respiro)
-    int yPos = adjustedArea.y + 215 + 20; 
-    int fontSizeTitulo = 30;
+    // Cálculo e renderização do Título
+    int yPos = adjustedArea.y + alturaImagem + espacoTitulo; 
+    int fontSizeTitulo = ConfigLayout::F(30);
     
     const std::string& fontePath = ConfigFontes::obterCaminho(TipoFonte::NEGRITO);
     TTF_Font* font = gerenciadorFontes.carregar(fontePath, fontSizeTitulo);
@@ -147,69 +155,67 @@ void Janela::desenharPopup(int offsetX, int offsetY) {
     int textWidth = 0;
     int textHeight = 0;
     
-    if (font) {
-        TTF_SizeUTF8(font, popupNome.c_str(), &textWidth, &textHeight);
-    } else {
-        textWidth = popupNome.length() * (fontSizeTitulo / 2);
+    // [NOVO] Lógica de Truncamento do Título (Limite 20 caracteres)
+    std::string tituloExibicao = popupNome;
+    if (tituloExibicao.length() > 20) {
+        tituloExibicao = tituloExibicao.substr(0, 20) + "...";
     }
     
-    /**
-     * @section Padding_Titulo
-     * Cálculo para centralizar o texto garantindo um 'paddingLateral' mínimo de 10px.
-     * Isso impede que títulos muito longos toquem na borda lateral do popup.
-     */
-    int xPosTitulo = adjustedArea.x + (adjustedArea.w - textWidth) / 2;
-    int paddingLateral = 10;
-    if (xPosTitulo < adjustedArea.x + paddingLateral) {
-        xPosTitulo = adjustedArea.x + paddingLateral;
+    // Utiliza a string truncada para medir o tamanho
+    if (font) {
+        TTF_SizeUTF8(font, tituloExibicao.c_str(), &textWidth, &textHeight);
+    } else {
+        textWidth = tituloExibicao.length() * (fontSizeTitulo / 2);
     }
-    if (xPosTitulo + textWidth > adjustedArea.x + adjustedArea.w - paddingLateral) {
-        xPosTitulo = adjustedArea.x + adjustedArea.w - textWidth - paddingLateral;
+    
+    // Centralização com tratamento de bordas (safety padding)
+    int xPosTitulo = adjustedArea.x + (adjustedArea.w - textWidth) / 2;
+    
+    if (xPosTitulo < adjustedArea.x + paddingInterno) {
+        xPosTitulo = adjustedArea.x + paddingInterno;
+    }
+    if (xPosTitulo + textWidth > adjustedArea.x + adjustedArea.w - paddingInterno) {
+        xPosTitulo = adjustedArea.x + adjustedArea.w - textWidth - paddingInterno;
     }
 
     SDL_Color corTitulo = tema.getCorTextoNegrito();
-    desenharTexto(renderer, popupNome, xPosTitulo, yPos, corTitulo, fontSizeTitulo, MeuProjeto::TipoFonte::NEGRITO);
+    // Renderiza a versão truncada
+    MeuProjeto::desenharTexto(renderer, tituloExibicao, xPosTitulo, yPos, corTitulo, fontSizeTitulo, MeuProjeto::TipoFonte::NEGRITO);
 
-    // Configurações para a descrição (corpo do texto)
-    yPos += fontSizeTitulo + 10;
-    int fontSizeDesc = 18;
-    int linhaAltura = 22;
+    // Lógica de Word Wrap Responsivo para a Descrição
+    yPos += fontSizeTitulo + espacoDesc;
+    int fontSizeDesc = ConfigLayout::F(18);
+    int linhaAltura = ConfigLayout::Y(22);
 
-    /**
-     * @section Padding_Descricao
-     * Definimos um padding de 15px para o texto da descrição.
-     * A largura máxima (maxLargura) é a largura total do popup menos o padding de ambos os lados.
-     */
-    int paddingDesc = 15;
+    int paddingDesc = ConfigLayout::X(15);
     int xPosDesc = adjustedArea.x + paddingDesc;
     int maxLargura = adjustedArea.w - (paddingDesc * 2);
 
-    // Algoritmo simples de Word Wrap (Quebra de Linha)
     stringstream ss(popupDesc);
     string linhaAtual, palavra;
     
     SDL_Color corDesc = tema.getCorTextoNormal();
 
+    // Processamento de fluxo de texto palavra por palavra
     while (ss >> palavra) {
-        // Estima a largura da linha atual (baseado na média de pixels por caractere)
-        int larguraLinhaAtual = linhaAtual.length() * (fontSizeDesc / 2);
+        // Cálculo de largura estimada para detecção de quebra de linha
+        int larguraLinhaAtual = linhaAtual.length() * (fontSizeDesc / 2); 
         int larguraPalavra = palavra.length() * (fontSizeDesc / 2);
 
-        // Se a palavra cabe na linha, adiciona. Senão, desenha a linha e pula para a próxima.
         if (larguraLinhaAtual + larguraPalavra < maxLargura) {
             linhaAtual += palavra + " ";
         } else {
-            desenharTexto(renderer, linhaAtual, xPosDesc, yPos, corDesc, fontSizeDesc, MeuProjeto::TipoFonte::NORMAL);
+            MeuProjeto::desenharTexto(renderer, linhaAtual, xPosDesc, yPos, corDesc, fontSizeDesc, MeuProjeto::TipoFonte::NORMAL);
             yPos += linhaAltura;
             linhaAtual = palavra + " ";
         }
         
-        // Proteção para não desenhar texto fora da área vertical do popup
+        // Proteção contra overflow vertical do popup
         if (yPos > adjustedArea.y + adjustedArea.h - linhaAltura) break;
     }
 
-    // Desenha a última linha restante
+    // Renderização do remanescente do buffer de texto
     if (yPos <= adjustedArea.y + adjustedArea.h - linhaAltura && !linhaAtual.empty()) {
-        desenharTexto(renderer, linhaAtual, xPosDesc, yPos, corDesc, fontSizeDesc, MeuProjeto::TipoFonte::NORMAL);
+        MeuProjeto::desenharTexto(renderer, linhaAtual, xPosDesc, yPos, corDesc, fontSizeDesc, MeuProjeto::TipoFonte::NORMAL);
     }
 }

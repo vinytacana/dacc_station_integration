@@ -1,12 +1,20 @@
-//Compilar: g++ implementacao/*.cpp mains/main.cpp -I cabecalhos -o DACCStation -lSDL2 -lSDL2_image -lSDL2_gfx -lSDL2_ttf
+//Compilar:  g++ main/main.cpp \
+    implementacao/Principais/*.cpp \
+    implementacao/Arquivos/*.cpp \
+    implementacao/Gerenciadores/*.cpp \
+    implementacao/GerenciadoresJogos/*.cpp \
+    implementacao/Interface/Componentes/*.cpp \
+    implementacao/Interface/Janelas/*.cpp \
+    -I cabecalhos \
+    -o DACCStation \
+    -lSDL2 -lSDL2_image -lSDL2_gfx -lSDL2_ttf
 //Executar: ./DACCStation
 
 
 /**
  * @file main.cpp
  * @brief Ponto de entrada principal da aplicação de biblioteca de jogos (Launcher).
- * 
- * Este arquivo coordena a integração de todos os sistemas: inicialização da SDL2,
+ * * Este arquivo coordena a integração de todos os sistemas: inicialização da SDL2,
  * carregamento da base de dados de jogos, gerenciamento de interface, processamento
  * de inputs (teclado, mouse e gamepad) e o loop de renderização principal.
  */
@@ -25,36 +33,37 @@
 #include "GerenciadorImagens.hpp"
 #include "Arquivos.hpp"
 #include "GerenciadorTemas.hpp"
-#include "LogManager.hpp"
-#include "NetworkClient.hpp"
+#include "ConfigLayout.hpp"
 
 using namespace std;
 using namespace MeuProjeto;
 
-/** 
- * @brief Instância global do gerenciador de imagens para cache de texturas. 
+/** * @brief Instância global do gerenciador de imagens para cache de texturas. 
  */
 MeuProjeto::GerenciadorImagens gerImg;
 
-/** 
- * @brief Instância global que armazena a base de dados de todos os jogos carregados. 
+/** * @brief Instância global que armazena a base de dados de todos os jogos carregados. 
  */
 MeuProjeto::GerenciadorJogos gerenciadorJogos;
 
+/**
+ * @brief Definição da janela de jogo atual (Resolvendo o erro de múltiplas definições).
+ */
+std::unique_ptr<MeuProjeto::JanelaJogo> MeuProjeto::janelaJogoAtual = nullptr; 
+
 /** @brief Largura padrão da janela principal da aplicação. */
-const int LARGURA_JANELA = 1920;
+const int LARGURA_JANELA =  ConfigLayout::LARGURA_NATIVA;
 
 /** @brief Altura padrão da janela principal da aplicação. */
-const int ALTURA_JANELA = 1280;
+const int ALTURA_JANELA = ConfigLayout::ALTURA_NATIVA;
 
 /**
  * @brief Carrega os dados dos jogos a partir de arquivos de texto no disco.
- * 
- * Percorre uma lista pré-definida de caminhos de arquivos e utiliza a classe
+ * * Percorre uma lista pré-definida de caminhos de arquivos e utiliza a classe
  * Arquivos para desserializar os dados e popular o gerenciadorJogos.
  */
 void carregarJogosDoDisco() {
-    LOG_INFO("UI: Carregando biblioteca de jogos...");
+    cout << "Carregando biblioteca de jogos..." << endl;
     vector<string> arquivos = {
         "assets/data/jogo1.txt", "assets/data/jogo2.txt", "assets/data/jogo3.txt",
         "assets/data/jogo4.txt", "assets/data/jogo5.txt"
@@ -62,28 +71,16 @@ void carregarJogosDoDisco() {
     for (const auto& arquivo : arquivos) {
         Arquivos::carregarJogos(arquivo, gerenciadorJogos);
     }
-    LOG_INFO("UI: Total de jogos carregados: " + to_string(gerenciadorJogos.listarJogos().size()));
+    cout << "Total de jogos carregados: " << gerenciadorJogos.listarJogos().size() << endl;
 }
 
 /**
  * @brief Função principal (Entry Point).
- * 
- * @param argc Quantidade de argumentos de linha de comando.
+ * * @param argc Quantidade de argumentos de linha de comando.
  * @param argv Vetor de argumentos de linha de comando.
  * @return int Status de saída do programa (0 para sucesso, 1 para erro).
  */
 int main(int argc, char* argv[]) {
-    // Inicializa Logging
-    LogManager::getInstance().initialize("UI", "/tmp/dacc-station.sock");
-    LOG_INFO("UI: Inicializando DACC Station UI...");
-
-    // Tenta conectar ao Process Manager
-    if (NetworkClient::getInstance().connectToManager()) {
-        LOG_INFO("UI: Conexão com PM estabelecida.");
-    } else {
-        LOG_WARNING("UI: Não foi possível conectar ao PM. A UI funcionará offline.");
-    }
-
     // Inicializa semente para funções aleatórias
     srand(static_cast<unsigned int>(time(NULL)));
 
@@ -92,13 +89,13 @@ int main(int argc, char* argv[]) {
 
     // 1. Inicialização do Hardware e SDL
     if (!GerenciarSDL::inicializar(janela, renderer, LARGURA_JANELA, ALTURA_JANELA)) {
-        LOG_ERROR("UI: Falha crítica no SDL.");
         return 1;
     }
 
     // Verifica a presença de periféricos (Controles)
     if (!GerenciarSDL::verificarControle(janela, renderer)) {
-        LOG_WARNING("UI: Nenhum controle detectado. Modo Mouse/Teclado.");
+        cout << "[AVISO] Nenhum controle detectado." << endl;
+        cout << "[SISTEMA] Iniciando em modo Mouse/Teclado..." << endl;
     }
 
     // 2. Carregamento de Dados
@@ -107,7 +104,13 @@ int main(int argc, char* argv[]) {
     // 3. Inicialização dos Módulos de Interface e Input
     GerenciarScroll estado;           /**< Estado de navegação e scroll. */
     GerenciarInterface interface;     /**< Orquestrador visual. */
-    interface.inicializar(renderer);
+    
+    // --- VERIFICAÇÃO ADICIONADA AQUI ---
+    if (!interface.inicializar(renderer)) {
+        cerr << "Erro Fatal: Falha ao carregar imagens da interface. Encerrando sistema." << endl;
+        GerenciarSDL::limpar(janela, renderer);
+        return 1;
+    }
     
     GerenciarInputs inputs;           /**< Processador de periféricos. */
     inputs.inicializarControle();
@@ -126,14 +129,11 @@ int main(int argc, char* argv[]) {
     const Uint32 CHANGE_INTERVAL = 60000; /**< Intervalo de 60 segundos para trocar o fundo. */
 
     SDL_Event evento;
-    LOG_INFO("UI: SISTEMA INICIADO! Entrando no loop principal.");
+    cout << "SISTEMA INICIADO!" << endl;
 
     // 4. Loop Principal (Game Loop)
     while (estado.rodando) {
         
-        // Verifica mensagens do Backend (Ex: Jogo fechou)
-        NetworkClient::getInstance().checkEvents();
-
         // Gerenciamento automático da janela de configuração
         if (estado.configAberta && !janelaConfig.estaAberta()) janelaConfig.abrir();
         else if (!estado.configAberta && janelaConfig.estaAberta()) janelaConfig.fechar();
@@ -163,7 +163,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (fecharJanela) {
-                    delete estado.janelaJogoAtual;
+                    MeuProjeto::janelaJogoAtual.reset();
                     estado.janelaJogoAtual = nullptr;
                 }
                 continue; // Bloqueia inputs da interface principal enquanto a janela do jogo está aberta
@@ -214,7 +214,7 @@ int main(int argc, char* argv[]) {
     // 5. Finalização e Limpeza de Recursos
     inputs.fecharControle();
     janelaConfig.fechar();
-    if (estado.janelaJogoAtual) delete estado.janelaJogoAtual;
+    if (estado.janelaJogoAtual) MeuProjeto::janelaJogoAtual.reset();;
     GerenciarSDL::limpar(janela, renderer);
     
     return 0;

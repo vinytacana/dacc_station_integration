@@ -1,9 +1,10 @@
 /**
  * @file BotaoPesquisa.hpp
- * @brief Definição da classe BotaoPesquisa, uma barra de busca interativa com resultados dinâmicos.
- * 
- * Este arquivo define um componente de UI especializado que funciona como um campo de texto
- * para busca de jogos, exibindo uma lista de resultados (pop-up) conforme o usuário digita.
+ * @brief Definição da classe BotaoPesquisa.
+ *
+ * Este arquivo contém a especificação da classe BotaoPesquisa, que integra
+ * funcionalidades de entrada de texto e exibição dinâmica de resultados de busca
+ * para a interface da biblioteca de jogos, utilizando SDL2.
  */
 
 #ifndef BOTAOPESQUISA_HPP
@@ -13,186 +14,207 @@
 
 #include "Botao.hpp"
 #include "Utils.hpp"
+#include "Jogo.hpp"
 #include <SDL2/SDL.h>
 #include <string>
 #include <vector>
-#include "Jogo.hpp"
 
-/**
- * @namespace MeuProjeto
- * @brief Namespace principal do projeto da interface de biblioteca de jogos.
- */
 namespace MeuProjeto {
 
 /**
  * @class BotaoPesquisa
- * @brief Especialização da classe Botao para busca e filtragem de jogos.
- * 
- * A classe BotaoPesquisa gerencia o estado de digitação, a consulta ao banco de dados 
- * (GerenciadorJogos) e a exibição de uma lista de sugestões. Ela suporta navegação
- * por mouse (hover e clique nos resultados) e por controle (navegação direcional 
- * na lista de resultados).
+ * @brief Componente de interface para pesquisa de jogos com suporte a layout responsivo.
+ *
+ * A classe BotaoPesquisa herda de Botao e implementa uma caixa de busca interativa.
+ * Além da captura de texto, ela gerencia uma lista de resultados (objetos Jogo),
+ * lida com estados de foco, interação via teclado e renderização de uma interface
+ * de sugestões suspensa (dropdown).
  */
 class BotaoPesquisa : public Botao {
 public:
     /**
-     * @brief Construtor da barra de pesquisa.
+     * @brief Construtor da classe BotaoPesquisa.
      * 
-     * @param renderer Renderizador SDL para criação de texturas e desenho.
-     * @param x Posição X inicial na tela.
-     * @param y Posição Y inicial na tela.
-     * @param largura Largura do campo de busca.
-     * @param altura Altura do campo de busca.
-     * @param texto Texto inicial opcional (geralmente vazio).
+     * @param renderer Ponteiro para o renderizador SDL_Renderer utilizado para desenhar o componente.
+     * @param x Coordenada horizontal da posição inicial.
+     * @param y Coordenada vertical da posição inicial.
+     * @param largura Dimensão horizontal inicial do componente.
+     * @param altura Dimensão vertical inicial do componente.
+     * @param texto String inicial opcional a ser exibida na caixa de pesquisa.
      */
     BotaoPesquisa(SDL_Renderer* renderer, int x, int y, int largura, int altura, const std::string& texto = "");
-    
+
     /**
      * @brief Destrutor da classe BotaoPesquisa.
+     * 
+     * Realiza a liberação de recursos alocados internamente pela instância.
      */
     ~BotaoPesquisa();
 
     /**
-     * @brief Trata eventos de mouse e teclado para a barra de pesquisa.
+     * @brief Processa eventos de entrada do SDL para a caixa de pesquisa.
      * 
-     * Gerencia o foco do campo de texto, a captura de caracteres digitados e
-     * a seleção de itens na lista de resultados.
+     * Trata interações como cliques do mouse, pressionamento de teclas para entrada de texto
+     * e navegação pelos resultados.
      * 
-     * @param evento Referência ao evento SDL.
-     * @param offsetX Deslocamento horizontal da tela.
-     * @param offsetY Deslocamento vertical da tela.
-     * @return true se o evento foi consumido pelo componente.
+     * @param evento Referência para a estrutura SDL_Event contendo o evento capturado.
+     * @param offsetX Deslocamento horizontal aplicado à posição do componente.
+     * @param offsetY Deslocamento vertical aplicado à posição do componente.
+     * @return true se o evento foi consumido pelo componente, false caso contrário.
      */
     bool tratarEvento(SDL_Event& evento, int offsetX, int offsetY) override;
 
     /**
-     * @brief Renderiza a barra de pesquisa e sua lista de resultados suspensa.
+     * @brief Renderiza o componente na tela.
      * 
-     * @param renderer Renderizador SDL.
-     * @param offsetX Deslocamento X para desenho relativo.
-     * @param offsetY Deslocamento Y para desenho relativo.
+     * Desenha a caixa de entrada de texto e, se houver resultados ativos, a lista
+     * de sugestões suspensa.
+     * 
+     * @param renderer Ponteiro para o renderizador SDL_Renderer.
+     * @param offsetX Deslocamento horizontal para renderização.
+     * @param offsetY Deslocamento vertical para renderização.
      */
     void desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) override;
 
-    // Manipulação de Texto
-
     /**
-     * @brief Adiciona um caractere ou string ao campo de busca atual.
-     * @param txt Texto a ser concatenado.
+     * @brief Adiciona caracteres ao texto de entrada atual.
+     * 
+     * @param txt String contendo os caracteres a serem concatenados ao texto de pesquisa.
      */
     void adicionarTexto(const std::string& txt);
 
     /**
-     * @brief Remove o último caractere do campo de busca (Backspace).
+     * @brief Remove o último caractere do texto de entrada atual (Backspace).
      */
     void apagarTexto();
 
     /**
-     * @brief Limpa completamente o campo de busca.
+     * @brief Limpa integralmente o conteúdo do texto de entrada.
      */
     void limparTexto();
 
-    // Lógica de Mouse
-
     /**
-     * @brief Recupera o jogo que foi selecionado via clique de mouse na lista.
-     * @return Jogo* Ponteiro para o objeto Jogo selecionado ou nullptr.
+     * @brief Obtém o ponteiro para o jogo que foi selecionado via clique.
+     * 
+     * @return Ponteiro para o objeto Jogo selecionado, ou nullptr se nenhum jogo foi clicado.
      */
     Jogo* getJogoClicado() const { return jogoClicado; }
 
     /**
-     * @brief Reseta o ponteiro de seleção de clique, limpando a ação pendente.
+     * @brief Reseta o estado do jogo clicado para nulo.
      */
     void resetarJogoClicado() { jogoClicado = nullptr; }
 
-    // Navegação de Resultados (Controle/Gamepad)
-
     /**
-     * @brief Navega entre os resultados da lista suspensa usando o controle.
-     * @param direcao Valor positivo (baixo) ou negativo (cima) para mudar o foco.
-     * @return true se a navegação ocorreu com sucesso.
+     * @brief Realiza a navegação entre os resultados da pesquisa via teclado.
+     * 
+     * @param direcao Valor inteiro indicando a direção da navegação (ex: 1 para baixo, -1 para cima).
+     * @return true se a navegação foi realizada com sucesso, false caso contrário.
      */
     bool navegarResultados(int direcao); 
 
     /**
-     * @brief Verifica se há algum item da lista de resultados com foco (seleção via controle).
-     * @return true se algum resultado estiver destacado.
+     * @brief Verifica se algum resultado da lista possui o foco atual.
+     * 
+     * @return true se houver um item focado, false caso contrário.
      */
     bool temResultadoFocado() const;
 
     /**
-     * @brief Retorna o jogo selecionado atualmente através das setas do controle.
-     * @return Jogo* Ponteiro para o jogo focado.
+     * @brief Obtém o ponteiro para o jogo que está atualmente com foco de navegação.
+     * 
+     * @return Ponteiro para o objeto Jogo focado.
      */
     Jogo* getJogoResultadoFocado();
 
     /**
-     * @brief Remove o destaque de seleção dos resultados.
+     * @brief Reseta o índice de foco dos resultados para o estado inicial (sem foco).
      */
     void resetarFocoResultados();
 
     /**
-     * @brief Verifica se o componente está solicitando a abertura do teclado virtual.
-     * @return true se o teclado virtual deve ser exibido.
+     * @brief Verifica se o componente está solicitando a abertura do teclado (interação).
+     * 
+     * @return true se houver solicitação ativa, false caso contrário.
      */
     bool getSolicitaTeclado() { return solicitaTeclado; }
 
     /**
-     * @brief Reseta a flag de solicitação do teclado virtual após o processamento.
+     * @brief Reseta o sinalizador de solicitação de teclado.
      */
     void resetarSolicitacaoTeclado() { solicitaTeclado = false; }
 
-    // Configurações de Fontes
-
-    /** @brief Define o estilo da fonte do placeholder (ex: "Pesquisar..."). */
+    /**
+     * @brief Define o tipo de fonte utilizado para o texto de placeholder.
+     * 
+     * @param tipo Valor da enumeração TipoFonte.
+     */
     void setFontePlaceholder(TipoFonte tipo) { fontePlaceholder = tipo; }
-    
-    /** @brief Define o tamanho da fonte do placeholder. */
+
+    /**
+     * @brief Define o tamanho da fonte utilizado para o texto de placeholder.
+     * 
+     * @param tamanho Valor inteiro representando o tamanho da fonte.
+     */
     void setTamanhoFontePlaceholder(int tamanho) { tamanhoPlaceholder = tamanho; }
-    
-    /** @brief Define o estilo da fonte para os nomes dos jogos nos resultados. */
+
+    /**
+     * @brief Define o tipo de fonte utilizado na exibição dos resultados da busca.
+     * 
+     * @param tipo Valor da enumeração TipoFonte.
+     */
     void setFonteResultados(TipoFonte tipo) { fonteResultados = tipo; }
-    
-    /** @brief Define o tamanho da fonte dos nomes dos jogos nos resultados. */
+
+    /**
+     * @brief Define o tamanho da fonte utilizado na exibição dos resultados da busca.
+     * 
+     * @param tamanho Valor inteiro representando o tamanho da fonte.
+     */
     void setTamanhoFonteResultados(int tamanho) { tamanhoResultados = tamanho; }
 
 private:
-    SDL_Renderer* renderer;       /**< Ponteiro para o renderizador associado. */
-    std::string textoInput;       /**< Buffer contendo o texto digitado pelo usuário. */
-    bool inputAtivo;              /**< Indica se o campo está em modo de edição (focado). */
+    SDL_Renderer* renderer; /**< Ponteiro para o renderizador SDL. */
+    std::string textoInput; /**< Armazena a string de texto digitada pelo usuário. */
+    bool inputAtivo;        /**< Indica se a caixa de pesquisa está em estado de edição ativa. */
     
-    std::vector<Jogo> resultadosAtuais; /**< Lista de jogos que condizem com a busca atual. */
+    std::vector<Jogo> resultadosAtuais; /**< Vetor contendo os objetos Jogo filtrados pela pesquisa. */
     
-    // Variáveis de Estado de Interação
-    int indiceFocoResultado = -1; /**< Índice do item selecionado via controle (-1 = nenhum). */
-    int resultadoHoverIndex = -1; /**< Índice do item sob o cursor do mouse. */
-    Jogo* jogoClicado = nullptr;  /**< Armazena o jogo clicado para processamento posterior. */
+    int indiceFocoResultado = -1; /**< Índice do item que possui foco de navegação via teclado. */
+    int resultadoHoverIndex = -1; /**< Índice do item que possui foco de mouse (hover). */
+    Jogo* jogoClicado = nullptr;  /**< Ponteiro para o último jogo que sofreu uma ação de clique. */
 
-    // Customização Visual
-    TipoFonte fontePlaceholder = TipoFonte::NORMAL;
-    int tamanhoPlaceholder = 28;
-    TipoFonte fonteResultados = TipoFonte::NEGRITO;
-    int tamanhoResultados = 32;
+    TipoFonte fontePlaceholder = TipoFonte::NORMAL; /**< Estilo da fonte para o placeholder. */
+    int tamanhoPlaceholder; /**< Dimensão da fonte para o placeholder. */
+    TipoFonte fonteResultados = TipoFonte::NEGRITO; /**< Estilo da fonte para os itens de resultado. */
+    int tamanhoResultados;  /**< Dimensão da fonte para os itens de resultado. */
 
-    // Constantes de Layout da Lista Suspensa
-    const int ITEM_HEIGHT = 120;     /**< Altura de cada linha de resultado. */
-    const int ITEM_PADDING = 6;      /**< Espaçamento interno entre itens. */
-    const int IMG_SIZE = 90;         /**< Tamanho da miniatura da capa no resultado. */
-    const int IMG_OFFSET_Y = (ITEM_HEIGHT - IMG_SIZE) / 2; /**< Centralização vertical da imagem. */
-    const int IMG_OFFSET_X = 15;     /**< Margem esquerda da imagem. */
-    const int TEXT_OFFSET_X = IMG_OFFSET_X + IMG_SIZE + 20; /**< Posição X onde o texto começa. */
-    const int MAX_RESULTADOS = 3;    /**< Limite máximo de jogos exibidos na lista suspensa. */
-    bool solicitaTeclado = false;    /**< Flag para ativação do teclado virtual (UI). */
+    int itemHeight;    /**< Altura individual de cada item na lista de resultados. */
+    int itemPadding;   /**< Espaçamento interno entre os elementos de um item de resultado. */
+    int imgSize;       /**< Dimensão da imagem (ícone) exibida nos resultados. */
+    int imgOffsetY;    /**< Deslocamento vertical da imagem dentro do item. */
+    int imgOffsetX;    /**< Deslocamento horizontal da imagem dentro do item. */
+    int textOffsetX;   /**< Deslocamento horizontal do texto em relação à imagem. */
+    int raioBorda;     /**< Raio de arredondamento da borda da caixa de pesquisa. */
+    int raioDestaque;  /**< Raio de arredondamento para o destaque de seleção/foco. */
+    
+    /**
+     * @brief Quantidade máxima de resultados exibidos simultaneamente no dropdown.
+     */
+    static constexpr int MAX_RESULTADOS = 3;
+    
+    bool solicitaTeclado = false; /**< Sinalizador para indicar necessidade de entrada de texto externa. */
 
     /**
-     * @brief Renderiza a caixa contendo os resultados da busca.
-     * @param adjustedArea Retângulo da área da barra de pesquisa para cálculo de posição.
+     * @brief Realiza o desenho técnico da lista de resultados suspensa.
+     * 
+     * @param adjustedArea Área retangular calculada e ajustada para a exibição dos resultados.
      */
     void desenharResultados(const SDL_Rect& adjustedArea);
 
     /**
-     * @brief Atualiza a lista resultadosAtuais consultando o GerenciadorJogos.
-     * Chamada sempre que o textoInput é alterado.
+     * @brief Atualiza a lista interna de resultados baseando-se no textoInput atual.
+     * 
+     * Este método filtra os jogos disponíveis e atualiza o vetor resultadosAtuais.
      */
     void atualizarResultados();
 };
