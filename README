@@ -1,0 +1,63 @@
+# README - Gerenciador de Jogos (Interface Gráfica SDL)
+
+Este projeto implementa uma interface gráfica para gerenciamento e visualização de jogos, utilizando a biblioteca **SDL (Simple DirectMedia Layer)** e suas extensões. A aplicação permite navegar por destaques, filtrar jogos por categorias, pesquisar por nome e visualizar detalhes de cada título em uma tela dedicada.
+
+-----
+
+## Funcionalidades
+
+  * **Gerenciamento de Jogos:** Carregamento de dados de jogos a partir de arquivos de texto (`.txt`) com campos delimitados (`@`, `#`, `$`, `*`, `%`).
+  * **Interface Gráfica:** Navegação intuitiva com suporte a mouse e teclado.
+  * **Cache de Recursos:** Otimização de desempenho com **GerenciadorImagens** para cache de texturas e **GerenciadorFontes** para cache de fontes TTF.
+  * **Carrossel de Destaques:** Seção principal com rotação automática e interativa de capas de jogos.
+  * **Filtro por Categoria:** Sistema de categorias navegável (carrossel horizontal) e funcionalidade de *toggle* para exibir apenas jogos da categoria selecionada.
+  * **Barra de Pesquisa:** Busca dinâmica (*case-insensitive*) que exibe resultados em tempo real à medida que o usuário digita.
+  * **Tela de Detalhes do Jogo (`JanelaJogo`):** Exibição da capa, descrição e um carrossel circular de capturas de tela.
+  * **Popups de Descrição:** Exibição de um mini-popup com detalhes do jogo ao passar o mouse sobre os botões de capa.
+
+-----
+
+## Requisitos e Dependências
+
+Para compilar e executar o projeto, você precisará de um compilador C++ (como o **g++**) e as seguintes bibliotecas SDL2 e suas extensões.
+
+### Bibliotecas Necessárias
+
+| Biblioteca | Finalidade |
+| :--- | :--- |
+| **SDL2** | Core da biblioteca multimídia (Janelas, Renderização, Eventos). |
+| **SDL2\_image** | Suporte para carregar diversos formatos de imagem (PNG, JPEG, etc.). |
+| **SDL2\_ttf** | Suporte para renderizar fontes TrueType (.ttf). |
+| **SDL2\_gfx** | Funções para desenho de primitivas gráficas (círculos, retângulos arredondados, polígonos preenchidos). |
+
+### Configuração no Linux (Exemplo Debian/Ubuntu)
+
+Instale as bibliotecas e cabeçalhos de desenvolvimento:
+
+```bash
+sudo apt-get install libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-gfx-dev
+```
+
+-----
+
+## ⚙️ Compilação e Execução
+
+O projeto pode ser compilado utilizando um comando `g++` que linca todos os arquivos de implementação e as bibliotecas necessárias.
+
+### 1\. Compilação
+
+Use o comando abaixo, que combina os arquivos de implementação (`implementacao/*.cpp`), o arquivo principal (`mains/main.cpp`) e especifica os diretórios de cabeçalho (`-I cabecalhos`) e as bibliotecas a serem lincadas (`-lSDL2`, etc.):
+
+```bash
+g++ implementacao/*.cpp mains/main.cpp -I cabecalhos -o gerenciador -lSDL2 -lSDL2_image -lSDL2_gfx -lSDL2_ttf
+```
+
+### 2\. Execução
+
+Após a compilação, execute o binário gerado:
+
+```bash
+./gerenciador
+```
+
+**Nota:** O arquivo `gerenciador` fornecido no projeto é o binário de execução já compilado.

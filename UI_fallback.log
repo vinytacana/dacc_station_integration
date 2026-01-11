@@ -1,0 +1,75 @@
+[INFO] DACC Station UI Initializing...
+[INFO] Carregando biblioteca de jogos...
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock
+[INFO] DACC Station encerrada com sucesso.
+[INFO] DACC Station UI Initializing...
+[INFO] Carregando biblioteca de jogos...
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock
+[WARNING] Cannot start game: Not connected.
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock
+[WARNING] Cannot start game: Not connected.
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock
+[WARNING] Cannot start game: Not connected.
+[INFO] DACC Station encerrada com sucesso.
+[INFO] UI: Inicializando DACC Station UI...
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock (Connection refused)
+[INFO] UI: Conexão com PM estabelecida.
+[ERROR] main -> UI: Falha crítica no SDL.
+[INFO] UI: Inicializando DACC Station UI...
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock (Connection refused)
+[WARNING] UI: Não foi possível conectar ao PM. A UI funcionará offline.
+[WARNING] UI: Nenhum controle detectado. Modo Mouse/Teclado.
+[INFO] UI: Carregando biblioteca de jogos...
+[INFO] UI: Total de jogos carregados: 5
+[INFO] UI: SISTEMA INICIADO! Entrando no loop principal.
+[INFO] UI: Preparando para iniciar: Guardiões da galaxia
+[INFO] UI: Enviando comando IPC para PM: ./Guardiões da galaxia
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock (Connection refused)
+[WARNING] Cannot start game: Not connected.
+[INFO] UI: Comando enviado com sucesso.
+[INFO] UI: Inicializando DACC Station UI...
+[ERROR] connectToManager -> Failed to connect to Process Manager: UnixSocketClient: connect() failed for path: /tmp/gameman.sock (Connection refused)
+[WARNING] UI: Não foi possível conectar ao PM. A UI funcionará offline.
+[WARNING] UI: Nenhum controle detectado. Modo Mouse/Teclado.
+[INFO] UI: Carregando biblioteca de jogos...
+[INFO] UI: Total de jogos carregados: 5
+[INFO] UI: SISTEMA INICIADO! Entrando no loop principal.
+[INFO] UI: Inicializando DACC Station UI...
+[INFO] Connected to Process Manager.
+[INFO] UI: Conexão com PM estabelecida.
+[INFO] UI: Carregando biblioteca de jogos...
+[INFO] UI: Total de jogos carregados: 5
+[INFO] UI: SISTEMA INICIADO! Entrando no loop principal.
+[INFO] UI: Preparando para iniciar: Guardiões da galaxia
+[INFO] UI: Enviando comando IPC para PM: ./Guardiões da galaxia
+[INFO] Start command sent for: Guardiões da galaxia
+[INFO] UI: Comando enviado com sucesso.
+[DEBUG] Received: {"event":"game_finished","pid":42340,"status":256}
+[INFO] >>> JOGO TERMINOU! <<<
+[INFO] UI: Inicializando DACC Station UI...
+[INFO] Connected to Process Manager.
+[INFO] UI: Conexão com PM estabelecida.
+[INFO] UI: Carregando biblioteca de jogos...
+[INFO] UI: Total de jogos carregados: 5
+[INFO] UI: SISTEMA INICIADO! Entrando no loop principal.
+[INFO] UI: Preparando para iniciar: Guardiões da galaxia
+[INFO] UI: Enviando comando IPC para PM: ./Guardiões da galaxia
+[INFO] Start command sent for: Guardiões da galaxia
+[INFO] UI: Comando enviado com sucesso.
+[DEBUG] Received: {"event":"game_finished","pid":42396,"status":256}
+[INFO] >>> JOGO TERMINOU! <<<
+[INFO] UI: Inicializando DACC Station UI...
+[INFO] Connected to Process Manager.
+[INFO] UI: Conexão com PM estabelecida.
+[WARNING] UI: Nenhum controle detectado. Modo Mouse/Teclado.
+[INFO] UI: Carregando biblioteca de jogos...
+[INFO] UI: Total de jogos carregados: 5
+[INFO] UI: SISTEMA INICIADO! Entrando no loop principal.
+[INFO] UI: Inicializando DACC Station UI...
+[INFO] Connected to Process Manager.
+[INFO] UI: Conexão com PM estabelecida.
+[WARNING] UI: Nenhum controle detectado. Modo Mouse/Teclado.
+[INFO] UI: Carregando biblioteca de jogos...
+[INFO] UI: Total de jogos carregados: 5
+[INFO] UI: SISTEMA INICIADO! Entrando no loop principal.

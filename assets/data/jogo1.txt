@@ -1,0 +1,7 @@
+@Guardiões da galaxia
+#Uma aventura espacial cheia de ação, humor e personagens carismáticos, onde decisões influenciam o rumo da história.
+$Aventura, RPG
+*assets/images/jogo1CapaTelaPrincipal.jpeg
+&assets/images/jogo1FundoDestaque.jpeg
++assets/images/jogo1CapaJanelaJogo.jpeg
+%assets/images/captura1.jpeg;assets/images/captura2.jpeg;assets/images/captura3.jpeg;assets/images/captura4.jpeg

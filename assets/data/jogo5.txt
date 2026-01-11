@@ -1,0 +1,7 @@
+@God of Wars
+#Uma saga intensa focada em combates poderosos, mitologia e desafios que testam força, estratégia e determinação
+$RPG, Casual
+*assets/images/jogo5CapaTelaPrincipal.jpeg.jpeg
+&assets/images/jogo5FundoDestaque.jpeg
++assets/images/jogo5CapaJanelaJogo.jpeg.jpeg
+%assets/images/captura1.jpeg;assets/images/captura2.jpeg;assets/images/captura3.jpeg;assets/images/captura4.jpeg
