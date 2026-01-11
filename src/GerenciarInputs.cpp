@@ -12,7 +12,7 @@
 #include "GerenciadorImagens.hpp"
 #include "JanelaJogo.hpp"
 #include "Utils.hpp"
-#include "TecladoVirtual.hpp" 
+#include "TecladoVirtual.hpp"
 #include "GerenciadorTemas.hpp"
 #include <iostream>
 #include <algorithm>

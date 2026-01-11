@@ -1,10 +1,11 @@
 /**
  * @file GerenciarInterface.hpp
- * @brief Definição da classe GerenciarInterface responsável por organizar e renderizar a UI.
- * 
- * Este arquivo contém o gerenciador central da interface do usuário (UI), 
- * coordenando a criação, o layout e o desenho de todos os elementos visuais 
- * da biblioteca de jogos.
+ * @brief Definição da classe GerenciarInterface.
+ *
+ * Este arquivo define a classe responsável pela coordenação, gerenciamento e 
+ * renderização de todos os elementos da interface gráfica da biblioteca de jogos. 
+ * Atua como o núcleo centralizador de componentes como botões, teclado virtual e 
+ * janelas modais.
  */
 
 #ifndef GERENCIAR_INTERFACE_HPP
@@ -15,190 +16,208 @@
 #include <SDL2/SDL.h>
 #include <vector>
 #include <string>
+#include <memory>
 #include "Botao.hpp"
 #include "BotaoPesquisa.hpp"
+#include "TecladoVirtual.hpp"
 #include "Forma.hpp"
 #include "Janela.hpp"
 #include "GerenciarScroll.hpp"
-#include "TecladoVirtual.hpp"
 
-/**
- * @namespace MeuProjeto
- * @brief Namespace principal do projeto da interface de biblioteca de jogos.
- */
 namespace MeuProjeto {
 
 /**
  * @class GerenciarInterface
- * @brief Centraliza a gestão de componentes visuais e o layout da aplicação.
- * 
- * A classe GerenciarInterface atua como um container e gerenciador de layout.
- * Ela armazena as listas de botões de jogos, categorias e destaques, além de 
- * lidar com a troca dinâmica de texturas para suporte a temas (Claro/Escuro).
+ * @brief Gerencia os principais componentes de interface do projeto.
+ *
+ * A classe GerenciarInterface é responsável por instanciar, organizar e renderizar 
+ * os elementos visuais. Ela gerencia o ciclo de vida dos componentes, a troca de 
+ * temas (claro/escuro) através de texturas dinâmicas, e a organização dos elementos 
+ * navegáveis para interação via controle ou teclado.
  */
 class GerenciarInterface {
 public:
     /**
      * @brief Construtor da classe GerenciarInterface.
+     *
+     * Inicializa os ponteiros internos como nulos e prepara as estruturas de 
+     * dados para o carregamento dos componentes.
      */
     GerenciarInterface();
 
     /**
      * @brief Destrutor da classe GerenciarInterface.
-     * Realiza a limpeza de ponteiros, texturas e subcomponentes alocados.
+     *
+     * Garante a liberação adequada da memória e dos recursos de interface 
+     * gerenciados pela classe.
      */
     ~GerenciarInterface();
 
     /**
-     * @brief Inicializa todos os componentes da interface.
-     * 
-     * Carrega texturas iniciais, cria os botões principais, define áreas de layout
-     * e prepara o estado inicial da biblioteca para exibição.
-     * 
-     * @param renderer Ponteiro para o renderizador SDL principal.
+     * @brief Inicializa todos os componentes e recursos de interface.
+     *
+     * Realiza o carregamento de texturas, fontes e a configuração inicial das 
+     * posições dos botões e painéis.
+     *
+     * @param renderer Ponteiro para o renderizador SDL_Renderer utilizado para criar texturas.
+     * @return true se a inicialização for bem-sucedida, false caso ocorra falha no carregamento de recursos.
      */
-    void inicializar(SDL_Renderer* renderer);
+    bool inicializar(SDL_Renderer* renderer);
 
     /**
-     * @brief Renderiza todos os elementos visíveis na tela.
-     * 
-     * Orquestra a ordem de desenho: fundos, destaques, grid de jogos, categorias,
-     * botões de navegação e, por fim, elementos de overlay (popups e teclado).
-     * 
-     * @param renderer Ponteiro para o renderizador SDL.
-     * @param estado Referência ao objeto GerenciarScroll para aplicar deslocamentos.
+     * @brief Renderiza a interface completa na tela.
+     *
+     * Coordena o desenho de fundos, botões, ícones, jogos e componentes especiais 
+     * (como o teclado virtual) respeitando o estado de rolagem atual.
+     *
+     * @param renderer Ponteiro para o renderizador SDL_Renderer.
+     * @param estado Referência para a classe GerenciarScroll contendo os dados de deslocamento da interface.
      */
     void desenhar(SDL_Renderer* renderer, GerenciarScroll& estado);
 
     /**
-     * @brief Filtra e reconstrói a lista de jogos exibida com base em uma categoria.
-     * 
-     * @param categoria Nome da categoria para filtrar (ex: "Ação", "Todas").
-     * @param renderer Renderizador necessário para recriar as texturas dos botões de jogos.
+     * @brief Filtra e atualiza a exibição da lista de jogos baseada em uma categoria.
+     *
+     * @param categoria String contendo o nome da categoria selecionada.
+     * @param renderer Ponteiro para o renderizador SDL_Renderer para atualização de texturas, se necessário.
      */
     void atualizarJogosPorCategoria(const std::string& categoria, SDL_Renderer* renderer);
     
     /**
-     * @brief Atualiza as coordenadas (X, Y) de todos os botões com base no scroll atual.
-     * 
-     * Garante que a colisão de mouse e a renderização acompanhem o movimento da "câmera".
-     * 
-     * @param estado Referência ao estado global de navegação.
+     * @brief Recalcula as coordenadas dos elementos visuais.
+     *
+     * Ajusta a posição de todos os botões e componentes de acordo com as 
+     * mudanças no estado de scroll da interface.
+     *
+     * @param estado Referência para a classe GerenciarScroll.
      */
     void atualizarPosicoes(GerenciarScroll& estado);
     
     /**
-     * @brief Retorna uma lista de ponteiros para todos os botões que aceitam foco.
-     * 
-     * Essencial para o sistema de navegação por controle (gamepad), permitindo 
-     * que o GerenciarInputs saiba quais elementos podem ser selecionados.
-     * 
-     * @return std::vector<Botao*>& Referência para o vetor de botões navegáveis.
+     * @brief Obtém o vetor de botões habilitados para navegação.
+     *
+     * @return Referência para um vetor de ponteiros do tipo Botao.
      */
     std::vector<Botao*>& obterBotoesNavegaveis();
 
-    // Getters de Componentes Específicos
-
-    /** @brief Retorna o botão de abrir configurações. */
+    /**
+     * @brief Retorna o ponteiro do botão de configurações.
+     * @return Ponteiro para o objeto Botao.
+     */
     Botao* getBotaoConfig() { return btnConfig; }
 
-    /** @brief Retorna o botão de alternar tema (Claro/Escuro). */
+    /**
+     * @brief Retorna o ponteiro do botão de alternância de tema.
+     * @return Ponteiro para o objeto Botao.
+     */
     Botao* getBotaoMudarTema() { return btnMudarTema; }
 
-    /** @brief Retorna o botão de seleção aleatória de jogo. */
+    /**
+     * @brief Retorna o ponteiro do botão de seleção aleatória.
+     * @return Ponteiro para o objeto Botao.
+     */
     Botao* getBotaoAleatorio() { return btnAleatorio; }
 
-    /** @brief Retorna o componente de barra de pesquisa. */
+    /**
+     * @brief Retorna o ponteiro do componente de pesquisa.
+     * @return Ponteiro para o objeto BotaoPesquisa.
+     */
     BotaoPesquisa* getBotaoPesquisa() { return btnPesquisa; }
     
-    /** @brief Retorna o botão de navegação para a esquerda (carrossel). */
+    /**
+     * @brief Retorna o ponteiro da seta de navegação esquerda.
+     * @return Ponteiro para o objeto Botao.
+     */
     Botao* getSetaEsquerda() { return setaEsquerda; }
 
-    /** @brief Retorna o botão de navegação para a direita (carrossel). */
+    /**
+     * @brief Retorna o ponteiro da seta de navegação direita.
+     * @return Ponteiro para o objeto Botao.
+     */
     Botao* getSetaDireita() { return setaDireita; }
     
-    /** 
-     * @brief Busca um botão de categoria pelo seu índice.
-     * @param indice Posição no vetor de categorias.
-     * @return Botao* Ponteiro para o botão ou nullptr se inválido.
+    /**
+     * @brief Obtém um botão de categoria específico através de seu índice.
+     * @param indice Posição do botão no vetor de categorias.
+     * @return Ponteiro para o objeto Botao correspondente.
      */
     Botao* getBotaoCategoria(int indice);
 
-    // Getters de Coleções
-
-    /** @brief Retorna o vetor de botões da seção de destaques (Hero banners). */
+    /**
+     * @brief Retorna a lista de botões da seção de destaques.
+     * @return Referência constante para o vetor de objetos Botao.
+     */
     const std::vector<Botao>& getDestaques() const { return destaques; }
 
-    /** @brief Retorna o vetor de botões da barra de categorias. */
+    /**
+     * @brief Retorna a lista de botões da seção de categorias.
+     * @return Referência constante para o vetor de objetos Botao.
+     */
     const std::vector<Botao>& getCategorias() const { return categorias; }
 
-    /** @brief Retorna o vetor de botões que representam os jogos na grade principal. */
+    /**
+     * @brief Retorna a lista de botões da seção de jogos.
+     * @return Referência constante para o vetor de objetos Botao.
+     */
     const std::vector<Botao>& getJogos() const { return jogos; }
 
-    // Getters de Contagem
+    /**
+     * @brief Retorna a quantidade de elementos na seção de destaques.
+     * @return Valor inteiro representando o tamanho do vetor.
+     */
     int getNumDestaques() const { return destaques.size(); }
+
+    /**
+     * @brief Retorna a quantidade de elementos na seção de categorias.
+     * @return Valor inteiro representando o tamanho do vetor.
+     */
     int getNumCategorias() const { return categorias.size(); }
+
+    /**
+     * @brief Retorna a quantidade de elementos na seção de jogos.
+     * @return Valor inteiro representando o tamanho do vetor.
+     */
     int getNumJogos() const { return jogos.size(); }
 
-    /** @brief Retorna o componente do teclado virtual. */
+    /**
+     * @brief Retorna o ponteiro para o teclado virtual gerenciado pela interface.
+     * @return Ponteiro para o objeto TecladoVirtual.
+     */
     TecladoVirtual* getTecladoVirtual() { return tecladoVirtual; }
 
 private:
-    // Botões Fixos da UI Superior/Lateral
-    Botao* btnConfig = nullptr;
-    Botao* btnMudarTema = nullptr;
-    Botao* btnAleatorio = nullptr;
-    BotaoPesquisa* btnPesquisa = nullptr;
+    Botao* btnConfig = nullptr;     /**< Ponteiro para o botão de acesso às configurações. */
+    Botao* btnMudarTema = nullptr;  /**< Ponteiro para o botão de troca de tema visual. */
+    Botao* btnAleatorio = nullptr;  /**< Ponteiro para o botão de escolha de jogo aleatório. */
+    BotaoPesquisa* btnPesquisa = nullptr; /**< Ponteiro para o componente de busca de títulos. */
     
-    // Controles do Carrossel de Categorias
-    Botao* setaEsquerda = nullptr;
-    Botao* setaDireita = nullptr;
+    Botao* setaEsquerda = nullptr;  /**< Ponteiro para a seta de navegação lateral esquerda. */
+    Botao* setaDireita = nullptr;   /**< Ponteiro para a seta de navegação lateral direita. */
     
-    // Listas de Componentes Dinâmicos
-    std::vector<Botao> destaques;   /**< Banners grandes de destaque. */
-    std::vector<Botao> categorias;  /**< Botões de filtro de categoria. */
-    std::vector<Botao> jogos;       /**< Grid de jogos da biblioteca. */
+    std::vector<Botao> destaques;   /**< Vetor contendo os botões dos jogos em destaque. */
+    std::vector<Botao> categorias;  /**< Vetor contendo os botões de categorias de jogos. */
+    std::vector<Botao> jogos;       /**< Vetor contendo os botões da listagem geral de jogos. */
     
-    Forma* fundoCategorias = nullptr; /**< Elemento visual de fundo da barra de categorias. */
+    Forma* fundoCategorias = nullptr; /**< Ponteiro para o componente visual de fundo das categorias. */
     
-    // Texturas Dinâmicas (Alternadas conforme o tema)
-    SDL_Texture* iconeLupaClaro = nullptr;
-    SDL_Texture* iconeLupaEscuro = nullptr;
+    SDL_Texture* iconeLupaClaro = nullptr;   /**< Textura do ícone de pesquisa para o tema claro. */
+    SDL_Texture* iconeLupaEscuro = nullptr;  /**< Textura do ícone de pesquisa para o tema escuro. */
     
-    SDL_Texture* iconeDadoClaro = nullptr;
-    SDL_Texture* iconeDadoEscuro = nullptr;
+    SDL_Texture* iconeDadoClaro = nullptr;   /**< Textura do ícone de aleatoriedade para o tema claro. */
+    SDL_Texture* iconeDadoEscuro = nullptr;  /**< Textura do ícone de aleatoriedade para o tema escuro. */
 
-    SDL_Texture* iconeConfigClaro = nullptr;
-    SDL_Texture* iconeConfigEscuro = nullptr;
+    SDL_Texture* iconeConfigClaro = nullptr;  /**< Textura do ícone de engrenagem para o tema claro. */
+    SDL_Texture* iconeConfigEscuro = nullptr; /**< Textura do ícone de engrenagem para o tema escuro. */
     
-    SDL_Texture* explicacaoClaro = nullptr;  /**< Infográfico de ajuda (Modo Claro). */
-    SDL_Texture* explicacaoEscuro = nullptr; /**< Infográfico de ajuda (Modo Escuro). */
+    SDL_Texture* explicacaoClaro = nullptr;  /**< Textura informativa/tutorial para o tema claro. */
+    SDL_Texture* explicacaoEscuro = nullptr; /**< Textura informativa/tutorial para o tema escuro. */
     
-    Janela* popupJanela = nullptr;         /**< Sistema de popups informativos. */
-    std::vector<Botao*> botoesNavegaveis;  /**< Cache de botões para navegação por controle. */
+    Janela* popupJanela = nullptr; /**< Ponteiro para uma instância de janela popup/modal. */
+    std::vector<Botao*> botoesNavegaveis; /**< Lista consolidada de ponteiros para botões que suportam foco de navegação. */
 
-    // Constantes de Layout (Design System)
-    
-    // Categorias
-    const int CATEGORIA_POS_Y = 930;
-    const int CATEGORIA_LARGURA = 140;
-    const int CATEGORIA_ALTURA = 80;
-    const int CATEGORIA_ESPACAMENTO = 146;
-    const int CATEGORIA_AREA_VISIVEL_INICIO = 275; /**< Limite esquerdo da área de categorias. */
-    const int CATEGORIA_AREA_VISIVEL_FIM = 915;    /**< Limite direito da área de categorias. */
-    const int POSICAO_BASE_X = 320;
-    
-    // Jogos
-    const int JOGO_Y = 1080;
-    const int JOGO_LARGURA = 384;
-    const int JOGO_ALTURA = 328;
-    const int JOGO_GAP = 76;
-    
-    const int QTD_JOGOS_LISTA = 8; /**< Número de jogos exibidos por vez no grid. */
-
-    TecladoVirtual* tecladoVirtual = nullptr; /**< Instância do teclado para input via controle/mouse. */
+    TecladoVirtual* tecladoVirtual = nullptr; /**< Ponteiro para a instância do teclado virtual. */
 };
 
 } // namespace MeuProjeto
 
-#endif // GERENCIAR_INTERFACE_HPP
+#endif

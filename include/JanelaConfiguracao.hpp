@@ -14,6 +14,7 @@
 
 #include <SDL2/SDL.h>
 #include <vector>
+#include <memory>
 #include "Botao.hpp"
 
 /**
@@ -104,9 +105,9 @@ private:
     
     SubmenuConfig submenuAtivo = SubmenuConfig::NENHUM; /**< Rastreia qual seção está sendo visualizada. */
     
-    std::vector<Botao*> botoesMenu; /**< Coleção de ponteiros para os botões do menu principal de config. */
-    Botao* btnVoltar = nullptr;     /**< Botão para retornar ao menu anterior. */
-    Botao* btnFechar = nullptr;     /**< Botão para encerrar a janela de configurações. */
+    std::vector<std::unique_ptr<Botao>> botoesMenu; /**< Coleção de ponteiros para os botões do menu principal de config. */
+    std::unique_ptr<Botao> btnVoltar;     /**< Botão para retornar ao menu anterior. */
+    std::unique_ptr<Botao> btnFechar;     /**< Botão para encerrar a janela de configurações. */
     
     int indiceFocado = -1; /**< Índice do botão atualmente em foco (para navegação via controle). */
 

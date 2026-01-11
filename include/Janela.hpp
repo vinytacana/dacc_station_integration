@@ -1,10 +1,11 @@
 /**
  * @file Janela.hpp
- * @brief Definição da classe Janela, responsável pelo gerenciamento de interfaces sobrepostas (popups).
- * 
- * Este arquivo define os mecanismos para exibir janelas modais ou informativas
- * sobre a interface principal, permitindo a visualização de detalhes de um jogo
- * sem sair da tela de navegação.
+ * @brief Definição da classe Janela.
+ *
+ * Este arquivo estabelece a interface para o gerenciamento de janelas modais (popups)
+ * dentro da interface gráfica. A classe é projetada para exibir informações detalhadas 
+ * de um jogo, como título, imagem de capa e descrição, utilizando o sistema de 
+ * renderização da SDL2.
  */
 
 #ifndef JANELA_HPP
@@ -20,77 +21,94 @@
 #include <sstream>      
 #include "Utils.hpp"  
 
-/**
- * @namespace MeuProjeto
- * @brief Namespace principal do projeto da interface de biblioteca de jogos.
- */
 namespace MeuProjeto {
 
 /**
  * @class Janela
- * @brief Gerencia a exibição e o estado de janelas de popup na interface.
- * 
- * A classe Janela permite configurar, abrir e desenhar elementos de interface
- * que flutuam sobre a grade de jogos. Ela armazena o estado atual do popup,
- * como a textura da imagem do jogo, o nome e a descrição técnica.
+ * @brief Responsável pela criação e exibição de componentes modais informativos.
+ *
+ * A classe Janela atua como um container visual sobreposto à interface principal.
+ * Ela gerencia o estado de visibilidade, armazena os metadados do conteúdo a ser
+ * exibido e calcula as proporções visuais baseando-se em variáveis de layout 
+ * responsivo para garantir a integridade estética em diferentes resoluções.
  */
 class Janela {
 public:
     /**
      * @brief Construtor da classe Janela.
-     * @param renderer Ponteiro para o renderizador SDL que será usado para desenhar o popup.
+     * 
+     * Inicializa a instância da janela vinculando-a a um renderizador e configurando
+     * os estados iniciais de visibilidade e dimensões.
+     * 
+     * @param renderer Ponteiro para o SDL_Renderer que será utilizado para a renderização do popup.
      */
     Janela(SDL_Renderer* renderer);
 
     /**
      * @brief Destrutor da classe Janela.
-     * Limpa referências e garante que o estado do popup seja encerrado corretamente.
+     * 
+     * Realiza a limpeza de referências e garante que nenhum recurso pendente comprometa
+     * a integridade da memória ao destruir a instância da janela.
      */
     ~Janela();
 
     /**
-     * @brief Configura e ativa a exibição de um popup com informações de um jogo.
+     * @brief Configura e ativa a exibição de uma janela popup.
      * 
-     * @param nome Nome do jogo a ser exibido no título do popup.
-     * @param textura Ponteiro para a SDL_Texture contendo a imagem (capa) do jogo.
-     * @param desc Texto descritivo ou detalhes do jogo.
-     * @param x Coordenada X da posição inicial do popup.
-     * @param y Coordenada Y da posição inicial do popup.
-     * @param w Largura (width) da janela de popup.
-     * @param h Altura (height) da janela de popup.
+     * Este método define as informações que serão renderizadas, incluindo metadados 
+     * textuais e visuais, além de determinar a área de ocupação inicial.
+     * 
+     * @param nome String contendo o título ou nome do jogo a ser exibido.
+     * @param textura Ponteiro para a textura SDL_Texture contendo a imagem de capa.
+     * @param desc String contendo a descrição detalhada do conteúdo.
+     * @param x Coordenada horizontal para o posicionamento da janela.
+     * @param y Coordenada vertical para o posicionamento da janela.
+     * @param w Largura inicial da janela.
+     * @param h Altura inicial da janela.
      */
     void abrirPopup(const std::string& nome, SDL_Texture* textura, const std::string& desc, int x, int y, int w, int h);
 
     /**
-     * @brief Desativa o popup, parando sua renderização e limpando o estado de exibição.
+     * @brief Desativa a visibilidade da janela popup.
+     * 
+     * Altera o estado interno para fechado, interrompendo o ciclo de renderização
+     * do componente modal.
      */
     void fecharPopup();
 
     /**
-     * @brief Renderiza o popup na tela utilizando o renderizador associado.
+     * @brief Realiza o desenho da janela e seus subcomponentes no renderizador.
      * 
-     * Este método deve ser chamado dentro do loop principal de renderização, 
-     * preferencialmente após o desenho da biblioteca de fundo.
+     * Renderiza o fundo da janela, a imagem, o título e a descrição textual, 
+     * aplicando os deslocamentos fornecidos.
      * 
-     * @param offsetX Deslocamento horizontal opcional para animações ou ajustes de layout.
-     * @param offsetY Deslocamento vertical opcional para animações ou ajustes de layout.
+     * @param offsetX Valor de deslocamento horizontal para ajuste de posição.
+     * @param offsetY Valor de deslocamento vertical para ajuste de posição.
      */
     void desenharPopup(int offsetX = 0, int offsetY = 0);
 
     /**
-     * @brief Verifica se existe um popup ativo no momento.
-     * @return true se o popup estiver visível, false caso contrário.
+     * @brief Consulta o estado de visibilidade da janela.
+     * 
+     * @return true se a janela estiver aberta e visível, false caso contrário.
      */
     bool isPopupOpen() const { return isPopupAberto; }
 
 private:
-    SDL_Renderer* renderer;  /**< Referência ao renderizador principal da aplicação. */
-    bool isPopupAberto;      /**< Flag de controle de estado: indica se o popup deve ser desenhado. */
-    SDL_Rect popupArea;      /**< Estrutura que define a geometria (pos x, pos y, largura, altura) do popup. */
-    std::string popupNome;   /**< Nome armazenado para exibição no popup atual. */
-    SDL_Texture* popupTextura; /**< Textura da imagem do jogo sendo exibida no popup. */
-    std::string popupDesc;   /**< Descrição armazenada para exibição no popup atual. */
+    SDL_Renderer* renderer; /**< Ponteiro para o renderizador SDL associado à janela. */
+    bool isPopupAberto;     /**< Estado booleano que indica se o popup está ativo. */
+    SDL_Rect popupArea;     /**< Estrutura que define a geometria (posição e tamanho) da janela. */
+    std::string popupNome;  /**< Armazena o texto do título exibido na janela. */
+    SDL_Texture* popupTextura; /**< Referência para a textura da imagem principal do popup. */
+    std::string popupDesc;  /**< Armazena o corpo de texto descritivo do popup. */
 
+    int larguraPadrao;   /**< Dimensão horizontal base definida para o layout da janela. */
+    int alturaPadrao;    /**< Dimensão vertical base definida para o layout da janela. */
+    int paddingExterno;  /**< Espaçamento de segurança entre a borda da janela e o limite da tela. */
+    int paddingInterno;  /**< Espaçamento interno entre a borda da janela e seus elementos filhos. */
+    int alturaImagem;    /**< Dimensão vertical reservada exclusivamente para a exibição da imagem de capa. */
+    int espacoTitulo;    /**< Margem vertical entre o término da imagem e o início do título. */
+    int espacoDesc;      /**< Margem vertical entre o título e o bloco de texto de descrição. */
 };
 
 } // namespace MeuProjeto

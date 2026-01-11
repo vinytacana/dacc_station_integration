@@ -1,7 +1,7 @@
 @Naruto
 #Uma experiência inspirada no universo ninja, com batalhas intensas, personagens conhecidos e uma narrativa envolvente
 $Casual, Esportes
-*assets/images/jogo3CapaTelaPrincipal.jpeg.jpeg
-&assets/images/jogo3FundoDestaque.jpeg
-+assets/images/jogo3CapaJanelaJogo.jpeg.jpeg
-%assets/images/captura1.jpeg;assets/images/captura2.jpeg;assets/images/captura3.jpeg;assets/images/captura4.jpeg
+*assets/images/games/jogo3CapaTelaPrincipal.jpeg.jpeg
+&assets/images/games/jogo3FundoDestaque.jpeg
++assets/images/games/jogo3CapaJanelaJogo.jpeg.jpeg
+%assets/images/games/Capturas de Tela/captura1.jpeg;assets/images/games/Capturas de Tela/captura2.jpeg;assets/images/games/Capturas de Tela/captura3.jpeg;assets/images/games/Capturas de Tela/captura4.jpeg

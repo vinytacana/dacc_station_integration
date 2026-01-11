@@ -1,93 +1,113 @@
 /**
  * @file JanelaConfiguracao.cpp
- * @brief Implementação da janela de configurações e seu sistema de submenus.
- * 
- * Este arquivo gerencia o ciclo de vida de uma janela SDL secundária, incluindo
- * a criação de botões dinâmicos que herdam as cores do tema global e um sistema
- * de estados para navegação em submenus.
+ * @brief Implementação da janela de configurações com layout responsivo.
+ *
+ * Este arquivo contém a lógica de funcionamento de uma janela secundária do SDL2 dedicada
+ * às configurações do sistema. Implementa a criação de uma janela independente, gestão 
+ * de renderizador próprio, tratamento de eventos de navegação por controle (gamepad) 
+ * e organização de submenus funcionais.
  */
 
 #include "JanelaConfiguracao.hpp"
 #include "Utils.hpp"
-#include "GerenciadorTemas.hpp" 
+#include "GerenciadorTemas.hpp"
+#include "ConfigLayout.hpp"
 #include <iostream>
 #include <SDL2/SDL.h> 
 
 using namespace MeuProjeto;
 
 /**
- * @brief Construtor da classe. 
- * A inicialização real ocorre no método abrir().
+ * @brief Construtor da classe JanelaConfiguracao.
+ *
+ * Inicializa a instância da classe. O estado inicial da janela é definido como fechado.
  */
 JanelaConfiguracao::JanelaConfiguracao() {
 }
 
 /**
- * @brief Destrutor da classe. 
- * Garante que se o objeto for destruído, os recursos da SDL e a memória dos botões sejam limpos.
+ * @brief Destrutor da classe JanelaConfiguracao.
+ *
+ * Garante o encerramento seguro da janela e a liberação de recursos ao destruir a instância.
  */
 JanelaConfiguracao::~JanelaConfiguracao() {
     fechar();
 }
 
 /**
- * @brief Inicializa e configura todos os botões da janela de configuração.
- * 
- * @details **Lógica de Construção de Botões:**
- * 1. **Limpeza:** Antes de criar, deleta ponteiros existentes para evitar vazamentos (Memory Leaks).
- * 2. **Sincronização de Tema:** Recupera as cores do `GerenciadorTemas` (Normal, Hover, Press).
- * 3. **Instanciação:** Cria os botões principais de configuração usando coordenadas fixas.
- * 4. **Botões de Controle de Janela:** Cria os botões "X" (fechar) e "Voltar" com cores específicas.
- * 5. **Foco Inicial:** Se um controle estiver conectado, o primeiro botão já inicia focado.
+ * @brief Configura e instancia os componentes interativos da janela.
+ *
+ * Este método define as propriedades visuais e posicionais dos botões do menu principal,
+ * botões de fechamento e de retorno. Utiliza a classe ConfigLayout para converter 
+ * coordenadas estáticas em dimensões escaladas para a resolução do sistema e aplica 
+ * as cores provenientes do GerenciadorTemas. Também gerencia a definição inicial de 
+ * foco caso um controlador de jogo esteja conectado.
  */
 void JanelaConfiguracao::inicializarBotoes() {
-    // Limpeza de segurança para evitar duplicidade de alocação na memória heap
-    for (auto btn : botoesMenu) delete btn;
     botoesMenu.clear();
-    delete btnVoltar;
-    delete btnFechar;
+    btnVoltar.reset();
+    btnFechar.reset();
 
-    // Sincroniza os componentes com a paleta de cores do tema atual (Claro/Escuro)
     auto& tema = GerenciadorTemas::getInstance();
     SDL_Color btnNormal = tema.getCorBotaoNormal();
     SDL_Color btnHover = tema.getCorBotaoHover();
     SDL_Color btnPress = tema.getCorBotaoPressionado();
 
-    // Criação dos botões principais do menu de configurações
-    Botao* btn1 = new Botao(217, 274, 1101, 122, "Alterar Controle");
+    // Instanciação dos botões principais com coordenadas responsivas via ConfigLayout
+    auto btn1 = std::make_unique<Botao>(
+        ConfigLayout::X(217), ConfigLayout::Y(274), 
+        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        "Alterar Controle"
+    );
     btn1->setCor(btnNormal, btnHover, btnPress); 
-    botoesMenu.push_back(btn1);
+    botoesMenu.push_back(std::move(btn1));
     
-    Botao* btn2 = new Botao(217, 550, 1101, 122, "Suporte/Ajuda");
+    auto btn2 = std::make_unique<Botao>(
+        ConfigLayout::X(217), ConfigLayout::Y(550), 
+        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        "Suporte/Ajuda"
+    );
     btn2->setCor(btnNormal, btnHover, btnPress);
-    botoesMenu.push_back(btn2);
+    botoesMenu.push_back(std::move(btn2));
     
-    Botao* btn3 = new Botao(217, 826, 1101, 122, "Configurações Avançadas");
+    auto btn3 = std::make_unique<Botao>(
+        ConfigLayout::X(217), ConfigLayout::Y(826), 
+        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        "Configurações Avançadas"
+    );
     btn3->setCor(btnNormal, btnHover, btnPress);
-    botoesMenu.push_back(btn3);
+    botoesMenu.push_back(std::move(btn3));
 
-    // Botão de fechamento rápido (X) - Posicionado no canto superior direito
-    btnFechar = new Botao(1465, 10, 50, 50, "X");
+    // Configuração do componente de fechamento (X) com esquema de cores de alerta
+    btnFechar = std::make_unique<Botao>(
+        ConfigLayout::X(1465), ConfigLayout::Y(10), 
+        ConfigLayout::X(50), ConfigLayout::Y(50), 
+        "X"
+    );
     btnFechar->setCor({200, 20, 20, 255}, {250, 50, 50, 255}, {180, 0, 0, 255});
 
-    // Botão de navegação entre submenus
-    btnVoltar = new Botao(50, 10, 150, 50, "< Voltar");
+    // Configuração do componente de navegação de retorno
+    btnVoltar = std::make_unique<Botao>(
+        ConfigLayout::X(50), ConfigLayout::Y(10), 
+        ConfigLayout::X(150), ConfigLayout::Y(50), 
+        "< Voltar"
+    );
     btnVoltar->setCor(btnNormal, btnHover, btnPress);
 
-    // Gerenciamento de foco para Gamepad
+    // Lógica de ativação de foco baseada na presença de periféricos de entrada (Joystick)
     if (SDL_NumJoysticks() > 0) {
-        indiceFocado = 0; // Inicia com o primeiro botão selecionado se houver controle
+        indiceFocado = 0; 
     } else {
-        indiceFocado = -1; // Modo mouse puro
+        indiceFocado = -1; 
     }
 }
 
 /**
- * @brief Cria a janela física e o contexto de renderização.
- * 
- * Utiliza a flag `SDL_WINDOW_BORDERLESS` para criar uma janela limpa, 
- * típica de launchers modernos. `SDL_RaiseWindow` é chamado para garantir 
- * que ela apareça na frente da janela principal da biblioteca.
+ * @brief Realiza a criação da janela SDL2 e seu renderizador acelerado.
+ *
+ * Define as dimensões da janela de acordo com o design original escalado, remove 
+ * bordas decorativas do sistema operacional (SDL_WINDOW_BORDERLESS) e garante 
+ * que a janela receba o foco de exibição (SDL_RaiseWindow).
  */
 void JanelaConfiguracao::abrir() {
     if (aberta) return;
@@ -95,7 +115,7 @@ void JanelaConfiguracao::abrir() {
     janela = SDL_CreateWindow("Configurações", 
                              SDL_WINDOWPOS_CENTERED, 
                              SDL_WINDOWPOS_CENTERED, 
-                             1525, 1116, 
+                             ConfigLayout::X(1525), ConfigLayout::Y(1116), 
                              SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
     
     if (janela) {
@@ -103,82 +123,65 @@ void JanelaConfiguracao::abrir() {
         if (renderer) {
             aberta = true;
             inicializarBotoes(); 
-            SDL_RaiseWindow(janela); // Garante o foco da janela
+            SDL_RaiseWindow(janela); 
         }
     }
 }
 
 /**
- * @brief Destrói os recursos da janela e limpa a memória dos botões.
- * 
+ * @brief Encerra a janela de configurações e libera os recursos SDL.
+ *
+ * Destrói as instâncias de SDL_Renderer e SDL_Window, limpa os vetores de botões 
+ * e redefine os sinalizadores de estado interno e submenus.
  */
 void JanelaConfiguracao::fechar() {
     if (renderer) { SDL_DestroyRenderer(renderer); renderer = nullptr; }
     if (janela) { SDL_DestroyWindow(janela); janela = nullptr; }
-    
-    for (auto btn : botoesMenu) delete btn;
-    botoesMenu.clear();
-    
-    if (btnVoltar) { delete btnVoltar; btnVoltar = nullptr; }
-    if (btnFechar) { delete btnFechar; btnFechar = nullptr; }
+
+    botoesMenu.clear(); 
+    btnVoltar.reset(); 
+    btnFechar.reset();
     
     aberta = false;
     submenuAtivo = SubmenuConfig::NENHUM;
 }
 
-/** @brief Retorna o ID interno da SDL para filtragem de eventos em múltiplas janelas. */
+/**
+ * @brief Recupera o identificador único da janela SDL.
+ * @return Uint32 contendo o ID da janela ou 0 se a janela não estiver instanciada.
+ */
 Uint32 JanelaConfiguracao::getIDJanela() const { return janela ? SDL_GetWindowID(janela) : 0; }
 
 /**
- * @brief Dispara a mudança de estado baseada no botão pressionado.
- * 
- * @details **Execução de Ações:**
- * Esta função funciona como um roteador. Ao clicar em um índice do vetor de botões, 
- * ela altera o valor de `submenuAtivo`, o que fará com que o método `desenhar()` 
- * exiba uma interface diferente no próximo frame.
- * 
- * @param indice O índice do botão no vetor botoesMenu.
+ * @brief Altera o estado da janela para exibir um submenu específico.
+ * @param indice Índice do botão pressionado que determina o submenu alvo.
  */
 void JanelaConfiguracao::executarAcaoMenu(int indice) {
-    std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; // Log para debug
+    std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; 
 
     switch (indice) {
-        case 0: 
-            // Usuário clicou em "Alterar Controle"
-            // Define o estado para que o `desenhar()` mostre a tela de controles
-            submenuAtivo = SubmenuConfig::ALTERAR_CONTROLE; 
-            break;
-
-        case 1: 
-            // Usuário clicou em "Suporte/Ajuda"
-            submenuAtivo = SubmenuConfig::SUPORTE_AJUDA; 
-            break;
-
-        case 2: 
-            // Usuário clicou em "Configurações Avançadas"
-            submenuAtivo = SubmenuConfig::CONFIG_AVANCADAS; 
-            break;
-            
-        default:
-            std::cout << "[ERRO] Índice de botão desconhecido." << std::endl;
-            break;
+        case 0: submenuAtivo = SubmenuConfig::ALTERAR_CONTROLE; break;
+        case 1: submenuAtivo = SubmenuConfig::SUPORTE_AJUDA; break;
+        case 2: submenuAtivo = SubmenuConfig::CONFIG_AVANCADAS; break;
+        default: break;
     }
 }
 
 /**
- * @brief Processa os eventos de input focados nesta janela.
+ * @brief Processa a fila de eventos do SDL para a janela de configurações.
+ *
+ * Realiza o tratamento de eventos de janela, cliques de mouse nos botões, 
+ * movimentação de eixos analógicos e botões de controladores de jogo. Implementa 
+ * lógica de navegação vertical por foco, respeitando zonas mortas (deadzone) e 
+ * intervalos mínimos de processamento para inputs analógicos.
  * 
- * @details **Lógica de Execução de Ações por Input:**
- * 1. **Mouse:** O método `tratarEvento` de cada botão verifica a colisão. Se houver um 
- *    `SDL_MOUSEBUTTONUP` dentro da área, o botão retorna true e `executarAcaoMenu` é chamado.
- * 2. **Controle (Navegação):** Movimentos no Analógico ou D-Pad alteram o `indiceFocado`.
- * 3. **Controle (Execução):** Pressionar o botão 'A' do controle chama `executarAcaoMenu` 
- *    utilizando o botão que está focado no momento.
+ * @param evento Referência para o evento capturado pelo loop principal.
+ * @return true se o evento foi processado e consumido, false caso contrário.
  */
 bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
     if (!aberta) return false;
 
-    // Filtra se o evento de janela pertence a esta instância (ID único)
+    // Tratamento de eventos nativos da janela SDL
     if (evento.type == SDL_WINDOWEVENT && evento.window.windowID == getIDJanela()) {
         if (evento.window.event == SDL_WINDOWEVENT_CLOSE) {
             fechar();
@@ -186,43 +189,40 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
         }
     }
 
-    // Lógica de Interação Híbrida (Mouse e Controle)
+    // Lógica de interação com submenus e botões de navegação
     if (submenuAtivo != SubmenuConfig::NENHUM) {
-        // Se estiver dentro de um submenu, o foco principal é o botão "Voltar"
         if (btnVoltar->tratarEvento(evento, 0, 0) && evento.type == SDL_MOUSEBUTTONUP) {
             submenuAtivo = SubmenuConfig::NENHUM;
             return true;
         }
     } else {
-        // Navegação no Menu Principal de Configurações
         for (size_t i = 0; i < botoesMenu.size(); i++) {
             if (botoesMenu[i]->tratarEvento(evento, 0, 0) && evento.type == SDL_MOUSEBUTTONUP) {
-                executarAcaoMenu(i); // Executa a ação do botão clicado
+                executarAcaoMenu(i); 
                 return true;
             }
         }
     }
 
-    // Botão global de fechamento
     if (btnFechar->tratarEvento(evento, 0, 0) && evento.type == SDL_MOUSEBUTTONUP) {
         fechar();
         return true;
     }
     
-    // Navegação via Gamepad (Analógico Esquerdo)
+    // Tratamento de eixos analógicos para navegação de foco no menu
     if (evento.type == SDL_CONTROLLERAXISMOTION) {
         Uint32 tempoAtual = SDL_GetTicks();
         if (tempoAtual - ultimoInputAnalogico > INTERVALO_ANALOGICO) {
             if (submenuAtivo == SubmenuConfig::NENHUM) {
                 if (evento.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
                     if (indiceFocado == -1) indiceFocado = 0; 
-                    if (evento.caxis.value > DEADZONE) { // Direção: Baixo
+                    if (evento.caxis.value > DEADZONE) { 
                         if (indiceFocado >= (int)botoesMenu.size() - 1) indiceFocado = 0;
                         else indiceFocado++;
                         ultimoInputAnalogico = tempoAtual;
                         return true;
                     } 
-                    else if (evento.caxis.value < -DEADZONE) { // Direção: Cima
+                    else if (evento.caxis.value < -DEADZONE) { 
                         if (indiceFocado <= 0) indiceFocado = botoesMenu.size() - 1;
                         else indiceFocado--;
                         ultimoInputAnalogico = tempoAtual;
@@ -233,7 +233,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
         }
     }
 
-    // Navegação via Gamepad (Botões e D-Pad)
+    // Tratamento de botões físicos do controlador (D-Pad, A, B)
     if (evento.type == SDL_CONTROLLERBUTTONDOWN) {
         if (indiceFocado == -1) indiceFocado = 0;
 
@@ -252,19 +252,18 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
             return true;
         }
         else if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
-            // Executa a ação baseada no botão que detém o foco atual
             if (submenuAtivo == SubmenuConfig::NENHUM && indiceFocado != -1) {
                 executarAcaoMenu(indiceFocado);
             } else if (submenuAtivo != SubmenuConfig::NENHUM) {
-                submenuAtivo = SubmenuConfig::NENHUM; // Botão A no submenu volta para o principal
+                submenuAtivo = SubmenuConfig::NENHUM; 
             }
             return true;
         }
         else if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
             if (submenuAtivo != SubmenuConfig::NENHUM) {
-                submenuAtivo = SubmenuConfig::NENHUM; // Botão B volta um nível
+                submenuAtivo = SubmenuConfig::NENHUM; 
             } else {
-                fechar(); // Botão B no menu raiz fecha a janela
+                fechar(); 
             }
             return true;
         }
@@ -274,29 +273,30 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
 }
 
 /**
- * @brief Orquestra a renderização da interface de configurações.
- * 
- * @details **Lógica de Desenho:**
- * 1. **Fundo:** Limpa a tela com a cor de fundo do tema.
- * 2. **Estado Submenu:** Se um submenu estiver ativo, desenha um painel central 
- *    e o botão de voltar.
- * 3. **Estado Principal:** Desenha o título e itera sobre a lista de botões. 
- *    A lógica de foco (`setFocado`) é aplicada aqui para garantir que o realce 
- *    visual acompanhe o índice selecionado pelo controle.
+ * @brief Executa o ciclo de renderização da janela de configurações.
+ *
+ * Limpa o backbuffer com a cor de fundo do tema, desenha os elementos textuais 
+ * e botões correspondentes ao estado atual (menu principal ou submenu). 
+ * Aplica lógica de visibilidade para o destaque de foco em periféricos e 
+ * finaliza apresentando o frame no renderizador.
  */
 void JanelaConfiguracao::desenhar() {
     if (!aberta || !renderer) return;
 
     auto& tema = GerenciadorTemas::getInstance();
 
-    // 1. Preenchimento do fundo da janela conforme o tema atual
     SDL_Color corFundo = tema.getCorFundo(); 
     SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, corFundo.a);
     SDL_RenderClear(renderer);
 
     if (submenuAtivo != SubmenuConfig::NENHUM) {
-        // Renderização de Submenu: Exibe um painel placeholder centralizado
-        SDL_Rect quadrado = { (1525 - 200) / 2, (1116 - 200) / 2, 200, 200 };
+        // Cálculo e renderização do painel centralizado para submenus
+        int rectW = ConfigLayout::X(200);
+        int rectH = ConfigLayout::Y(200);
+        int rectX = (ConfigLayout::X(1525) - rectW) / 2;
+        int rectY = (ConfigLayout::Y(1116) - rectH) / 2;
+
+        SDL_Rect quadrado = { rectX, rectY, rectW, rectH };
         
         SDL_Color corPainel = tema.getCorRetangulos();
         SDL_SetRenderDrawColor(renderer, corPainel.r, corPainel.g, corPainel.b, corPainel.a);
@@ -304,11 +304,14 @@ void JanelaConfiguracao::desenhar() {
         
         if(btnVoltar) btnVoltar->desenhar(renderer);
     } else {
-        // Renderização do Menu Principal
-        desenharTexto(renderer, "Configurações", 535, 90, tema.getCorTextoNegrito(), 60);
+        // Renderização da interface do menu de configurações principal
+        desenharTexto(renderer, "Configurações", 
+                      ConfigLayout::X(535), ConfigLayout::Y(90), 
+                      tema.getCorTextoNegrito(), 
+                      ConfigLayout::F(60)); 
         
         for (int i = 0; i < (int)botoesMenu.size(); i++) {
-            // Atualiza o estado de foco visual para navegação por controle
+            // Sincronização do estado de foco visual com o índice de navegação do controlador
             if (i == indiceFocado && SDL_NumJoysticks() > 0) { 
                 botoesMenu[i]->setFocado(true);
             } else {
@@ -318,9 +321,7 @@ void JanelaConfiguracao::desenhar() {
         }
     }
 
-    // O botão de fechar é sempre desenhado por cima de tudo (z-index superior)
     if(btnFechar) btnFechar->desenhar(renderer);
     
-    // Apresenta o frame finalizado na janela secundária
     SDL_RenderPresent(renderer);
 }

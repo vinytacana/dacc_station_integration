@@ -1,58 +1,96 @@
 /**
  * @file BotaoPesquisa.cpp
- * @brief Implementação da barra de pesquisa com sugestões em tempo real.
- * 
- * Este arquivo gerencia a lógica de entrada de texto (via teclado físico ou virtual),
- * a filtragem dinâmica da biblioteca de jogos e a interação com a lista de resultados.
+ * @brief Implementação Responsiva do componente BotaoPesquisa.
+ *
+ * Este arquivo contém a lógica operacional do componente de pesquisa, incluindo
+ * o tratamento de entrada de texto via SDL_TextInput, a filtragem dinâmica de 
+ * títulos através do GerenciadorJogos e a renderização de uma interface 
+ * de resultados suspensa (dropdown) com suporte a temas e layout escalável.
  */
 
 #include "BotaoPesquisa.hpp"
 #include "GerenciadorJogos.hpp"
-#include "GerenciadorImagens.hpp" 
-#include "Utils.hpp" 
-#include "GerenciadorTemas.hpp" 
+#include "GerenciadorImagens.hpp"
+#include "Utils.hpp"
+#include "GerenciadorTemas.hpp"
+#include "ConfigLayout.hpp"
 #include <SDL2/SDL2_gfxPrimitives.h> 
 #include <iostream>
 
 using namespace MeuProjeto;
 
-/** @brief Referência ao gerenciador de dados para realizar as buscas. */
+/** * @brief Instâncias externas para acesso aos dados de jogos e recursos de imagem. 
+ */
 extern MeuProjeto::GerenciadorJogos gerenciadorJogos;
-/** @brief Referência ao gerenciador de texturas para carregar as capas nos resultados. */
 extern MeuProjeto::GerenciadorImagens gerImg; 
 
 /**
- * @brief Construtor especializado.
- * 
- * Além de inicializar o botão base, prepara o subsistema da SDL para receber 
- * eventos de texto.
+ * @brief Construtor da classe BotaoPesquisa.
+ * Inicializa o componente herdando de Botao e configura as variáveis de layout 
+ * responsivo. Utiliza a classe ConfigLayout para converter valores base em 
+ * coordenadas e dimensões proporcionais à resolução atual. Ativa o subsistema 
+ * de entrada de texto do SDL para captura de caracteres.
+ * @param renderer Ponteiro para o renderizador SDL.
+ * @param x Coordenada horizontal base.
+ * @param y Coordenada vertical base.
+ * @param largura Largura base do componente.
+ * @param altura Altura base do componente.
+ * @param texto Texto de placeholder exibido quando o campo está vazio.
  */
 BotaoPesquisa::BotaoPesquisa(SDL_Renderer* renderer, int x, int y, int largura, int altura, const std::string& texto)
-    : Botao(x, y, largura, altura, texto), renderer(renderer), inputAtivo(false), indiceFocoResultado(-1), jogoClicado(nullptr) {
-    if (renderer) SDL_StartTextInput(); // Habilita o buffer de texto da SDL
+    : Botao(x, y, largura, altura, texto), 
+      renderer(renderer), 
+      inputAtivo(false), 
+      indiceFocoResultado(-1), 
+      jogoClicado(nullptr) 
+{
+    if (renderer) SDL_StartTextInput();
+
+    // Inicialização de Variáveis de Layout Responsivo
+    
+    // Configuração das fontes escaladas
+    tamanhoPlaceholder = ConfigLayout::F(28);
+    tamanhoResultados = ConfigLayout::F(32);
+
+    // Definição das dimensões da lista de resultados suspensa
+    itemHeight = ConfigLayout::Y(120);
+    itemPadding = ConfigLayout::Y(6);
+    imgSize = ConfigLayout::F(90); 
+    imgOffsetX = ConfigLayout::X(15);
+    
+    // Cálculo de centralização vertical da imagem dentro do item de resultado
+    imgOffsetY = (itemHeight - imgSize) / 2;
+    
+    // Posicionamento do texto lateralmente em relação à imagem
+    textOffsetX = imgOffsetX + imgSize + ConfigLayout::X(20);
+
+    // Parâmetros estéticos de borda
+    raioBorda = ConfigLayout::F(15);
+    raioDestaque = ConfigLayout::F(18);
 }
 
 /**
- * @brief Destrutor.
- * Finaliza a captura de eventos de texto para economizar processamento.
+ * @brief Destrutor da classe BotaoPesquisa.
+ * Finaliza o subsistema de entrada de texto do SDL para liberar o foco do sistema operacional.
  */
 BotaoPesquisa::~BotaoPesquisa() { 
     SDL_StopTextInput(); 
 }
 
 /**
- * @brief Sincroniza a lista de resultados com o texto digitado.
- * 
- * Sempre que o texto muda, o `GerenciadorJogos` é consultado. Se o campo estiver
- * vazio, a lista de resultados é limpa imediatamente.
+ * @brief Atualiza o vetor de resultados baseando-se no conteúdo atual do input.
+ * Realiza uma consulta ao GerenciadorJogos para filtrar títulos que correspondam
+ * à string de pesquisa. Se o campo estiver vazio, a lista de resultados é limpa.
  */
 void BotaoPesquisa::atualizarResultados() { 
     if (textoInput.empty()) resultadosAtuais.clear(); 
     else resultadosAtuais = gerenciadorJogos.buscarPorNome(textoInput); 
 }
 
-// Manipulação de String
-
+/**
+ * @brief Adiciona texto ao buffer de entrada e atualiza a busca.
+ * @param txt String contendo os novos caracteres a serem inseridos.
+ */
 void BotaoPesquisa::adicionarTexto(const std::string& txt) { 
     textoInput += txt; 
     inputAtivo = true; 
@@ -60,6 +98,10 @@ void BotaoPesquisa::adicionarTexto(const std::string& txt) {
     resetarFocoResultados(); 
 }
 
+/**
+ * @brief Remove o último caractere do buffer de entrada.
+ * Aciona a re-filtragem dos resultados após a remoção do caractere.
+ */
 void BotaoPesquisa::apagarTexto() { 
     if (!textoInput.empty()) { 
         textoInput.pop_back(); 
@@ -68,38 +110,33 @@ void BotaoPesquisa::apagarTexto() {
     resetarFocoResultados(); 
 }
 
+/**
+ * @brief Limpa integralmente o estado de pesquisa.
+ * Reseta o texto, os resultados, o foco e o cache de renderização de texto.
+ */
 void BotaoPesquisa::limparTexto() { 
     textoInput.clear(); 
     resultadosAtuais.clear(); 
     resetarFocoResultados(); 
     inputAtivo = true; 
     jogoClicado = nullptr; 
+    limparCacheTexto();
 }
 
 /**
- * @brief Lógica de navegação vertical para controles (Gamepads).
- * 
- * @details **Como funciona a ação de navegação:**
- * 1. O sistema verifica se há resultados.
- * 2. `direcao > 0` (D-Pad para baixo): Move o foco para o próximo item da lista.
- * 3. `direcao < 0` (D-Pad para cima): Move o foco para o item anterior.
- * 4. Se o usuário subir além do primeiro item, o foco volta para a barra de pesquisa (`indiceFocoResultado = -1`).
- * 
- * @param direcao Valor positivo para descer, negativo para subir.
- * @return true se o movimento foi válido dentro dos limites.
+ * @brief Gerencia a navegação por índices na lista de resultados.
+ * @param direcao Valor positivo para avançar ou negativo para retroceder.
+ * @return true se a navegação resultou em uma mudança de foco válida.
  */
 bool BotaoPesquisa::navegarResultados(int direcao) {
     if (resultadosAtuais.empty()) return false;
     
     int maxIndex = std::min((int)resultadosAtuais.size(), MAX_RESULTADOS) - 1;
     
-    // Entrar na lista vindo da barra
     if (indiceFocoResultado == -1 && direcao > 0) { 
         indiceFocoResultado = 0; 
         return true; 
     }
-    
-    // Sair da lista voltando para a barra
     if (indiceFocoResultado == 0 && direcao < 0) { 
         indiceFocoResultado = -1; 
         return false; 
@@ -113,79 +150,84 @@ bool BotaoPesquisa::navegarResultados(int direcao) {
     return false;
 }
 
+/**
+ * @brief Verifica se há um item da lista de resultados com foco.
+ * @return true se houver foco ativo em algum resultado.
+ */
 bool BotaoPesquisa::temResultadoFocado() const { return indiceFocoResultado != -1; }
 
+/**
+ * @brief Obtém o jogo que detém o foco atual na lista de resultados.
+ * @return Ponteiro para o objeto Jogo focado, ou nullptr se inexistente.
+ */
 Jogo* BotaoPesquisa::getJogoResultadoFocado() { 
     if (indiceFocoResultado >= 0 && indiceFocoResultado < (int)resultadosAtuais.size()) 
         return &resultadosAtuais[indiceFocoResultado]; 
     return nullptr; 
 }
 
+/**
+ * @brief Reseta o índice de navegação dos resultados.
+ */
 void BotaoPesquisa::resetarFocoResultados() { indiceFocoResultado = -1; }
 
 /**
- * @brief Processamento de Eventos da Barra de Pesquisa.
- * 
- * @details **Tratamento de Ações:**
- * - **Movimento do Mouse:** Calcula se o cursor está sobre a barra ou sobre 
- *   cada um dos itens da lista de resultados suspensa.
- * - **Clique do Mouse (Barra):** Ativa o foco de escrita e solicita o teclado virtual.
- * - **Clique do Mouse (Resultado):** Define `jogoClicado`. O loop principal do 
- *   programa lerá este ponteiro para abrir a página do jogo.
- * - **Teclado:** Intercepta `SDL_TEXTINPUT` para caracteres e `SDL_KEYDOWN` para 
- *   teclas de comando (Backspace, Enter, Esc).
+ * @brief Processa eventos de interação (mouse e teclado) específicos do componente.
+ * Lida com o rastreamento do mouse para hover nos resultados, ativação do modo 
+ * de inserção de texto e captura de eventos físicos de teclado para edição do buffer.
+ * @param evento Referência ao evento SDL capturado.
+ * @param offsetX Deslocamento horizontal global.
+ * @param offsetY Deslocamento vertical global.
+ * @return true se o evento foi consumido pelo componente.
  */
 bool BotaoPesquisa::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
     bool consumido = false;
 
-    // 1. Detecção de Mouse Hover
+    // Processamento de movimento do mouse e hover dinâmico na lista de resultados
     if (evento.type == SDL_MOUSEMOTION) {
         int mx = evento.motion.x - offsetX, my = evento.motion.y - offsetY;
         hover = contemPonto(mx, my);
         resultadoHoverIndex = -1;
 
         if (!resultadosAtuais.empty()) {
-            int yPos = area.y + area.h + 10;
+            int yPos = area.y + area.h + ConfigLayout::Y(10); 
             for (size_t i = 0; i < resultadosAtuais.size() && i < MAX_RESULTADOS; ++i) {
-                SDL_Rect nr = {area.x, yPos, area.w, ITEM_HEIGHT};
+                SDL_Rect nr = {area.x, yPos, area.w, itemHeight};
                 if (mx >= nr.x && mx <= nr.x + nr.w && my >= nr.y && my <= nr.y + nr.h) {
                     resultadoHoverIndex = (int)i;
                 }
-                yPos += ITEM_HEIGHT + ITEM_PADDING;
+                yPos += itemHeight + itemPadding;
             }
         }
     }
 
-    // 2. Detecção de Cliques (Execução de Ações)
+    // Processamento de cliques para ativação de input ou seleção de jogo
     if (evento.type == SDL_MOUSEBUTTONUP && evento.button.button == SDL_BUTTON_LEFT) {
         int mx = evento.button.x - offsetX, my = evento.button.y - offsetY;
         
-        // Clicou na barra: Foca e pede teclado
         if (contemPonto(mx, my)) {
             inputAtivo = true; 
             SDL_StartTextInput(); 
             consumido = true; 
-            solicitaTeclado = true; // Sinaliza para o main abrir o TecladoVirtual
+            solicitaTeclado = true; 
         } 
-        // Clicou em um dos resultados da lista
         else if (!resultadosAtuais.empty()) {
-             int yPos = area.y + area.h + 10;
+             int yPos = area.y + area.h + ConfigLayout::Y(10);
              for (size_t i = 0; i < resultadosAtuais.size() && i < MAX_RESULTADOS; ++i) {
-                SDL_Rect nr = {area.x, yPos, area.w, ITEM_HEIGHT};
+                SDL_Rect nr = {area.x, yPos, area.w, itemHeight};
                 if (mx >= nr.x && mx <= nr.x + nr.w && my >= nr.y && my <= nr.y + nr.h) {
-                    // AÇÃO: Seleciona o jogo para visualização
                     jogoClicado = &resultadosAtuais[i]; 
                     inputAtivo = false; 
                     SDL_StopTextInput(); 
                     consumido = true; 
                     break;
                 }
-                yPos += ITEM_HEIGHT + ITEM_PADDING;
+                yPos += itemHeight + itemPadding;
              }
         }
     }
 
-    // 3. Entrada de Texto e Teclas Especiais
+    // Tratamento de entrada de texto e teclas de controle de edição
     if (inputAtivo) {
         if (evento.type == SDL_TEXTINPUT) { 
             adicionarTexto(evento.text.text); 
@@ -207,13 +249,12 @@ bool BotaoPesquisa::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
 }
 
 /**
- * @brief Renderização da Barra de Pesquisa.
- * 
- * @details **Lógica Visual:**
- * - Aplica cores dinâmicas baseadas no tema (Claro/Escuro).
- * - **Cursor Piscante:** Utiliza `SDL_GetTicks() % 1000 < 500` para alternar a 
- *   exibição do caractere `|` a cada meio segundo.
- * - **Placeholder:** Se não houver texto, exibe o rótulo padrão em cor suave.
+ * @brief Renderiza a barra de pesquisa e gerencia o estado visual (foco/hover).
+ * Desenha a caixa de entrada arredondada, o retângulo de destaque de foco por 
+ * controle e o cursor intermitente (caret) quando o input está ativo.
+ * @param renderer Ponteiro para o renderizador SDL.
+ * @param offsetX Deslocamento horizontal.
+ * @param offsetY Deslocamento vertical.
  */
 void BotaoPesquisa::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
     if (!renderer) return;
@@ -221,7 +262,6 @@ void BotaoPesquisa::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
     SDL_Rect adjustedArea = {area.x + offsetX, area.y + offsetY, area.w, area.h};
     auto& tema = GerenciadorTemas::getInstance();
     
-    // Definição da paleta reativa
     SDL_Color corBase = tema.getCorBotaoNormal(); 
     SDL_Color corHover = tema.getCorBotaoHover();
     
@@ -230,93 +270,93 @@ void BotaoPesquisa::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
     else if (hover || (focadoPorControle && indiceFocoResultado == -1)) corAtual = corHover;
     else corAtual = corBase;
     
-    // Desenha o corpo da barra (Arredondado via SDL2_gfx)
     SDL_SetRenderDrawColor(renderer, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
-    roundedBoxRGBA(renderer, adjustedArea.x, adjustedArea.y, adjustedArea.x + adjustedArea.w, adjustedArea.y + adjustedArea.h, 15, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
+    roundedBoxRGBA(renderer, adjustedArea.x, adjustedArea.y, adjustedArea.x + adjustedArea.w, adjustedArea.y + adjustedArea.h, raioBorda, corAtual.r, corAtual.g, corAtual.b, corAtual.a);
 
-    // Borda de foco para navegação por Gamepad
+    // Desenho do retângulo de destaque externo para foco via controle
     if (focadoPorControle && indiceFocoResultado == -1) {
         SDL_Color corDest = tema.getCorDestaque();
-        roundedRectangleRGBA(renderer, adjustedArea.x - 3, adjustedArea.y - 3, adjustedArea.x + adjustedArea.w + 3, adjustedArea.y + adjustedArea.h + 3, 18, corDest.r, corDest.g, corDest.b, 255);
+        int offsetFoco = ConfigLayout::X(3);
+        roundedRectangleRGBA(renderer, adjustedArea.x - offsetFoco, adjustedArea.y - offsetFoco, adjustedArea.x + adjustedArea.w + offsetFoco, adjustedArea.y + adjustedArea.h + offsetFoco, raioDestaque, corDest.r, corDest.g, corDest.b, 255);
     }
 
-    // Processamento do texto exibido
     std::string textoParaDesenhar;
     SDL_Color corTexto = tema.getCorTextoNormal(); 
 
+    // Lógica para exibição do texto ou placeholder e efeito de piscar do cursor
     if (inputAtivo) {
         textoParaDesenhar = textoInput;
         corTexto = tema.getCorTextoNegrito();
-        // Efeito de Cursor Piscante
         if (SDL_GetTicks() % 1000 < 500) textoParaDesenhar += "|";
     } else if (!textoInput.empty()) {
         textoParaDesenhar = textoInput;
         corTexto = tema.getCorTextoNegrito();
     } else {
-        textoParaDesenhar = texto; // Exibe o Placeholder (ex: "Pesquisar...")
+        textoParaDesenhar = texto;
     }
 
     if (!textoParaDesenhar.empty()) {
         int textY = adjustedArea.y + (adjustedArea.h / 2) - (tamanhoPlaceholder / 2);
-        MeuProjeto::desenharTexto(renderer, textoParaDesenhar, adjustedArea.x + 20, textY, corTexto, tamanhoPlaceholder, fontePlaceholder);
+        MeuProjeto::desenharTexto(renderer, textoParaDesenhar, adjustedArea.x + ConfigLayout::X(20), textY, corTexto, tamanhoPlaceholder, fontePlaceholder);
     }
 
-    // Renderiza a lista suspensa se houver jogos condizentes com a busca
     if (!resultadosAtuais.empty()) {
         desenharResultados(adjustedArea);
     }
 }
 
 /**
- * @brief Renderiza a lista de resultados (dropdown) abaixo da barra.
- * 
- * @details **Organização dos Itens:**
- * 1. Calcula a posição vertical `yPos` com um respiro de 10px abaixo da barra.
- * 2. Para cada jogo (até o limite `MAX_RESULTADOS`):
- *    - Desenha o fundo do item (destacado se focado por mouse ou controle).
- *    - Carrega e desenha a miniatura da capa do jogo.
- *    - Desenha o nome do jogo centralizado verticalmente em relação ao item.
- *    - Incrementa `yPos` para o próximo item considerando o `ITEM_PADDING`.
+ * @brief Renderiza a lista suspensa com as sugestões de pesquisa encontrados.
+ * Desenha cada item de resultado, incluindo a capa do jogo, o título e os 
+ * indicadores visuais de foco ou hover. Aplica o limite MAX_RESULTADOS para 
+ * exibição vertical.
+ * @param adjustedArea Retângulo da área da barra de pesquisa para cálculo de origem.
  */
 void BotaoPesquisa::desenharResultados(const SDL_Rect& adjustedArea) {
-    int yPos = adjustedArea.y + adjustedArea.h + 10;
+    int yPos = adjustedArea.y + adjustedArea.h + ConfigLayout::Y(10);
     auto& tema = GerenciadorTemas::getInstance();
 
     for (size_t i = 0; i < resultadosAtuais.size() && i < MAX_RESULTADOS; ++i) {
-        SDL_Rect nomeRect = {adjustedArea.x, yPos, adjustedArea.w, ITEM_HEIGHT};
+        SDL_Rect nomeRect = {adjustedArea.x, yPos, adjustedArea.w, itemHeight};
         
         bool isFocado = ((int)i == indiceFocoResultado) || ((int)i == resultadoHoverIndex);
         
-        // Estilização do fundo do resultado
         SDL_Color corFundo = isFocado ? tema.getCorBotaoHover() : tema.getCorRetangulos();
         
         SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, corFundo.a);
         SDL_RenderFillRect(renderer, &nomeRect);
         
-        // Borda interna de realce para navegação por controle
+        // Desenho de borda de destaque interna para itens selecionados via controle
         if ((int)i == indiceFocoResultado && focadoPorControle) {
             SDL_Color corDest = tema.getCorDestaque();
-            roundedRectangleRGBA(renderer, nomeRect.x + 2, nomeRect.y + 2, nomeRect.x + nomeRect.w - 2, nomeRect.y + nomeRect.h - 2, 5, corDest.r, corDest.g, corDest.b, 255);
+            int offsetInterno = ConfigLayout::X(2);
+            int raioItem = ConfigLayout::F(5);
+            roundedRectangleRGBA(renderer, nomeRect.x + offsetInterno, nomeRect.y + offsetInterno, nomeRect.x + nomeRect.w - offsetInterno, nomeRect.y + nomeRect.h - offsetInterno, raioItem, corDest.r, corDest.g, corDest.b, 255);
         }
 
-        // Desenho da Miniatura (Capa)
         const auto& jogo = resultadosAtuais[i];
         std::string caminho = jogo.getCapaTelaPrincipal();
         
+        // Renderização da miniatura da capa do jogo
         if (!caminho.empty()) {
             SDL_Texture* img = gerImg.carregar(renderer, caminho.c_str());
             if (img) {
-                // Posicionamento da imagem com base nos offsets definidos no header
-                SDL_Rect imgRect = {nomeRect.x + IMG_OFFSET_X, yPos + IMG_OFFSET_Y, IMG_SIZE, IMG_SIZE}; 
+                SDL_Rect imgRect = {nomeRect.x + imgOffsetX, yPos + imgOffsetY, imgSize, imgSize}; 
                 SDL_RenderCopy(renderer, img, nullptr, &imgRect);
             }
         }
 
-        // Desenho do Nome do Jogo
-        int textY = yPos + (ITEM_HEIGHT / 2) - (tamanhoResultados / 2);
-        MeuProjeto::desenharTexto(renderer, jogo.getNome(), nomeRect.x + TEXT_OFFSET_X, textY, tema.getCorTextoNegrito(), tamanhoResultados, fonteResultados);
+        // Renderização do nome do jogo com verificação de tamanho
+        int textY = yPos + (itemHeight / 2) - (tamanhoResultados / 2);
         
-        // Salto para a próxima linha de resultado
-        yPos += ITEM_HEIGHT + ITEM_PADDING;
+        std::string nomeExibicao = jogo.getNome();
+        // Se o nome for maior que 40 caracteres, corta e adiciona "..."
+        if (nomeExibicao.length() > 40) {
+            nomeExibicao = nomeExibicao.substr(0, 40) + "...";
+        }
+
+        MeuProjeto::desenharTexto(renderer, nomeExibicao, nomeRect.x + textOffsetX, textY, tema.getCorTextoNegrito(), tamanhoResultados, fonteResultados);
+        
+        yPos += itemHeight + itemPadding;
     }
 }

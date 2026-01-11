@@ -1,10 +1,10 @@
 /**
  * @file TecladoVirtual.hpp
- * @brief Definição da classe TecladoVirtual para entrada de texto via interface gráfica.
- * 
- * Este arquivo contém a lógica de um teclado alfanumérico renderizado em tela,
- * projetado para ser operado via controle (joystick) ou mouse, facilitando a
- * busca de jogos na biblioteca.
+ * @brief Definição da classe TecladoVirtual.
+ *
+ * Este arquivo especifica a interface de um teclado virtual projetado para permitir
+ * a entrada de texto em sistemas que utilizam SDL2, com suporte nativo para 
+ * navegação via controle (gamepad) e interação direta via mouse.
  */
 
 #ifndef TECLADO_VIRTUAL_HPP
@@ -17,78 +17,80 @@
 #include <string>
 #include "BotaoPesquisa.hpp"
 
-/**
- * @namespace MeuProjeto
- * @brief Namespace principal do projeto da interface de biblioteca de jogos.
- */
 namespace MeuProjeto {
 
 /**
  * @class TecladoVirtual
- * @brief Gerencia e renderiza um teclado virtual na interface.
- * 
- * A classe controla uma grade de teclas alfanuméricas e funções especiais (espaço, apagar, etc.).
- * Ela suporta navegação por índices (para controles) e detecção de coordenadas (para mouse),
- * enviando os caracteres selecionados diretamente para um objeto BotaoPesquisa.
+ * @brief Gerencia e renderiza uma interface de teclado na tela para entrada de dados.
+ *
+ * A classe TecladoVirtual provê uma solução de acessibilidade e entrada de dados
+ * para interfaces de usuário, permitindo que caracteres sejam enviados para um
+ * componente BotaoPesquisa. Inclui lógica de navegação por grade, tratamento de
+ * deadzone para analogicos e suporte a layouts responsivos.
  */
 class TecladoVirtual {
 public:
     /**
-     * @brief Construtor que inicializa o estado do teclado e as configurações de layout.
+     * @brief Construtor da classe TecladoVirtual.
+     * 
+     * Inicializa o estado interno do teclado, definindo as configurações padrão
+     * de visibilidade e posicionamento dos índices de navegação.
      */
     TecladoVirtual();
 
     /**
      * @brief Destrutor da classe TecladoVirtual.
+     * 
+     * Responsável pela liberação de recursos associados à instância do teclado virtual.
      */
     ~TecladoVirtual();
 
     /**
-     * @brief Renderiza o teclado completo na tela.
+     * @brief Renderiza a interface do teclado no renderer especificado.
      * 
-     * Desenha as linhas de caracteres, as teclas especiais e o cursor de seleção
-     * (highlight) sobre a tecla atualmente focada.
+     * Este método processa o desenho do painel de fundo, das teclas de caracteres
+     * e das teclas especiais, considerando o estado atual de foco e visibilidade.
      * 
-     * @param renderer O renderizador SDL onde o teclado será desenhado.
+     * @param renderer Ponteiro para o SDL_Renderer onde o teclado será desenhado.
      */
     void desenhar(SDL_Renderer* renderer);
-    
+
     /**
-     * @brief Processa entradas vindas de um controle (Gamepad/Joystick).
+     * @brief Processa entradas provenientes de controles (gamepads).
      * 
-     * Lida com o movimento do D-Pad ou Analógico para mover o cursor entre as teclas
-     * e processa o botão de confirmação para inserir o caractere no alvo.
+     * Gerencia a navegação entre teclas e a seleção de caracteres utilizando
+     * eventos de botões ou eixos analógicos do SDL_Event.
      * 
-     * @param evento O evento SDL capturado (SDL_JOYBUTTONDOWN, SDL_JOYAXISMOTION, etc).
-     * @param alvo Ponteiro para o BotaoPesquisa que receberá o texto digitado.
-     * @return true se o evento foi processado pelo teclado, false caso contrário.
+     * @param evento Referência para o evento SDL capturado.
+     * @param alvo Ponteiro para o objeto BotaoPesquisa que receberá o texto inserido.
+     * @return true se o evento foi processado com sucesso, false caso contrário.
      */
     bool processarControle(SDL_Event& evento, BotaoPesquisa* alvo);
-    
+
     /**
-     * @brief Processa entradas vindas do mouse.
+     * @brief Processa entradas provenientes do mouse.
      * 
-     * Verifica se o clique ocorreu sobre uma tecla específica ou fora da área do teclado.
+     * Trata o posicionamento do cursor e o clique sobre as teclas virtuais.
      * 
-     * @param evento O evento SDL de mouse (SDL_MOUSEBUTTONDOWN).
-     * @param alvo Ponteiro para o BotaoPesquisa que receberá o texto digitado.
-     * @return true Se o evento foi consumido pelo teclado (impede que o clique atinja elementos atrás do teclado).
-     * @return false Se o clique foi fora da área de interação do teclado.
+     * @param evento Referência para o evento SDL capturado.
+     * @param alvo Ponteiro para o objeto BotaoPesquisa que receberá o texto inserido.
+     * @return true se o clique foi realizado sobre uma tecla, false caso contrário.
      */
     bool processarMouse(SDL_Event& evento, BotaoPesquisa* alvo);
 
     /**
-     * @brief Torna o teclado visível e reinicia o cursor para a posição inicial.
+     * @brief Torna o teclado visível e reseta os índices de navegação.
      */
     void abrir() { visivel = true; indiceX = 0; indiceY = 0; }
 
     /**
-     * @brief Oculta o teclado da interface.
+     * @brief Oculta a interface do teclado virtual.
      */
     void fechar() { visivel = false; }
 
     /**
-     * @brief Verifica se o teclado está ativo/visível na tela.
+     * @brief Verifica se o teclado está sendo exibido no momento.
+     * 
      * @return true se visível, false caso contrário.
      */
     bool estaVisivel() const { return visivel; }
@@ -96,71 +98,78 @@ public:
 private:
     bool visivel = false; /**< Estado de exibição do teclado. */
     
-    // Layout do teclado dividido por linhas
-    std::vector<std::string> linha1 = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
-    std::vector<std::string> linha2 = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"};
-    std::vector<std::string> linha3 = {"A", "S", "D", "F", "G", "H", "J", "K", "L"};
-    std::vector<std::string> linha4 = {"Z", "X", "C", "V", "B", "N", "M"};
+    std::vector<std::string> linha1 = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"}; /**< Primeira linha de caracteres (numérica). */
+    std::vector<std::string> linha2 = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"}; /**< Segunda linha de caracteres (alfabética). */
+    std::vector<std::string> linha3 = {"A", "S", "D", "F", "G", "H", "J", "K", "L"};      /**< Terceira linha de caracteres (alfabética). */
+    std::vector<std::string> linha4 = {"Z", "X", "C", "V", "B", "N", "M"};               /**< Quarta linha de caracteres (alfabética). */
     
-    /**
-     * @enum TeclaEspecial
-     * @brief Identificadores para teclas que não são caracteres simples.
-     */
-    enum class TeclaEspecial { NENHUMA, ESPACO, LIMPAR, APAGAR, ENTER };
+    int indiceX = 0; /**< Índice horizontal atual do foco no teclado. */
+    int indiceY = 0; /**< Índice vertical atual do foco no teclado. */
     
-    int indiceX = 0; /**< Posição horizontal atual do cursor no grid. */
-    int indiceY = 0; /**< Posição vertical atual do cursor no grid. */
+    int baseX; /**< Coordenada X base para o início da renderização do teclado. */
+    int baseY; /**< Coordenada Y base para o início da renderização do teclado. */
+    int teclaLargura; /**< Largura individual de cada tecla alfanumérica. */
+    int teclaAltura;  /**< Altura individual de cada tecla alfanumérica. */
+    int gapX; /**< Espaçamento horizontal entre as teclas. */
+    int gapY; /**< Espaçamento vertical entre as linhas de teclas. */
     
-    // Configurações de layout (posicionamento e tamanho)
-    const int BASE_X = 460;     /**< Posição X inicial do desenho do teclado. */
-    const int BASE_Y = 600;     /**< Posição Y inicial do desenho do teclado. */
-    const int TECLA_SIZE = 60;  /**< Tamanho em pixels de cada tecla quadrada. */
-    const int GAP = 10;         /**< Espaçamento entre as teclas. */
-    
-    // Controle de tempo para evitar entradas duplicadas (debounce)
-    Uint32 ultimoInput = 0;
-    const Uint32 INTERVALO_INPUT = 150;
+    int painelPadding; /**< Margem interna do painel de fundo. */
+    int painelLargura; /**< Largura total do painel de fundo do teclado. */
+    int painelAltura;  /**< Altura total do painel de fundo do teclado. */
 
-    // Configurações para sticks analógicos
-    Uint32 ultimoInputAnalogico = 0;
-    const Uint32 INTERVALO_ANALOGICO = 200;
-    const int DEADZONE = 16000; /**< Limiar de sensibilidade para ignorar movimentos leves no analógico. */
+    int offsetEspacoX;     /**< Deslocamento horizontal inicial para o botão de espaço. */
+    int larguraBotaoEsp;   /**< Largura padrão para os botões de funções especiais (Espaço, Limpar). */
+    int larguraBotaoOk;    /**< Largura específica para o botão de confirmação (OK). */
+    int gapBotoesEsp;      /**< Espaçamento entre os botões da linha especial. */
+    int offsetTextoY;      /**< Deslocamento vertical para centralização de texto nos botões especiais. */
+
+    int fonteTamanhoTecla; /**< Tamanho da fonte utilizada nas teclas alfanuméricas. */
+    int fonteTamanhoEsp;   /**< Tamanho da fonte utilizada nos botões de funções especiais. */
+    int offsetCharX;       /**< Ajuste fino horizontal para centralização de caracteres. */
+    int offsetCharY;       /**< Ajuste fino vertical para centralização de caracteres. */
+    
+    Uint32 ultimoInput = 0; /**< Marca temporal do último input processado via botões. */
+    const Uint32 INTERVALO_INPUT = 150; /**< Período mínimo de espera entre inputs de botões (ms). */
+    Uint32 ultimoInputAnalogico = 0; /**< Marca temporal do último input processado via analógico. */
+    const Uint32 INTERVALO_ANALOGICO = 200; /**< Período mínimo de espera entre inputs analógicos (ms). */
+    const int DEADZONE = 16000; /**< Limite de sensibilidade para ativação dos eixos analógicos. */
 
     /**
-     * @brief Desenha uma tecla individual.
-     * @param renderer Renderizador SDL.
-     * @param x Coordenada X.
-     * @param y Coordenada Y.
-     * @param letra Caractere a ser exibido.
-     * @param focado Define se a tecla deve ser desenhada com destaque de seleção.
+     * @brief Desenha uma tecla individual no renderer.
+     * 
+     * @param renderer Ponteiro para o SDL_Renderer.
+     * @param x Posição horizontal da tecla.
+     * @param y Posição vertical da tecla.
+     * @param letra Caractere ou string a ser exibido na tecla.
+     * @param focado Indica se a tecla deve ser renderizada com destaque de foco.
      */
     void desenharTecla(SDL_Renderer* renderer, int x, int y, const std::string& letra, bool focado);
-    
+
     /**
-     * @brief Desenha a linha de teclas especiais (Espaço, Apagar, etc).
-     * @param renderer Renderizador SDL.
+     * @brief Desenha a linha inferior de botões especiais (Espaço, Limpar, OK).
+     * 
+     * @param renderer Ponteiro para o SDL_Renderer.
      */
     void desenharEspeciais(SDL_Renderer* renderer);
 
     /**
-     * @brief Altera a posição do cursor no grid, tratando limites de borda.
-     * @param deltaX Mudança em X (-1, 0, 1).
-     * @param deltaY Mudança em Y (-1, 0, 1).
+     * @brief Atualiza a posição do cursor/foco no teclado virtual.
+     * 
+     * @param deltaX Alteração no índice horizontal.
+     * @param deltaY Alteração no índice vertical.
      */
     void moverCursor(int deltaX, int deltaY);
-    
+
     /**
-     * @brief Auxiliar para detecção de colisão AABB (caixa delimitadora).
-     * 
-     * Verifica se as coordenadas do mouse estão dentro do retângulo de uma tecla.
+     * @brief Verifica se uma coordenada de mouse está dentro dos limites de uma tecla.
      * 
      * @param mouseX Posição X do mouse.
      * @param mouseY Posição Y do mouse.
-     * @param x X da tecla.
-     * @param y Y da tecla.
+     * @param x Posição X da tecla.
+     * @param y Posição Y da tecla.
      * @param w Largura da tecla.
      * @param h Altura da tecla.
-     * @return true se houver colisão.
+     * @return true se o ponto estiver contido na área, false caso contrário.
      */
     bool checarCliqueTecla(int mouseX, int mouseY, int x, int y, int w, int h);
 };

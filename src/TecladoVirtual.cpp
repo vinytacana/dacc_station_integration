@@ -1,90 +1,138 @@
 /**
  * @file TecladoVirtual.cpp
- * @brief Implementação da lógica de renderização e interação do teclado virtual.
- * 
- * Este arquivo contém os cálculos de posicionamento das teclas, a lógica de 
- * navegação por foco (para controles) e a detecção de colisão para cliques de mouse.
+ * @brief Implementação Responsiva do Teclado Virtual.
+ *
+ * Este arquivo contém a lógica de funcionamento e renderização do teclado virtual.
+ * A implementação foca na responsividade, utilizando a classe ConfigLayout para 
+ * escalar dimensões e posições, e integra-se ao GerenciadorTemas para garantir 
+ * a consistência visual com o restante da interface.
  */
 
 #include "TecladoVirtual.hpp"
 #include "Utils.hpp"
-#include "GerenciadorTemas.hpp" 
+#include "GerenciadorTemas.hpp"
+#include "ConfigLayout.hpp"
 #include <SDL2/SDL2_gfxPrimitives.h>
 #include <iostream>
 
 using namespace MeuProjeto;
 using namespace std;
 
-TecladoVirtual::TecladoVirtual() {}
+/**
+ * @brief Construtor da classe TecladoVirtual.
+ * 
+ * Realiza a inicialização de todos os parâmetros de layout utilizando métodos de 
+ * escala (ConfigLayout::X, Y e F). Define as dimensões das teclas, espaçamentos (gaps), 
+ * preenchimentos (padding) e tamanhos de fonte de forma a manter a proporção visual 
+ * em diferentes resoluções de tela.
+ */
+TecladoVirtual::TecladoVirtual() {
+    // --- Inicialização de Layout Responsivo ---
+    
+    baseX = ConfigLayout::X(460);
+    baseY = ConfigLayout::Y(600);
+    
+    // Configuração das dimensões das teclas alfanuméricas
+    teclaLargura = ConfigLayout::X(60);
+    teclaAltura = ConfigLayout::Y(60);
+    gapX = ConfigLayout::X(10);
+    gapY = ConfigLayout::Y(10);
+
+    // Configuração do painel de fundo que abriga o teclado
+    painelLargura = ConfigLayout::X(1000);
+    painelAltura = ConfigLayout::Y(400);
+    painelPadding = ConfigLayout::X(20); 
+
+    // Configuração dos elementos da linha de funções especiais
+    offsetEspacoX = ConfigLayout::X(50);
+    larguraBotaoEsp = ConfigLayout::X(180);
+    larguraBotaoOk = ConfigLayout::X(100);
+    gapBotoesEsp = ConfigLayout::X(20);
+    offsetTextoY = ConfigLayout::Y(15);
+
+    // Configuração de fontes e ajustes de centralização de caracteres
+    fonteTamanhoTecla = ConfigLayout::F(32);
+    fonteTamanhoEsp = ConfigLayout::F(24);
+    offsetCharX = ConfigLayout::X(20);
+    offsetCharY = ConfigLayout::Y(10);
+}
+
+/**
+ * @brief Destrutor da classe TecladoVirtual.
+ */
 TecladoVirtual::~TecladoVirtual() {}
 
 /**
- * @brief Renderiza o teclado na tela se estiver visível.
+ * @brief Gerencia a renderização principal do teclado e seus componentes.
  * 
- * A renderização segue os seguintes passos:
- * 1. Desenha um painel de fundo semitransparente (overlay).
- * 2. Calcula a centralização horizontal de cada linha de teclas.
- * 3. Itera sobre as strings das linhas para desenhar teclas individuais.
- * 4. Chama o desenho das teclas especiais na base.
+ * O método desenha o painel de fundo com transparência (blend mode), calcula a 
+ * centralização dinâmica de cada linha de teclas baseando-se na largura do painel 
+ * e delega o desenho individual das teclas e dos botões especiais.
  * 
- * @param renderer Renderizador SDL principal.
+ * @param renderer Ponteiro para o renderizador SDL_Renderer.
  */
 void TecladoVirtual::desenhar(SDL_Renderer* renderer) {
     if (!visivel) return;
 
     auto& tema = GerenciadorTemas::getInstance();
 
-    // Geometria do Fundo
-    // O teclado é fixado a partir de BASE_X e BASE_Y. 
-    // O padding externo do painel é de 20px em relação às teclas.
-    SDL_Rect fundo = {BASE_X - 20, BASE_Y - 20, 1000, 400};
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    // Definição da área do fundo responsivo
+    SDL_Rect fundo = {
+        baseX - painelPadding, 
+        baseY - painelPadding, 
+        painelLargura, 
+        painelAltura
+    };
     
-    // Define a cor do painel com base no tema, com Alpha em 240 (quase opaco)
+    // Configuração de transparência e cor de fundo baseada no tema atual
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     if (tema.getTemaAtual() == TipoTema::CLARO) {
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 240); 
     } else {
         SDL_SetRenderDrawColor(renderer, 30, 30, 35, 240);
     }
-    
     SDL_RenderFillRect(renderer, &fundo);
 
-    int startY = BASE_Y;
+    int startY = baseY;
     
     /**
-     * @brief Lambda auxiliar para desenhar uma linha de teclas.
-     * 
-     * Calcula o startX para que a linha fique perfeitamente centralizada dentro
-     * da largura de 1000px do painel, considerando o tamanho das teclas e o GAP.
+     * @brief Lambda interna para renderizar linhas de teclas com centralização automática.
+     * @param linha Vetor de strings com os caracteres da linha.
+     * @param yIdx Índice vertical da linha para controle de foco.
      */
     auto desenharLinha = [&](const vector<string>& linha, int yIdx) {
-        int larguraTotalLinha = (linha.size() * (TECLA_SIZE + GAP)) - GAP;
-        int startX = BASE_X + (1000 - larguraTotalLinha) / 2;
+        int larguraTotalLinha = (linha.size() * (teclaLargura + gapX)) - gapX;
+        
+        // Cálculo de início horizontal para centralizar a linha dentro do painel
+        int startX = baseX + (painelLargura - (2 * painelPadding) - larguraTotalLinha) / 2;
 
         for (size_t i = 0; i < linha.size(); i++) {
-            // Verifica se esta tecla é a que detém o foco atual do controle
             bool focado = (indiceY == yIdx && indiceX == (int)i);
-            desenharTecla(renderer, startX + i * (TECLA_SIZE + GAP), startY, linha[i], focado);
+            desenharTecla(renderer, startX + i * (teclaLargura + gapX), startY, linha[i], focado);
         }
-        // Avança o Y para a próxima linha
-        startY += TECLA_SIZE + GAP;
+        startY += teclaAltura + gapY;
     };
 
-    // Desenha as 4 linhas alfanuméricas
     desenharLinha(linha1, 0);
     desenharLinha(linha2, 1);
     desenharLinha(linha3, 2);
     desenharLinha(linha4, 3);
 
-    // Desenha a última linha (Especiais)
     desenharEspeciais(renderer);
 }
 
 /**
- * @brief Desenha uma tecla individual (letra ou número).
+ * @brief Renderiza uma tecla individual utilizando primitivas gráficas.
  * 
- * Utiliza a biblioteca SDL2_gfx para desenhar retângulos arredondados.
- * Se a tecla estiver focada, desenha uma borda extra de destaque.
+ * Utiliza a biblioteca SDL2_gfx para desenhar caixas arredondadas (roundedBoxRGBA), 
+ * aplicando cores diferenciadas para estados de repouso e foco, além de renderizar 
+ * o texto centralizado na tecla.
+ * 
+ * @param renderer Ponteiro para o renderizador SDL_Renderer.
+ * @param x Posição horizontal da tecla.
+ * @param y Posição vertical da tecla.
+ * @param letra Texto/caractere a ser exibido.
+ * @param focado Booleano que indica se a tecla possui o foco atual de navegação.
  */
 void TecladoVirtual::desenharTecla(SDL_Renderer* renderer, int x, int y, const string& letra, bool focado) {
     auto& tema = GerenciadorTemas::getInstance();
@@ -93,86 +141,91 @@ void TecladoVirtual::desenharTecla(SDL_Renderer* renderer, int x, int y, const s
     SDL_Color corTexto = tema.getCorTextoNegrito();
     SDL_Color corDestaque = tema.getCorDestaque();
 
+    int raio = ConfigLayout::F(5); 
+
     if (focado) {
-        // Borda de foco: Padding de 2px para fora da tecla
-        roundedBoxRGBA(renderer, x - 2, y - 2, x + TECLA_SIZE + 2, y + TECLA_SIZE + 2, 5, 
+        int padFoco = ConfigLayout::X(2);
+        // Desenha a borda de destaque externa
+        roundedBoxRGBA(renderer, x - padFoco, y - padFoco, x + teclaLargura + padFoco, y + teclaAltura + padFoco, raio, 
                        corDestaque.r, corDestaque.g, corDestaque.b, 255);
-        // Fundo da tecla focada (usa cor de Hover para feedback)
-        roundedBoxRGBA(renderer, x, y, x + TECLA_SIZE, y + TECLA_SIZE, 5, 
+        // Desenha o corpo da tecla em estado hover
+        roundedBoxRGBA(renderer, x, y, x + teclaLargura, y + teclaAltura, raio, 
                        tema.getCorBotaoHover().r, tema.getCorBotaoHover().g, tema.getCorBotaoHover().b, 255);
     } else {
-        // Fundo da tecla em estado normal
-        roundedBoxRGBA(renderer, x, y, x + TECLA_SIZE, y + TECLA_SIZE, 5, 
+        roundedBoxRGBA(renderer, x, y, x + teclaLargura, y + teclaAltura, raio, 
                        corTecla.r, corTecla.g, corTecla.b, 255);
     }
     
-    // Renderiza o caractere centralizado (Offset manual de 20x10px)
-    desenharTexto(renderer, letra, x + 20, y + 10, corTexto, 32, TipoFonte::NEGRITO);
+    desenharTexto(renderer, letra, x + offsetCharX, y + offsetCharY, corTexto, fonteTamanhoTecla, TipoFonte::NEGRITO);
 }
 
 /**
- * @brief Desenha a linha de botões funcionais (Espaço, Limpar, Apagar, OK).
+ * @brief Renderiza a linha de botões de funções especiais (Espaço, Limpar, Apagar, OK).
  * 
- * Estes botões possuem larguras diferentes das teclas normais e cores
- * semânticas (Vermelho para limpar, Verde para OK).
+ * Organiza horizontalmente os botões funcionais na base do teclado, aplicando 
+ * lógica de foco individual e estimativa de largura de caractere para centralização 
+ * manual dos rótulos textuais.
+ * 
+ * @param renderer Ponteiro para o renderizador SDL_Renderer.
  */
 void TecladoVirtual::desenharEspeciais(SDL_Renderer* renderer) {
-    int y = BASE_Y + 4 * (TECLA_SIZE + GAP); // Posiciona na 5ª linha (índice 4)
-    int espacoX = BASE_X + 50;
-    int largPadrao = 180;
-    int gapBotoes = 20;
+    int y = baseY + 4 * (teclaAltura + gapY);
+    int espacoX = baseX + offsetEspacoX;
     int yEsp = y;
 
     auto& tema = GerenciadorTemas::getInstance();
     SDL_Color corTexto = tema.getCorTextoNegrito();
     SDL_Color corDestaque = tema.getCorDestaque();
+    int raio = ConfigLayout::F(5);
+    int padFoco = ConfigLayout::X(2);
 
     /**
-     * @brief Lambda para desenhar botões especiais coloridos.
+     * @brief Lambda para facilitar a renderização recorrente de botões especiais.
      */
     auto desenharEsp = [&](int x, int w, const string& txt, int idxX, int r, int g, int b) {
         bool focado = (indiceY == 4 && indiceX == idxX);
         if (focado) {
-            roundedBoxRGBA(renderer, x-2, yEsp-2, x+w+2, yEsp+TECLA_SIZE+2, 5, 
+            roundedBoxRGBA(renderer, x-padFoco, yEsp-padFoco, x+w+padFoco, yEsp+teclaAltura+padFoco, raio, 
                            corDestaque.r, corDestaque.g, corDestaque.b, 255);
         }
-        roundedBoxRGBA(renderer, x, yEsp, x+w, yEsp+TECLA_SIZE, 5, r, g, b, 255);
+        roundedBoxRGBA(renderer, x, yEsp, x+w, yEsp+teclaAltura, raio, r, g, b, 255);
         
-        // Centralização do texto baseada na largura do botão
-        int textX = x + (w/2) - (txt.length() * 8); 
-        desenharTexto(renderer, txt, textX, yEsp + 15, {255,255,255,255}, 24, TipoFonte::NEGRITO); 
+        int charWEstimate = fonteTamanhoEsp / 2; 
+        int textX = x + (w/2) - (txt.length() * charWEstimate / 2); 
+        desenharTexto(renderer, txt, textX, yEsp + offsetTextoY, {255,255,255,255}, fonteTamanhoEsp, TipoFonte::NEGRITO); 
     };
 
-    // 0: ESPAÇO (Segue a cor do tema)
+    // Renderização do botão ESPAÇO
     SDL_Color btnCor = tema.getCorBotaoNormal();
     bool focadoEspaco = (indiceY == 4 && indiceX == 0);
     if (focadoEspaco) {
-        roundedBoxRGBA(renderer, espacoX-2, y-2, espacoX+largPadrao+2, y+TECLA_SIZE+2, 5, 
+        roundedBoxRGBA(renderer, espacoX-padFoco, y-padFoco, espacoX+larguraBotaoEsp+padFoco, y+teclaAltura+padFoco, raio, 
                        corDestaque.r, corDestaque.g, corDestaque.b, 255);
     }
-    roundedBoxRGBA(renderer, espacoX, y, espacoX+largPadrao, y+TECLA_SIZE, 5, 
+    roundedBoxRGBA(renderer, espacoX, y, espacoX+larguraBotaoEsp, y+teclaAltura, raio, 
                    btnCor.r, btnCor.g, btnCor.b, 255);
-    desenharTexto(renderer, "ESPAÇO", espacoX + 40, y + 15, corTexto, 24, TipoFonte::NEGRITO);
+    
+    desenharTexto(renderer, "ESPACO", espacoX + ConfigLayout::X(40), y + offsetTextoY, corTexto, fonteTamanhoEsp, TipoFonte::NEGRITO);
 
-    // 1: LIMPAR (Vermelho suave)
-    int limparX = espacoX + largPadrao + gapBotoes;
-    desenharEsp(limparX, largPadrao, "LIMPAR", 1, 120, 60, 60);
+    // Renderização dos demais botões com cores específicas de ação
+    int limparX = espacoX + larguraBotaoEsp + gapBotoesEsp;
+    desenharEsp(limparX, larguraBotaoEsp, "LIMPAR", 1, 120, 60, 60);
 
-    // 2: APAGAR (Laranja suave)
-    int apagarX = limparX + largPadrao + gapBotoes;
-    desenharEsp(apagarX, largPadrao, "<--", 2, 150, 100, 60);
+    int apagarX = limparX + larguraBotaoEsp + gapBotoesEsp;
+    desenharEsp(apagarX, larguraBotaoEsp, "<--", 2, 150, 100, 60);
 
-    // 3: OK (Verde suave)
-    int okX = apagarX + largPadrao + gapBotoes;
-    int largOk = 100;
-    desenharEsp(okX, largOk, "OK", 3, 60, 150, 60);
+    int okX = apagarX + larguraBotaoEsp + gapBotoesEsp;
+    desenharEsp(okX, larguraBotaoOk, "OK", 3, 60, 150, 60);
 }
 
 /**
- * @brief Gerencia o movimento do cursor na matriz do teclado.
+ * @brief Executa a lógica de movimentação do foco na grade de teclas.
  * 
- * Ajusta os índices X e Y garantindo que o cursor não saia dos limites das linhas,
- * que possuem tamanhos variados.
+ * Controla os limites dos índices X e Y, garantindo que ao mudar de linha, o 
+ * índice horizontal seja ajustado para o tamanho máximo da nova linha selecionada.
+ * 
+ * @param deltaX Deslocamento horizontal (-1, 0, 1).
+ * @param deltaY Deslocamento vertical (-1, 0, 1).
  */
 void TecladoVirtual::moverCursor(int deltaX, int deltaY) {
     if (deltaY != 0) {
@@ -180,13 +233,12 @@ void TecladoVirtual::moverCursor(int deltaX, int deltaY) {
         if (indiceY < 0) indiceY = 0;
         if (indiceY > 4) indiceY = 4;
         
-        // Ajusta o X se a nova linha for menor que a anterior
         int maxX = 0;
         if (indiceY == 0) maxX = linha1.size();
         else if (indiceY == 1) maxX = linha2.size();
         else if (indiceY == 2) maxX = linha3.size();
         else if (indiceY == 3) maxX = linha4.size();
-        else if (indiceY == 4) maxX = 4; // Linha de especiais
+        else if (indiceY == 4) maxX = 4;
         
         if (indiceX >= maxX) indiceX = maxX - 1;
     }
@@ -206,19 +258,20 @@ void TecladoVirtual::moverCursor(int deltaX, int deltaY) {
 }
 
 /**
- * @brief Processa entradas de controles (Gamepad).
+ * @brief Processa entradas de controles físicos (gamepad) para interação com o teclado.
  * 
- * Lida com:
- * - Movimento Analógico (com Deadzone).
- * - Movimento D-Pad (Digital).
- * - Botão A para confirmar tecla.
- * - Botão B para fechar teclado.
+ * Trata tanto eixos analógicos (aplicando deadzone e intervalos de tempo para evitar 
+ * disparos múltiplos) quanto botões de D-Pad. O botão A seleciona o caractere e o 
+ * botão B fecha o teclado.
+ * 
+ * @param evento Referência para o evento SDL.
+ * @param alvo Ponteiro para o BotaoPesquisa que receberá os caracteres.
+ * @return true se o evento de controle foi capturado e processado.
  */
 bool TecladoVirtual::processarControle(SDL_Event& evento, BotaoPesquisa* alvo) {
     if (!visivel) return false;
     Uint32 tempoAtual = SDL_GetTicks();
 
-    // Processamento Analógico
     if (evento.type == SDL_CONTROLLERAXISMOTION) {
         if (tempoAtual - ultimoInputAnalogico > INTERVALO_ANALOGICO) {
             int valX = 0, valY = 0;
@@ -240,7 +293,6 @@ bool TecladoVirtual::processarControle(SDL_Event& evento, BotaoPesquisa* alvo) {
         return true;
     }
 
-    // Processamento de Botões
     if (evento.type == SDL_CONTROLLERBUTTONDOWN) {
         if (tempoAtual - ultimoInput < INTERVALO_INPUT) return true;
         
@@ -252,7 +304,6 @@ bool TecladoVirtual::processarControle(SDL_Event& evento, BotaoPesquisa* alvo) {
             
             case SDL_CONTROLLER_BUTTON_A:
                 if (indiceY < 4) {
-                    // Insere caractere alfanumérico
                     string car;
                     if (indiceY == 0) car = linha1[indiceX];
                     else if (indiceY == 1) car = linha2[indiceX];
@@ -260,11 +311,10 @@ bool TecladoVirtual::processarControle(SDL_Event& evento, BotaoPesquisa* alvo) {
                     else if (indiceY == 3) car = linha4[indiceX];
                     if (alvo) alvo->adicionarTexto(car);
                 } else {
-                    // Ações especiais (Linha 4)
                     if (indiceX == 0) { if(alvo) alvo->adicionarTexto(" "); }
                     else if (indiceX == 1) { if(alvo) alvo->limparTexto(); }
                     else if (indiceX == 2) { if(alvo) alvo->apagarTexto(); }
-                    else if (indiceX == 3) fechar(); // Botão OK
+                    else if (indiceX == 3) fechar();
                 }
                 break;
             
@@ -279,19 +329,24 @@ bool TecladoVirtual::processarControle(SDL_Event& evento, BotaoPesquisa* alvo) {
 }
 
 /**
- * @brief Processa interações do mouse com as teclas.
+ * @brief Processa cliques e interações do mouse com as teclas virtuais.
  * 
- * Detecta o clique em coordenadas específicas e mapeia para a tecla correspondente.
- * Se o clique ocorrer fora da área do teclado, o componente é fechado.
+ * Verifica cliques fora do painel para fechamento automático, identifica qual tecla 
+ * foi pressionada através de checagem de colisão 2D e envia o comando correspondente 
+ * para o objeto alvo de pesquisa.
+ * 
+ * @param evento Referência para o evento SDL.
+ * @param alvo Ponteiro para o BotaoPesquisa.
+ * @return true se o evento de mouse foi consumido.
  */
 bool TecladoVirtual::processarMouse(SDL_Event& evento, BotaoPesquisa* alvo) {
     if (!visivel) return false;
 
-    // Fecha o teclado se clicar fora da área total (com padding de 20px)
+    // Fechar ao clicar fora da área do painel
     if (evento.type == SDL_MOUSEBUTTONDOWN || evento.type == SDL_MOUSEBUTTONUP) {
         int mx = evento.button.x;
         int my = evento.button.y;
-        SDL_Rect areaTotal = {BASE_X - 20, BASE_Y - 20, 1000, 400};
+        SDL_Rect areaTotal = {baseX - painelPadding, baseY - painelPadding, painelLargura, painelAltura};
         if (mx < areaTotal.x || mx > areaTotal.x + areaTotal.w || 
             my < areaTotal.y || my > areaTotal.y + areaTotal.h) {
             if (evento.type == SDL_MOUSEBUTTONUP) fechar();
@@ -303,17 +358,17 @@ bool TecladoVirtual::processarMouse(SDL_Event& evento, BotaoPesquisa* alvo) {
 
     int mx = evento.button.x;
     int my = evento.button.y;
-    int startY = BASE_Y;
+    int startY = baseY;
 
     /**
-     * @brief Lambda para verificar clique em uma linha específica.
+     * @brief Lambda para verificar colisão do mouse em uma linha específica.
      */
     auto verificarCliqueLinha = [&](const vector<string>& linha, int yIdx) {
-        int larguraTotalLinha = (linha.size() * (TECLA_SIZE + GAP)) - GAP;
-        int startX = BASE_X + (1000 - larguraTotalLinha) / 2;
+        int larguraTotalLinha = (linha.size() * (teclaLargura + gapX)) - gapX;
+        int startX = baseX + (painelLargura - (2 * painelPadding) - larguraTotalLinha) / 2;
 
         for (size_t i = 0; i < linha.size(); i++) {
-            if (checarCliqueTecla(mx, my, startX + i * (TECLA_SIZE + GAP), startY, TECLA_SIZE, TECLA_SIZE)) {
+            if (checarCliqueTecla(mx, my, startX + i * (teclaLargura + gapX), startY, teclaLargura, teclaAltura)) {
                 if (alvo) alvo->adicionarTexto(linha[i]);
                 indiceX = i; indiceY = yIdx; 
                 return true;
@@ -322,38 +377,35 @@ bool TecladoVirtual::processarMouse(SDL_Event& evento, BotaoPesquisa* alvo) {
         return false;
     };
 
-    // Verifica cliques linha por linha
     if (verificarCliqueLinha(linha1, 0)) return true;
-    startY += TECLA_SIZE + GAP;
+    startY += teclaAltura + gapY;
     if (verificarCliqueLinha(linha2, 1)) return true;
-    startY += TECLA_SIZE + GAP;
+    startY += teclaAltura + gapY;
     if (verificarCliqueLinha(linha3, 2)) return true;
-    startY += TECLA_SIZE + GAP;
+    startY += teclaAltura + gapY;
     if (verificarCliqueLinha(linha4, 3)) return true;
-    startY += TECLA_SIZE + GAP;
+    startY += teclaAltura + gapY;
 
-    // Verificação dos botões especiais na base
-    int espacoX = BASE_X + 50;
-    int largPadrao = 180;
-    int gapBotoes = 20;
+    // Processamento de cliques nos botões especiais
+    int espacoX = baseX + offsetEspacoX;
     int yEsp = startY;
 
-    if (checarCliqueTecla(mx, my, espacoX, yEsp, largPadrao, TECLA_SIZE)) {
+    if (checarCliqueTecla(mx, my, espacoX, yEsp, larguraBotaoEsp, teclaAltura)) {
         if(alvo) alvo->adicionarTexto(" ");
         indiceX=0; indiceY=4; return true;
     }
-    int limparX = espacoX + largPadrao + gapBotoes;
-    if (checarCliqueTecla(mx, my, limparX, yEsp, largPadrao, TECLA_SIZE)) {
+    int limparX = espacoX + larguraBotaoEsp + gapBotoesEsp;
+    if (checarCliqueTecla(mx, my, limparX, yEsp, larguraBotaoEsp, teclaAltura)) {
         if(alvo) alvo->limparTexto();
         indiceX=1; indiceY=4; return true;
     }
-    int apagarX = limparX + largPadrao + gapBotoes;
-    if (checarCliqueTecla(mx, my, apagarX, yEsp, largPadrao, TECLA_SIZE)) {
+    int apagarX = limparX + larguraBotaoEsp + gapBotoesEsp;
+    if (checarCliqueTecla(mx, my, apagarX, yEsp, larguraBotaoEsp, teclaAltura)) {
         if(alvo) alvo->apagarTexto();
         indiceX=2; indiceY=4; return true;
     }
-    int okX = apagarX + largPadrao + gapBotoes;
-    if (checarCliqueTecla(mx, my, okX, yEsp, 100, TECLA_SIZE)) {
+    int okX = apagarX + larguraBotaoEsp + gapBotoesEsp;
+    if (checarCliqueTecla(mx, my, okX, yEsp, larguraBotaoOk, teclaAltura)) {
         fechar();
         return true;
     }
@@ -361,7 +413,15 @@ bool TecladoVirtual::processarMouse(SDL_Event& evento, BotaoPesquisa* alvo) {
 }
 
 /**
- * @brief Helper de colisão AABB simples.
+ * @brief Utilitário para detecção de ponto dentro de retângulo (AABB).
+ * 
+ * @param mouseX Coordenada X do mouse.
+ * @param mouseY Coordenada Y do mouse.
+ * @param x Coordenada X da tecla.
+ * @param y Coordenada Y da tecla.
+ * @param w Largura da tecla.
+ * @param h Altura da tecla.
+ * @return true se o ponto (mouseX, mouseY) estiver contido na área delimitada.
  */
 bool TecladoVirtual::checarCliqueTecla(int mouseX, int mouseY, int x, int y, int w, int h) {
     return (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h);
