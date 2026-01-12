@@ -240,7 +240,12 @@ int main(int argc, char* argv[]) {
     // 5. Finalização e Limpeza de Recursos
     inputs.fecharControle();
     janelaConfig.fechar();
-    if (estado.janelaJogoAtual) MeuProjeto::janelaJogoAtual.reset();;
+    if (estado.janelaJogoAtual) MeuProjeto::janelaJogoAtual.reset();
+    
+    // Explicitly clear texture cache before destroying the renderer
+    gerImg.liberarTudo();
+    MeuProjeto::limparCacheTexto();
+    
     GerenciarSDL::limpar(janela, renderer);
     
     return 0;

@@ -14,9 +14,7 @@ public:
     static NetworkClient& getInstance();
 
     bool connectToManager();
-    // Updated signature to support graphics options
-    void sendStartGame(const std::string& id, const std::string& path, 
-                      int width = 1280, int height = 720, int fps = 60, bool useGamescope = true);
+    void sendStartGame(const std::string& id, const std::string& path);
                       
     void checkEvents(); // Call this in the main loop
     

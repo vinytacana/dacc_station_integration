@@ -264,35 +264,22 @@ bool JanelaJogo::tratarEventoControle(SDL_Event& evento) {
 void JanelaJogo::executarJogo() {
     std::cout << "\n[LAUNCHER] Iniciando: " << nomeJogo << std::endl;
     
+    std::string id = "Ashley"; // Fallback ou busca real do objeto Jogo
+    // Em uma implementação real, o 'id' (codigo) seria passado no construtor da JanelaJogo
+    // Como estamos usando o nomeJogo para o mock, vamos extrair o ID aqui se for Ashley
+    if (nomeJogo == "Ashley") id = "Ashley";
+
     std::string path;
-    std::string id = nomeJogo; 
     
-    // Mapeamento temporário para demonstração/teste
-    if (nomeJogo == "God of War") { 
-        path = "/usr/bin/gnome-calculator"; 
-        id = "demo_calc";
-    }
-    else if (nomeJogo == "GTA V") { 
-        path = "/usr/bin/gedit"; 
-        id = "demo_editor";
-    }
-    else if (nomeJogo == "Minecraft") { 
-        path = "/usr/bin/x-terminal-emulator"; 
-        id = "demo_term";
-    }
-    else {
-        // Para outros jogos, tenta construir um caminho absoluto
-        char cwd[1024];
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-             path = std::string(cwd) + "/games/" + nomeJogo + ".sh"; 
-        } else {
-             path = "/usr/bin/" + nomeJogo; // Fallback
-        }
+    // Padrão: scripts na pasta games/ (Relativo à raiz do projeto, onde roda o PM)
+    if (id == "Ashley") {
+        path = "games/run-sync.sh"; 
+    } else {
+        path = "games/" + id + ".sh";
     }
 
     // Envia o comando para o Process Manager via Socket
-    // Default: 1280x720 @ 60FPS com Gamescope ativado
-    NetworkClient::getInstance().sendStartGame(id, path, 1280, 720, 60, true);
+    NetworkClient::getInstance().sendStartGame(id, path);
 }
 
 /**

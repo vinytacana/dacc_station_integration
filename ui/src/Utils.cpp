@@ -64,6 +64,7 @@ void desenharTexto(SDL_Renderer* renderer, const std::string& texto, int x, int 
 
 void limparCacheTexto() {
     g_texturasTexto.liberarTudo();
+    g_fontes.liberarTudo();
 }
 
 } // namespace MeuProjeto

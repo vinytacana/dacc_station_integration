@@ -31,8 +31,7 @@ bool NetworkClient::connectToManager() {
     }
 }
 
-void NetworkClient::sendStartGame(const std::string& id, const std::string& path, 
-                                 int width, int height, int fps, bool useGamescope) {
+void NetworkClient::sendStartGame(const std::string& id, const std::string& path) {
     if (!connectToManager()) {
         LOG_WARNING("Cannot start game: Not connected.");
         return;
