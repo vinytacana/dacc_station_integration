@@ -107,12 +107,41 @@ dispositivos.clear();
 void JanelaAudioEVideo::inicializarResolucoes() {
     resolucoes.clear();
     
-    // Adiciona resoluções comuns
-    resolucoes.push_back(Resolucao(1920, 1080));  // Full HD
-    resolucoes.push_back(Resolucao(1280, 720));   // HD
-    resolucoes.push_back(Resolucao(2560, 1440));  // QHD
-    resolucoes.push_back(Resolucao(3840, 2160));  // 4K
-    resolucoes.push_back(Resolucao(1366, 768));   // WXGA
+    // 1. Busca info do sistema
+    std::vector<DisplayOutput> displays = ::obter_info_displays();
+    
+    if (displays.empty()) {
+        // Fallback se não detectar nada (ex: rodando em VM sem xrandr)
+        resolucoes.push_back(Resolucao(1920, 1080));
+        resolucoes.push_back(Resolucao(1280, 720));
+        indiceResolucaoAtual = 0;
+        return;
+    }
+
+    // 2. Pega o primeiro monitor conectado
+    const auto& displayPrincipal = displays[0];
+    
+    // 3. Preenche o vetor da UI
+    for (const auto& mode : displayPrincipal.modes) {
+        // Filtro: Evitar resoluções muito baixas que quebrem a UI
+        if (mode.width >= 800) {
+            resolucoes.push_back(Resolucao(mode.width, mode.height));
+            
+            // Tenta manter a seleção na resolução que o sistema diz ser a "current"
+            if (mode.is_current) {
+                indiceResolucaoAtual = resolucoes.size() - 1;
+            }
+        }
+    }
+    
+    // Segurança caso o loop não tenha achado nada
+    if (resolucoes.empty()) {
+        resolucoes.push_back(Resolucao(1920, 1080));
+        indiceResolucaoAtual = 0;
+    }
+    
+    // Se o indice ficou invalido (-1), reseta
+    if (indiceResolucaoAtual < 0) indiceResolucaoAtual = 0;
 }
 
 /**
@@ -218,11 +247,13 @@ void JanelaAudioEVideo::desenhar(SDL_Renderer* renderer) {
     if (!renderer) return;
 
     desenharCabecalho(renderer);
+    desenharInfoSistema(renderer);
     desenharControleVolume(renderer);
     desenharSeletorDispositivo(renderer);
     desenharSeletorResolucao(renderer);
     desenharControleEscala(renderer);
     desenharImagemExplicativa(renderer);
+    
 
     if (btnAplicar) {
         // Verifica se o foco está nele (índice 8)
@@ -234,6 +265,8 @@ void JanelaAudioEVideo::desenhar(SDL_Renderer* renderer) {
         
         btnAplicar->desenhar(renderer);
     }
+
+
 }
 
 /**
@@ -982,22 +1015,75 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         std::cout << "Áudio definido para ID: " << idReal << std::endl;
     }
 
-    // 2. Aplicar Resolução
-    if (!resolucoes.empty() && indiceResolucaoAtual >= 0) {
-        std::string resStr = resolucoes[indiceResolucaoAtual].toString();
-        // Assume que a saída padrão é "eDP-1" ou "HDMI-1". 
-        // Idealmente você pegaria isso do sistema, mas vamos usar "default" ou pegar via argumento se tiver.
-        // No seu functions.hpp você tem alterarResolucao(saida, modo).
-        // Vamos tentar detectar ou usar uma string vazia se sua função lidar com auto-detect.
-        ::alterarResolucao("eDP-1", resStr); // Ajuste "eDP-1" conforme seu monitor principal
-        std::cout << "Resolução definida para: " << resStr << std::endl;
+    // ---------------------------------------------------------
+    // 2. PREPARAÇÃO DE VÍDEO (Detectar Monitor)
+    // ---------------------------------------------------------
+    // Precisamos saber o nome do monitor (ex: HDMI-1, eDP-1) dinamicamente
+    std::string nomeMonitor = "HDMI-1"; // Fallback padrão
+    
+    std::vector<DisplayOutput> displays = ::obter_info_displays();
+    if (!displays.empty()) {
+        nomeMonitor = displays[0].name; // Pega o primeiro monitor conectado
+    } else {
+        std::cerr << "[UI] Aviso: Nenhum monitor detectado via backend. Tentando aplicar em " << nomeMonitor << "...\n";
     }
 
-    
-    ::alterarEscala("eDP-1", escalaJanela, escalaJanela); 
-    std::cout << "Escala definida para: " << escalaJanela << std::endl;
+    // ---------------------------------------------------------
+    // 3. APLICAR RESOLUÇÃO
+    // ---------------------------------------------------------
+    if (!resolucoes.empty() && indiceResolucaoAtual >= 0 && indiceResolucaoAtual < (int)resolucoes.size()) {
+        Resolucao alvo = resolucoes[indiceResolucaoAtual];
+        
+        // A nova função pede (nome, largura, altura, refresh_rate)
+        // Usamos 60.0f como padrão seguro, já que a UI ainda não escolhe Hz
+        bool sucesso = ::alterarResolucao(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
+        
+        if (sucesso)
+            std::cout << "[UI] Resolução definida para: " << alvo.toString() << " em " << nomeMonitor << std::endl;
+        else
+            std::cerr << "[UI] Falha ao definir resolução.\n";
+    }
 
-    gerAudio.tocarSom("select.wav");
+  //---------------------------------------------------------
+    // 4. APLICAR ESCALA
+    // ---------------------------------------------------------
+    // A nova função pede apenas (nome, float escala)
+    bool scaleSucesso = ::alterarEscala(nomeMonitor, escalaJanela);
     
-    // Feedback visual (Opcional: piscar botão ou mostrar mensagem)
+    if (scaleSucesso)
+        std::cout << "[UI] Escala definida para: " << escalaJanela << "x" << std::endl;
+    else
+        std::cerr << "[UI] Falha ao definir escala.\n";
+
+    // ---------------------------------------------------------
+    // 5. FEEDBACK
+    // ---------------------------------------------------------
+    gerAudio.tocarSom("select.wav");
+}
+
+/**
+ * @brief Desenha informações sobre o Monitor e o Compositor (Wayland/X11).
+ */
+void JanelaAudioEVideo::desenharInfoSistema(SDL_Renderer* renderer) {
+    auto& tema = GerenciadorTemas::getInstance();
+    
+    // Obter informações do backend (cachear isso numa variável de classe seria melhor para performance)
+    std::string sessao = ::obter_tipo_sessao(); // "wayland" ou "x11"
+    
+    // Pega o nome do monitor (fallback se vazio)
+    std::string nomeMonitor = "Desconhecido";
+    auto displays = ::obter_info_displays();
+    if (!displays.empty()) {
+        nomeMonitor = displays[0].name; // Ex: "HDMI-1"
+    }
+
+    // Formata o texto: "Monitor: HDMI-1 | Sessão: wayland"
+    std::stringstream ss;
+    ss << "Monitor: " << nomeMonitor << " | Sessão: " << sessao;
+    
+    // Desenha logo abaixo do título (ajuste Y conforme necessário)
+    desenharTexto(renderer, ss.str(), 
+                  ConfigLayout::X(250), ConfigLayout::Y(200), // Posição
+                  tema.getCorTextoNormal(), 
+                  ConfigLayout::F(22)); // Fonte menor
 }

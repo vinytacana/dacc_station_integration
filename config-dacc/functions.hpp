@@ -47,12 +47,13 @@ void definir_volume(int valor_int);
 
 //Vídeo
 std::vector<DisplayOutput> obter_info_displays();
+std::string obter_tipo_sessao();
 void aumentar_brilho();
 void diminuir_brilho();
 void verificarSessao();
 bool alterarResolucao(const std::string &saida, int width, int height, float rate);
 void listar_resolucao();
-void alterarEscala(const std::string &saida, float escalaX, float escalaY = -1);
+bool alterarEscala(const std::string &saida, float escala);
 
 // Wi-Fi
 void listar_wifi();

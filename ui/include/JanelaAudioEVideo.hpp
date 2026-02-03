@@ -345,6 +345,8 @@ private:
     float calcularEscalaAPartirDoPonto(int mouseX);
 
     void aplicarAlteracoes();
+
+    void desenharInfoSistema(SDL_Renderer* renderer);
 };
 
 } // namespace MeuProjeto
