@@ -199,12 +199,11 @@ std::string obter_tipo_sessao() {
     if (!sessao) return "unknown";
     return std::string(sessao);
 }
+
 std::vector<DisplayOutput> obter_info_displays() {
     std::vector<DisplayOutput> displays;
     std::string sessao = obter_tipo_sessao();
     
-    // Por enquanto, usaremos xrandr como base pois é mais fácil de parsear
-    // Em Wayland puro (sway/hyprland), o ideal seria 'wlr-randr'
     std::string cmd = "xrandr --verbose"; 
     std::string output;
     
@@ -219,14 +218,14 @@ std::vector<DisplayOutput> obter_info_displays() {
     DisplayOutput* currentDisplay = nullptr;
 
     while (std::getline(ss, linha)) {
-        // 1. Detectar nova saída (Ex: "HDMI-1 connected...")
+
         if (linha.find(" connected ") != std::string::npos) {
             DisplayOutput disp;
-            // Pega a primeira palavra como nome (HDMI-1)
+
             std::stringstream lineSS(linha);
             lineSS >> disp.name;
             disp.connected = true;
-            disp.current_scale = 1.0f; // Default
+            disp.current_scale = 1.0f;
             
             displays.push_back(disp);
             currentDisplay = &displays.back();
@@ -234,17 +233,12 @@ std::vector<DisplayOutput> obter_info_displays() {
         }
 
         if (currentDisplay && !displays.empty()) {
-            // 2. Parsear modos (Ex: "  1920x1080 (0x4d) 148.500MHz +HSync +VSync *current +preferred")
-            // O xrandr identa os modos com espaços
             if (linha.size() > 2 && linha[0] == ' ' && linha.find("x") != std::string::npos) {
-                // É uma linha de resolução? Contém 'x' e números?
-                // Formato simples: "  1920x1080 ... 60.00*+ ..."
+
                 
                 std::stringstream modeSS(linha);
                 std::string token;
                 
-                // Pular o identificador inicial se houver
-                // Procurar token com 'x' (ex: 1920x1080)
                 int w = 0, h = 0;
                 bool foundRes = false;
                 
@@ -254,14 +248,13 @@ std::vector<DisplayOutput> obter_info_displays() {
                         try {
                             w = std::stoi(token.substr(0, xPos));
                             size_t iPos = xPos + 1;
-                            // remove sufixos como 'i' (interlaced)
                             std::string hStr;
                             while(iPos < token.size() && isdigit(token[iPos])) {
                                 hStr += token[iPos++];
                             }
                             h = std::stoi(hStr);
                             foundRes = true;
-                            break; // Achou a resolução, sair para procurar Hz
+                            break;
                         } catch(...) {}
                     }
                 }
@@ -272,12 +265,7 @@ std::vector<DisplayOutput> obter_info_displays() {
                     mode.height = h;
                     mode.refresh_rate = 60.0f; // Default
                     mode.is_current = (linha.find("*current") != std::string::npos || linha.find("*") != std::string::npos);
-
-                    // Tentar achar refresh rate na mesma linha (geralmente tem ponto, ex: 59.94)
-                    // Resetar stream ou continuar procurando token
-                    // O parsing exato do xrandr verbose é chato, vamos simplificar:
-                    // Se achar *current, é o atual.
-                    
+                   
                     currentDisplay->modes.push_back(mode);
                     if (mode.is_current) {
                         currentDisplay->current_mode = mode;
@@ -308,98 +296,54 @@ void listar_resolucao()
         perror("execlp falhou!!");
     }
 }
-void alterarEscala(const string &saida, float escalaX, float escalaY)
-{
-    const char *sessao = getenv("XDG_SESSION_TYPE");
-    if (!sessao)
-    {
-        cerr << "Não foi possível detectar a sessão\n";
-        return;
-    }
+bool alterarEscala(const string &saida, float escala) {
+    std::string sessao = obter_tipo_sessao();
+    std::string comando;
 
-    string sessaoStr(sessao);
-    string comando;
+    if (escala < 0.5f) escala = 0.5f;
+    if (escala > 3.0f) escala = 3.0f;
 
-    if (sessaoStr == "x11")
-    {
-        if (escalaY < 0)
-            escalaY = escalaX;
-        comando = "xrandr --output " + saida + " --scale " +
-                  to_string(escalaX) + "x" + to_string(escalaY);
-    }
-    else if (sessaoStr == "wayland")
-    {
-        const char *compositor = getenv("XDG_SESSION_DESKTOP");
-        string comp(compositor ? compositor : "");
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(2) << escala;
+    std::string scaleStr = ss.str();
 
-        if (comp == "gnome")
-        {
-            int escalaInt = static_cast<int>(escalaX + 0.5);
-            comando = "gsettings set org.gnome.desktop.interface scaling-factor " + to_string(escalaInt);
+    if (sessao == "x11") {
+        comando = "xrandr --output " + saida + " --scale " + scaleStr + "x" + scaleStr;
+    } 
+    else if (sessao == "wayland") {
+        const char *desktop = getenv("XDG_SESSION_DESKTOP");
+        std::string de = desktop ? std::string(desktop) : "";
+        
+        if (de.find("gnome") != std::string::npos) {
+            int scaleInt = static_cast<int>(escala + 0.5f); 
+            comando = "gsettings set org.gnome.desktop.interface scaling-factor " + std::to_string(scaleInt);
+        } else {
+            comando = "wlr-randr --output " + saida + " --scale " + scaleStr;
         }
-        else
-        {
-            comando = "wlr-randr --output " + saida + " --scale " + to_string(escalaX);
-        }
-    }
-    else
-    {
-        cerr << "Sessão não reconhecida.\n";
-        return;
+    } else {
+        return false;
     }
 
-    cout << "Executando: " << comando << endl;
+    std::cout << "[Video] Escala: " << comando << std::endl;
     int ret = system(comando.c_str());
-    if (ret != 0)
-    {
-        cerr << "Falha ao alterar escala\n";
-    }
+    return (ret == 0);
 }
 
-void alterarResolucao(const string &saida, const string &modo)
-{
-    const char *sessao = getenv("XDG_SESSION_TYPE");
-    if (!sessao)
-    {
-        cerr << "Não foi possível detectar a sessão\n";
-        return;
+bool alterarResolucao(const string &saida, int width, int height, float rate) {
+    std::string sessao = obter_tipo_sessao();
+    std::string comando;
+    std::string modeStr = std::to_string(width) + "x" + std::to_string(height);
+
+    if (sessao == "wayland") {
+        comando = "wlr-randr --output " + saida + " --mode " + modeStr;
+    } else {
+    
+        comando = "xrandr --output " + saida + " --mode " + modeStr;
     }
 
-    string sessaoStr(sessao);
-    string comando;
-
-    if (sessaoStr == "x11")
-    {
-        comando = "xrandr --output " + saida + " --mode " + modo;
-    }
-    else if (sessaoStr == "wayland")
-    {
-        const char *compositor = getenv("XDG_SESSION_DESKTOP");
-        string comp(compositor ? compositor : "");
-
-        if (comp == "gnome")
-        {
-            cerr << "GNOME Wayland não suporta mudar resolução via xrandr/wlr-randr.\n";
-            cerr << "Use a interface gráfica ou configure escalonamento.\n";
-            return;
-        }
-        else
-        {
-            comando = "wlr-randr --output " + saida + " --mode " + modo;
-        }
-    }
-    else
-    {
-        cerr << "Sessão não reconhecida.\n";
-        return;
-    }
-
-    cout << "Executando: " << comando << endl;
+    std::cout << "[Video] Executando: " << comando << std::endl;
     int ret = system(comando.c_str());
-    if (ret != 0)
-    {
-        cerr << "Falha ao alterar resolução\n";
-    }
+    return (ret == 0);
 }
 
 void listar_wifi()

@@ -50,7 +50,7 @@ std::vector<DisplayOutput> obter_info_displays();
 void aumentar_brilho();
 void diminuir_brilho();
 void verificarSessao();
-void alterarResolucao(const std::string &saida, const std::string &modo);
+bool alterarResolucao(const std::string &saida, int width, int height, float rate);
 void listar_resolucao();
 void alterarEscala(const std::string &saida, float escalaX, float escalaY = -1);
 
