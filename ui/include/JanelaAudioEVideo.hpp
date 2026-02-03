@@ -143,7 +143,7 @@ private:
     // CONTROLE DE NAVEGAÇÃO
     
     int indiceFocado = -1;                  /**< Índice do elemento atualmente focado. */
-    const int NUM_ELEMENTOS_FOCAVEIS = 8;   /**< Total de elementos navegáveis (4 grupos x 2 botões). */
+    const int NUM_ELEMENTOS_FOCAVEIS = 9;   /**< Total de elementos navegáveis (4 grupos x 2 botões). */
     
     // Controle de Input de Periféricos
     Uint32 ultimoInputAnalogico = 0;        /**< Timestamp do último input analógico. */
@@ -164,7 +164,6 @@ private:
     GerenciadorImagens gerenciadorImagens;    /**< Gerenciador de cache de texturas. */
     
 
-    void aplicarAlteracoes();
     /**
      * @brief Inicializa os botões e elementos interativos.
      */
@@ -344,6 +343,8 @@ private:
      * @return Valor de escala calculado (0.5-2.0).
      */
     float calcularEscalaAPartirDoPonto(int mouseX);
+
+    void aplicarAlteracoes();
 };
 
 } // namespace MeuProjeto
