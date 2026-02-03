@@ -71,12 +71,34 @@ JanelaAudioEVideo::~JanelaAudioEVideo() {
  * @brief Inicializa a lista de dispositivos de áudio com dados de exemplo.
  */
 void JanelaAudioEVideo::inicializarDispositivos() {
-    dispositivos.clear();
+dispositivos.clear();
     
-    // Adiciona dispositivos de exemplo
-    dispositivos.push_back(DispositivoAudio("Speakers (Realtek)", 0));
-    dispositivos.push_back(DispositivoAudio("Headphones (USB)", 1));
-    dispositivos.push_back(DispositivoAudio("Monitor Audio", 2));
+    // 1. Chama o Backend (HardwareControl.cpp via functions.hpp)
+    std::vector<device_audio> listaDoSistema = ::listar_dispositivos_audio();
+    
+    // Fallback se não encontrar nada
+    if (listaDoSistema.empty()) {
+        dispositivos.push_back(DispositivoAudio("Nenhum dispositivo encontrado", -1));
+        indiceDispositivoAtual = 0;
+        return;
+    }
+
+    // 2. Converte os dados do backend para a estrutura da UI
+    indiceDispositivoAtual = 0; // Padrão
+    
+    for (size_t i = 0; i < listaDoSistema.size(); i++) {
+        const auto& dev = listaDoSistema[i];
+        
+        // Cria o objeto da UI com (Nome, ID)
+        dispositivos.push_back(DispositivoAudio(dev.descricao, dev.id));
+        
+        // 3. Se este for o dispositivo padrão (marcado com * no wpctl), seleciona ele na UI
+        if (dev.padrao) {
+            indiceDispositivoAtual = i;
+        }
+    }
+    
+    std::cout << "[UI] Carregados " << dispositivos.size() << " dispositivos de áudio.\n";
 }
 
 /**
@@ -176,6 +198,17 @@ void JanelaAudioEVideo::inicializarBotoes() {
     } else {
         indiceFocado = -1;
     }
+
+    // --- NOVO: Botão Aplicar ---
+    // Posicionado lá embaixo, centralizado ou à direita
+    btnAplicar = std::make_unique<Botao>(
+        ConfigLayout::X(1200), ConfigLayout::Y(920), // Posição X, Y
+        ConfigLayout::X(200), ConfigLayout::Y(60),   // Largura, Altura
+        "Aplicar"
+    );
+    btnAplicar->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
+    btnAplicar->setRetanguloBordasArredondadas(15);
+    // ---------------------------
 }
 
 /**
