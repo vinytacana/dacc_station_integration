@@ -1,0 +1,9 @@
+{
+  "server": {
+    "socket_path": "/tmp/dacc-station.sock"
+  },
+  "output": {
+    "type": "file",
+    "filepath": "data/logs/dacc-system.log"
+  }
+}

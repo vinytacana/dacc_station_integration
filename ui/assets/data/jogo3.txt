@@ -1,0 +1,9 @@
+@Naruto
+#Uma experiência inspirada no universo ninja, com batalhas intensas, personagens conhecidos e uma narrativa envolvente
+>Em um mundo digital cheio de ideias curiosas, esta descricao aleatoria surge apenas para preencher espaco com palavras simples, frases comuns e um ritmo tranquilo. Ela nao conta uma historia profunda, mas cria uma sensacao leve de leitura continuayyyyyyyyyyyyy
+$Casual, Esportes
+^run-sync
+*assets/images/games/jogo3CapaTelaPrincipal.jpeg.jpeg
+&assets/images/games/jogo3FundoDestaque.jpeg
++assets/images/games/jogo3CapaJanelaJogo.jpeg.jpeg
+%assets/images/games/captura1.jpeg;assets/images/games/captura2.jpeg;assets/images/games/captura3.jpeg;assets/images/games/captura4.jpeg

@@ -1,0 +1,84 @@
+Este documento fornece uma especificação técnica exaustiva da Interface de Usuário (UI) do projeto, detalhando sua arquitetura, componentes, dependências e procedimentos de configuração em ambiente Linux Ubuntu.
+
+---
+
+## 1. Arquitetura da Interface e Filosofia de Design
+
+A UI foi projetada como um Launcher de jogos de alto desempenho, priorizando a fluidez visual e a navegabilidade via controle (gamepad) ou mouse. O sistema opera sobre uma camada de abstração de coordenadas para garantir que a interface seja visualmente idêntica em diferentes resoluções de tela.
+
+### 1.1. Sistema de Layout Responsivo
+
+A lógica de posicionamento não utiliza pixels fixos, mas sim um sistema de design virtual:
+
+* **Resolução Nativa**: O design base é calculado para 1920x1280 pixels.
+* **Escalonamento Global**: Através da classe `ConfigLayout`, o sistema calcula um fator de escala proporcional à resolução atual da janela do usuário.
+* **Centralização Dinâmica**: Caso a proporção da tela (aspect ratio) seja diferente da nativa, o sistema aplica "offsets" (deslocamentos) horizontais ou verticais para manter o conteúdo centralizado.
+
+### 1.2. Gerenciamento de Estados e Temas
+
+A interface suporta a alternância dinâmica de estados globais:
+
+* **Gerenciador de Temas**: Controla a paleta de cores entre os modos Claro e Escuro, alterando instantaneamente tons de fundo, botões e textos.
+* **Sistema de Foco**: Gerencia qual elemento está selecionado para interação via teclado ou controle, fornecendo feedback visual através da cor de destaque (accent color).
+
+---
+
+## 2. Componentes da UI (Implementação Técnica)
+
+Os componentes foram desenvolvidos de forma modular, permitindo a reutilização de lógica de eventos e renderização.
+
+### 2.1. Navegação Principal
+
+* **Grade de Jogos**: Organiza os títulos carregados em colunas e linhas calculadas dinamicamente.
+* **Banner de Destaque (Hero)**: Um carrossel superior que exibe os jogos em evidência com imagens de fundo em alta resolução.
+* **Barra de Categorias**: Permite a filtragem rápida do catálogo por gêneros, utilizando navegação horizontal lateral.
+
+### 2.2. Elementos Interativos
+
+* **Botão Pesquisa**: Integra uma caixa de entrada de texto com uma lista suspensa de resultados que são filtrados em tempo real conforme a digitação.
+* **Teclado Virtual**: Uma interface de entrada completa composta por quatro linhas de teclas alfanuméricas e funções especiais (Espaço, Backspace, OK), permitindo a busca de jogos sem a necessidade de um teclado físico.
+* **Janela de Detalhes (JanelaJogo)**: Uma tela modal complexa que exibe metadados expandidos, descrição longa e uma galeria de capturas de tela interativa.
+
+### 2.3. Utilitários Gráficos
+
+* **GraphicsUtils**: Provê renderização de primitivas avançadas, como retângulos com cantos arredondados, preenchimento de texturas mantendo a proporção (cover) e overlays de escurecimento para modais.
+* **SystemStatus**: Uma barra superior que renderiza o relógio, status de conexão WiFi e nível de bateria em tempo real.
+
+---
+
+## 3. Bibliotecas e Dependências
+
+O projeto utiliza o ecossistema SDL2 para garantir portabilidade e acesso direto ao hardware de vídeo e áudio.
+
+### 3.1. Descrição das Bibliotecas
+
+* **SDL2 (Simple DirectMedia Layer)**: Biblioteca de desenvolvimento multiplataforma projetada para fornecer acesso de baixo nível ao hardware de áudio, teclado, mouse e joystick via OpenGL ou Direct3D.
+* **SDL2_image**: Extensão para carregar imagens em vários formatos, como PNG, JPG e JPEG.
+* **SDL2_ttf**: Biblioteca de suporte para renderização de fontes TrueType (.ttf).
+* **SDL2_mixer**: Biblioteca multicanal para gerenciamento de áudio (música e efeitos sonoros).
+* **SDL2_gfx**: Fornece primitivas gráficas adicionais, como retângulos arredondados e círculos antialiasing.
+* **nlohmann/json**: Biblioteca moderna de C++ para manipulação de dados no formato JSON, utilizada na comunicação de rede.
+
+### 3.2. Instalação no Ubuntu Linux
+
+Para preparar o ambiente de desenvolvimento e compilação, execute os seguintes comandos no terminal:
+
+# Atualizar a lista de pacotes
+sudo apt update
+
+# Instalar o compilador e ferramentas de build
+sudo apt install build-essential git
+
+# Instalar a biblioteca SDL2 e suas extensões
+sudo apt install libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev libsdl2-gfx-dev
+
+# Instalar a biblioteca JSON
+sudo apt install nlohmann-json3-dev
+
+## 4. Estrutura do Código de Interface
+
+A lógica da UI está distribuída entre as pastas `include` (definições) e `src` (implementações):
+
+* **GerenciarInterface**: Centraliza a lógica de desenho de todos os componentes.
+* **GerenciarInputs**: Captura eventos do sistema e os distribui para os componentes da UI, gerenciando o foco de navegação.
+* **Gerenciadores de Cache**: Classes como `GerenciadorImagens`, `GerenciadorFontes` e `GerenciadorTexturasTexto` garantem que os ativos da interface sejam carregados e mantidos na memória de forma otimizada para evitar "stuttering" durante a navegação.

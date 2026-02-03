@@ -1,0 +1,9 @@
+@Minecraft
+#Um mundo aberto onde a criatividade não tem limites, permitindo construir, explorar e sobreviver do seu próprio jeito.
+>Em um mundo digital cheio de ideias curiosas, esta descricao aleatoria surge apenas para preencher espaco com palavras simples, frases comuns e um ritmo tranquilo. Ela nao conta uma historia profunda, mas cria uma sensacao leve de leitura continuayyyyyyyyyyyyy
+$Acao, Estrategia
+^run-sync
+*assets/images/games/jogo2CapaTelaPrincipal.jpeg.jpeg
+&assets/images/games/jogo2FundoDestaque.jpeg
++assets/images/games/jogo2CapaJanelaJogo.jpeg.jpeg
+%assets/images/games/captura1.jpeg;assets/images/games/captura2.jpeg;assets/images/games/captura3.jpeg;assets/images/games/captura4.jpeg

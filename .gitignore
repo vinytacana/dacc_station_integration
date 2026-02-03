@@ -1,0 +1,20 @@
+# --- Compilados e Binários ---
+*.a
+*.o
+*.obj
+*.exe
+*.out
+*.app
+
+# --- Pastas de Build ---
+bin/
+build/
+
+# --- Logs e Dados Temporários ---
+*.log
+*.tmp
+
+# --- Editor e Sistema Operacional ---
+.vscode/
+.DS_Store
+Thumbs.db

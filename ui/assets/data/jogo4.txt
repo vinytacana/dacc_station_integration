@@ -1,0 +1,9 @@
+@Star Wars
+#Uma jornada em um universo épico de ficção científica, repleta de conflitos, tecnologia avançada e histórias marcantes
+>Em um mundo digital cheio de ideias curiosas, esta descricao aleatoria surge apenas para preencher espaco com palavras simples, frases comuns e um ritmo tranquilo. Ela nao conta uma historia profunda, mas cria uma sensacao leve de leitura continuayyyyyyyyyyyyy
+$Aventura, Esportes
+^run-sync
+*assets/images/games/jogo4CapaTelaPrincipal.jpeg.jpeg
+&assets/images/games/jogo4FundoDestaque.jpeg
++assets/images/games/jogo4CapaJanelaJogo.jpeg.jpeg
+%assets/images/games/captura1.jpeg;assets/images/games/captura2.jpeg;assets/images/games/captura3.jpeg;assets/images/games/captura4.jpeg
