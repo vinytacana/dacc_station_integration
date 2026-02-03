@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <stdexcept> 
 #include <cstdio> 
+#include <iomanip>
 
 
 using namespace std;
@@ -192,6 +193,101 @@ void verificarSessao()
     {
         cout << "Compositor nao reconhecido" << "\n";
     }
+}
+std::string obter_tipo_sessao() {
+    const char *sessao = getenv("XDG_SESSION_TYPE");
+    if (!sessao) return "unknown";
+    return std::string(sessao);
+}
+std::vector<DisplayOutput> obter_info_displays() {
+    std::vector<DisplayOutput> displays;
+    std::string sessao = obter_tipo_sessao();
+    
+    // Por enquanto, usaremos xrandr como base pois é mais fácil de parsear
+    // Em Wayland puro (sway/hyprland), o ideal seria 'wlr-randr'
+    std::string cmd = "xrandr --verbose"; 
+    std::string output;
+    
+    try {
+        output = exec_command(cmd.c_str());
+    } catch (...) {
+        return displays;
+    }
+
+    std::stringstream ss(output);
+    std::string linha;
+    DisplayOutput* currentDisplay = nullptr;
+
+    while (std::getline(ss, linha)) {
+        // 1. Detectar nova saída (Ex: "HDMI-1 connected...")
+        if (linha.find(" connected ") != std::string::npos) {
+            DisplayOutput disp;
+            // Pega a primeira palavra como nome (HDMI-1)
+            std::stringstream lineSS(linha);
+            lineSS >> disp.name;
+            disp.connected = true;
+            disp.current_scale = 1.0f; // Default
+            
+            displays.push_back(disp);
+            currentDisplay = &displays.back();
+            continue;
+        }
+
+        if (currentDisplay && !displays.empty()) {
+            // 2. Parsear modos (Ex: "  1920x1080 (0x4d) 148.500MHz +HSync +VSync *current +preferred")
+            // O xrandr identa os modos com espaços
+            if (linha.size() > 2 && linha[0] == ' ' && linha.find("x") != std::string::npos) {
+                // É uma linha de resolução? Contém 'x' e números?
+                // Formato simples: "  1920x1080 ... 60.00*+ ..."
+                
+                std::stringstream modeSS(linha);
+                std::string token;
+                
+                // Pular o identificador inicial se houver
+                // Procurar token com 'x' (ex: 1920x1080)
+                int w = 0, h = 0;
+                bool foundRes = false;
+                
+                while(modeSS >> token) {
+                    size_t xPos = token.find('x');
+                    if (xPos != std::string::npos && isdigit(token[0])) {
+                        try {
+                            w = std::stoi(token.substr(0, xPos));
+                            size_t iPos = xPos + 1;
+                            // remove sufixos como 'i' (interlaced)
+                            std::string hStr;
+                            while(iPos < token.size() && isdigit(token[iPos])) {
+                                hStr += token[iPos++];
+                            }
+                            h = std::stoi(hStr);
+                            foundRes = true;
+                            break; // Achou a resolução, sair para procurar Hz
+                        } catch(...) {}
+                    }
+                }
+
+                if (foundRes) {
+                    DisplayMode mode;
+                    mode.width = w;
+                    mode.height = h;
+                    mode.refresh_rate = 60.0f; // Default
+                    mode.is_current = (linha.find("*current") != std::string::npos || linha.find("*") != std::string::npos);
+
+                    // Tentar achar refresh rate na mesma linha (geralmente tem ponto, ex: 59.94)
+                    // Resetar stream ou continuar procurando token
+                    // O parsing exato do xrandr verbose é chato, vamos simplificar:
+                    // Se achar *current, é o atual.
+                    
+                    currentDisplay->modes.push_back(mode);
+                    if (mode.is_current) {
+                        currentDisplay->current_mode = mode;
+                    }
+                }
+            }
+        }
+    }
+    
+    return displays;
 }
 void listar_resolucao()
 {

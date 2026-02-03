@@ -23,13 +23,30 @@ struct device_audio{
     bool padrao;
 };
 
+struct DisplayMode {
+    int width;
+    int height;
+    float refresh_rate;
+    bool is_current;
+};
+
+struct DisplayOutput {
+    std::string name;
+    bool connected;
+    std::vector<DisplayMode> modes;
+    DisplayMode current_mode;
+    float current_scale;
+};
+
 // Sistema
 std::string exec_command(const char* cmd);
 void aumentar_volume();
 void diminuir_volume();
 int obter_volume_atual();
-
 void definir_volume(int valor_int);
+
+//Vídeo
+std::vector<DisplayOutput> obter_info_displays();
 void aumentar_brilho();
 void diminuir_brilho();
 void verificarSessao();
