@@ -95,7 +95,26 @@ void definir_volume(int valor_int)
 }
 
 int obter_volume_atual() {
-    return 50; 
+    const char* cmd = "wpctl get-volume @DEFAULT_AUDIO_SINK@";
+    std::string saida;
+    
+    try {
+        saida = exec_command(cmd); 
+    } catch (...) {
+        return 50;
+    }
+
+    size_t pos = saida.find("Volume: ");
+    if (pos == std::string::npos) return 50;
+
+    std::string volStr = saida.substr(pos + 8); 
+    
+    try {
+        float volFloat = std::stof(volStr);
+        return static_cast<int>(volFloat * 100);
+    } catch (...) {
+        return 50;
+    }
 }
 
 void aumentar_brilho()

@@ -24,6 +24,7 @@ struct device_audio{
 };
 
 // Sistema
+std::string exec_command(const char* cmd);
 void aumentar_volume();
 void diminuir_volume();
 int obter_volume_atual();
