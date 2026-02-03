@@ -223,6 +223,17 @@ void JanelaAudioEVideo::desenhar(SDL_Renderer* renderer) {
     desenharSeletorResolucao(renderer);
     desenharControleEscala(renderer);
     desenharImagemExplicativa(renderer);
+
+    if (btnAplicar) {
+        // Verifica se o foco está nele (índice 8)
+        if (indiceFocado == 8 && SDL_NumJoysticks() > 0) {
+            btnAplicar->setFocado(true);
+        } else {
+            btnAplicar->setFocado(false);
+        }
+        
+        btnAplicar->desenhar(renderer);
+    }
 }
 
 /**
@@ -554,26 +565,27 @@ void JanelaAudioEVideo::setVolume(int novoVolume) {
  * @brief Seleciona o dispositivo anterior.
  */
 void JanelaAudioEVideo::dispositivoAnterior() {
+    if (dispositivos.empty()) return;
     if (indiceDispositivoAtual > 0) {
         indiceDispositivoAtual--;
     } else {
-        indiceDispositivoAtual = dispositivos.size() - 1; // Wrap around
+        indiceDispositivoAtual = dispositivos.size() - 1; 
     }
     gerAudio.tocarSom("navegacao.wav");
-    std::cout << "[AUDIO] Dispositivo: " << dispositivos[indiceDispositivoAtual].nome << std::endl;
+
 }
 
 /**
  * @brief Seleciona o próximo dispositivo.
  */
 void JanelaAudioEVideo::dispositivoProximo() {
+    if (dispositivos.empty()) return;
     if (indiceDispositivoAtual < (int)dispositivos.size() - 1) {
         indiceDispositivoAtual++;
     } else {
-        indiceDispositivoAtual = 0; // Wrap around
+        indiceDispositivoAtual = 0; 
     }
     gerAudio.tocarSom("navegacao.wav");
-    std::cout << "[AUDIO] Dispositivo: " << dispositivos[indiceDispositivoAtual].nome << std::endl;
 }
 
 /**
@@ -689,6 +701,7 @@ void JanelaAudioEVideo::confirmarSelecao() {
         case 5: resolucaoProxima(); break;
         case 6: diminuirEscala(); break;
         case 7: aumentarEscala(); break;
+        case 8: aplicarAlteracoes(); break;
     }
 }
 
@@ -793,6 +806,13 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
             }
             if (btnEscalaIncremento && btnEscalaIncremento->contemPonto(mouseX, mouseY)) {
                 aumentarEscala();
+                return true;
+            }
+
+
+            //verifica clique no botao
+            if (btnAplicar && btnAplicar->contemPonto(mouseX, mouseY)) {
+                aplicarAlteracoes(); // <--- CHAMA AQUI
                 return true;
             }
         }
@@ -950,4 +970,34 @@ void JanelaAudioEVideo::resetar() {
     arrastandoVolume = false;
     arrastandoEscala = false;
     inicializarBotoes();
+}
+
+void JanelaAudioEVideo::aplicarAlteracoes() {
+    std::cout << "=== Aplicando Configurações ===" << std::endl;
+
+    // 1. Aplicar Áudio
+    if (!dispositivos.empty() && indiceDispositivoAtual >= 0) {
+        int idReal = dispositivos[indiceDispositivoAtual].id;
+        ::selecionar_dispositivo_audio(idReal);
+        std::cout << "Áudio definido para ID: " << idReal << std::endl;
+    }
+
+    // 2. Aplicar Resolução
+    if (!resolucoes.empty() && indiceResolucaoAtual >= 0) {
+        std::string resStr = resolucoes[indiceResolucaoAtual].toString();
+        // Assume que a saída padrão é "eDP-1" ou "HDMI-1". 
+        // Idealmente você pegaria isso do sistema, mas vamos usar "default" ou pegar via argumento se tiver.
+        // No seu functions.hpp você tem alterarResolucao(saida, modo).
+        // Vamos tentar detectar ou usar uma string vazia se sua função lidar com auto-detect.
+        ::alterarResolucao("eDP-1", resStr); // Ajuste "eDP-1" conforme seu monitor principal
+        std::cout << "Resolução definida para: " << resStr << std::endl;
+    }
+
+    
+    ::alterarEscala("eDP-1", escalaJanela, escalaJanela); 
+    std::cout << "Escala definida para: " << escalaJanela << std::endl;
+
+    gerAudio.tocarSom("select.wav");
+    
+    // Feedback visual (Opcional: piscar botão ou mostrar mensagem)
 }
