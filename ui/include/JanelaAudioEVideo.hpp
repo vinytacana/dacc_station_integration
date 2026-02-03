@@ -139,7 +139,7 @@ private:
     
     std::unique_ptr<Botao> btnEscalaDecremento;  /**< Botão para diminuir escala. */
     std::unique_ptr<Botao> btnEscalaIncremento;  /**< Botão para aumentar escala. */
-    
+    std::unique_ptr<Botao> btnAplicar;
     // CONTROLE DE NAVEGAÇÃO
     
     int indiceFocado = -1;                  /**< Índice do elemento atualmente focado. */
@@ -163,6 +163,8 @@ private:
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
     GerenciadorImagens gerenciadorImagens;    /**< Gerenciador de cache de texturas. */
     
+
+    void aplicarAlteracoes();
     /**
      * @brief Inicializa os botões e elementos interativos.
      */
