@@ -17,6 +17,9 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #include "Botao.hpp"
 
 /**
@@ -117,7 +120,9 @@ private:
     // ESTADO DO BLUETOOTH
     
     bool bluetoothAtivo = true;             /**< Estado do Bluetooth (ON/OFF). */
-    bool escaneando = false;                /**< Se está em processo de escaneamento. */
+    std::atomic<bool> escaneando{false};    /**< Se está em processo de escaneamento. */
+    std::mutex mutexBT;
+    std::thread threadBT;
     
     // LISTAS DE DISPOSITIVOS
     
