@@ -69,6 +69,7 @@ void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos);
 void gerenciar_bluetooth();
 bool obter_estado_bluetooth();
 void definir_estado_bt(bool ligar);
+std::vector<device_bt> get_list_device();
 
 // Parsing
 void parsing_bluetooth_stream(
