@@ -23,76 +23,68 @@
 
 using namespace std;
 
+bool comando_existe(const string &cmd) {
+    string check = "which " + cmd + " > /dev/null 2>&1";
+    return (system(check.c_str()) == 0);
+}
+
+bool executar_comando_audio(const string &cmd_wp, const string &cmd_pa, const string &cmd_alsa) {
+    // Captura as strings por valor para a thread
+    std::thread([cmd_wp, cmd_pa, cmd_alsa]() {
+        bool sucesso = false;
+        if (comando_existe("wpctl")) {
+            if (system((cmd_wp + " > /dev/null 2>&1").c_str()) == 0) sucesso = true;
+        }
+        if (!sucesso && comando_existe("pactl")) {
+            if (system((cmd_pa + " > /dev/null 2>&1").c_str()) == 0) sucesso = true;
+        }
+        if (!sucesso && comando_existe("amixer")) {
+            system((cmd_alsa + " > /dev/null 2>&1").c_str());
+        }
+    }).detach(); // Fire and forget: a thread se limpa sozinha ao terminar
+    return true; 
+}
+
 void aumentar_volume()
 {
-    pid_t pid = fork();
-    if (pid == 0)
-    {
-        execlp("sh", "sh", "-c", "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+", nullptr);
-        perror("execlp falhou");
-        exit(1);
-    }
-    else if (pid > 0)
-    {
-        waitpid(pid, NULL, 0);
-        cout << "Volume aumentado com sucesso\n";
-    }
-    else
-    {
-        perror("fork falhou");
-    }
+    bool ok = executar_comando_audio(
+        "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+",
+        "pactl set-sink-volume @DEFAULT_SINK@ +5%",
+        "amixer sset Master 5%+"
+    );
+    if (ok) cout << "Volume aumentado com sucesso\n";
+    else cerr << "[Erro] Nenhum backend de áudio disponível\n";
 }
 
 void diminuir_volume()
 {
-    pid_t pid = fork();
-    if (pid == 0)
-    {
-        execlp("sh", "sh", "-c", "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-", nullptr);
-        perror("execlp falhou");
-        exit(1);
-    }
-    else if (pid > 0)
-    {
-        waitpid(pid, NULL, 0);
-        cout << "Volume diminuído com sucesso\n";
-    }
-    else
-    {
-        perror("fork falhou");
-    }
+    bool ok = executar_comando_audio(
+        "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-",
+        "pactl set-sink-volume @DEFAULT_SINK@ -5%",
+        "amixer sset Master 5%-"
+    );
+    if (ok) cout << "Volume diminuído com sucesso\n";
+    else cerr << "[Erro] Nenhum backend de áudio disponível\n";
 }
 
 void definir_volume(int valor_int)
 {
-
     if (valor_int > 100) valor_int = 100;
     if (valor_int < 0) valor_int = 0;
 
     float valor_float = static_cast<float>(valor_int) / 100.0f;
-
     string valor_str = to_string(valor_float);
     std::replace(valor_str.begin(), valor_str.end(), ',', '.'); 
-    // --------------------------------------------------
 
-    pid_t pid = fork();
-    string comando = "wpctl set-volume @DEFAULT_AUDIO_SINK@ " + valor_str;
-    
-    if (pid == 0)
-    {
-        execlp("sh", "sh", "-c", comando.c_str(), nullptr);
-        perror("Execlp falhou");
-        exit(1);
-    }
-    else if (pid > 0)
-    {
-        waitpid(pid, nullptr, 0);
-        cout << "[Hardware] Volume definido para " << valor_int << "% (Comando: " << valor_str << ")\n";
-    }
-    else
-    {
-        perror("fork falhou");
-    }
+    string v_perc = to_string(valor_int) + "%";
+
+    bool ok = executar_comando_audio(
+        "wpctl set-volume @DEFAULT_AUDIO_SINK@ " + valor_str,
+        "pactl set-sink-volume @DEFAULT_SINK@ " + v_perc,
+        "amixer sset Master " + v_perc
+    );
+
+    if (ok) cout << "[Hardware] Volume definido para " << valor_int << "%\n";
 }
 
 int obter_volume_atual() {
@@ -120,6 +112,7 @@ int obter_volume_atual() {
 
 void aumentar_brilho()
 {
+    if (!comando_existe("brightnessctl")) return;
     pid_t pid = fork();
     if (pid == 0)
     {
@@ -140,6 +133,7 @@ void aumentar_brilho()
 
 void diminuir_brilho()
 {
+    if (!comando_existe("brightnessctl")) return;
     pid_t pid = fork();
     if (pid == 0)
     {
@@ -279,6 +273,10 @@ std::vector<DisplayOutput> obter_info_displays() {
 }
 void listar_resolucao()
 {
+    if (!comando_existe("xrandr")) {
+        cout << "[Hardware] xrandr não disponível.\n";
+        return;
+    }
     cout << "Lista de saidas e resolucoes suportadas: \n";
     pid_t pid = fork();
     if (pid == 0)
