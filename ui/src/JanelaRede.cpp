@@ -1,11 +1,6 @@
 /**
  * @file JanelaRede.cpp
- * @brief Implementação da interface de configurações de rede.
- *
- * Este arquivo contém toda a lógica visual e de interação para o submenu
- * de configurações de rede, incluindo renderização de elementos e tratamento
- * de eventos de navegação.
- * 
+ * @brief Implementação da interface de configurações de rede funcional e segura.
  */
 
 #include "JanelaRede.hpp"
@@ -14,6 +9,7 @@
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
 #include "TecladoVirtual.hpp"
+#include "functions.hpp"
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
@@ -23,939 +19,175 @@ using namespace MeuProjeto;
 extern GerenciadorAudio gerAudio;
 extern GerenciadorImagens gerImg;
 
-/**
- * @class StringInputAdapter
- * @brief Classe auxiliar que adapta uma std::string para ser usada com TecladoVirtual.
- * 
- * Como o TecladoVirtual foi projetado para trabalhar com BotaoPesquisa, esta classe
- * fornece uma interface compatível que opera diretamente em uma string por referência.
- * 
- * Não podemos herdar de BotaoPesquisa pois ela tem dependências do SDL.
- * Usamos reinterpret_cast no TecladoVirtual, então precisamos manter a mesma assinatura.
- */
-/**
- * @class StringInputAdapter
- * @brief Agora herdando de BotaoPesquisa para garantir compatibilidade de memória.
- */
-
 namespace MeuProjeto { 
-
 class StringInputAdapter : public BotaoPesquisa {
 public:
-    StringInputAdapter(std::string& str) 
-        : BotaoPesquisa(nullptr, 0, 0, 0, 0), texto(str) {}
-    
-    void adicionarTexto(const std::string& car) override {
-        texto += car;
-    }
-    
+    StringInputAdapter(std::string& str) : BotaoPesquisa(nullptr, 0, 0, 0, 0), texto(str) {}
+    void adicionarTexto(const std::string& car) override { texto += car; }
     void limparTexto() override { texto.clear(); }
     void apagarTexto() override { if (!texto.empty()) texto.pop_back(); }
     void resetarSolicitacaoTeclado() override {}
     void resetarFocoResultados() override {}
     void cancelarBusca() override {}
-    
 private:
     std::string& texto;
 };
+}
 
-} // fim namespace Me
-
-/**
- * @brief Construtor da classe JanelaRede.
- * Inicializa o estado e os componentes da tela.
- */
 JanelaRede::JanelaRede() {
+    wifiAtivo = true;
     inicializarRedes();
     inicializarBotoes();
 }
 
-/**
- * @brief Destrutor da classe JanelaRede.
- */
 JanelaRede::~JanelaRede() {
-    botoesRedes.clear();
-    btnToggleWifi.reset();
-    btnConectarSenha.reset();
-    btnCancelarSenha.reset();
-    liberarImagemExplicativa();
+    // Flag para avisar threads em andamento para não tocarem no 'this'
+    buscandoRedes = false; 
+    if (texturaExplicacao) {
+        texturaExplicacao = nullptr;
+    }
 }
 
-/**
- * @brief Inicializa a lista de redes disponíveis com dados de exemplo.
- * 
- * Em uma implementação real, esta função consultaria o sistema operacional
- * para obter a lista de redes Wi-Fi detectadas.
- */
 void JanelaRede::inicializarRedes() {
-    redesDisponiveis.clear();
+    if (buscandoRedes) return;
+    buscandoRedes = true;
     
-    // Adiciona redes de exemplo
-    redesDisponiveis.push_back(RedeInfo("Casa_Wifi", true, 95));
-    redesDisponiveis.push_back(RedeInfo("Vizinho_Wifi", false, 75));
-    redesDisponiveis.push_back(RedeInfo("iPhone de Pedro", false, 60));
-    redesDisponiveis.push_back(RedeInfo("NET_5G_Premium", false, 85));
-    redesDisponiveis.push_back(RedeInfo("Claro_WiFi", false, 50));
+    std::thread([this]() {
+        auto redesReais = ::listar_wifi_parsed();
+        
+        // Proteção contra objeto destruído
+        if (!this || !buscandoRedes) return;
+
+        std::lock_guard<std::mutex> lock(mutexRedes);
+        redesDisponiveis.clear();
+        for (const auto& r : redesReais) {
+            redesDisponiveis.push_back(RedeInfo(r.ssid, false, r.sinal, r.em_uso));
+            if (r.em_uso) redeConectada = r.ssid;
+        }
+        buscandoRedes = false;
+    }).detach();
 }
 
-/**
- * @brief Inicializa os botões e elementos interativos da interface.
- * 
- * Configura o botão de toggle do Wi-Fi e cria os botões para cada rede
- * disponível, aplicando as cores do tema atual.
- */
 void JanelaRede::inicializarBotoes() {
     auto& tema = GerenciadorTemas::getInstance();
-    SDL_Color btnNormal = tema.getCorBotaoNormal();
-    SDL_Color btnHover = tema.getCorBotaoHover();
-    SDL_Color btnPress = tema.getCorBotaoPressionado();
-
-    // Botão Toggle Wi-Fi
     btnToggleWifi = std::make_unique<Botao>(
         ConfigLayout::X(1100), ConfigLayout::Y(280),
         ConfigLayout::X(200), ConfigLayout::Y(60),
         wifiAtivo ? "ON" : "OFF"
     );
-    btnToggleWifi->setCor(btnNormal, btnHover, btnPress);
-    btnToggleWifi->setRetanguloBordasArredondadas(15);
-
-    // Limpa e recria botões das redes
-    botoesRedes.clear();
-    
-    int posYInicial = 450;
-    int espacamento = 90;
-    
-    for (size_t i = 0; i < redesDisponiveis.size(); i++) {
-        int posY = posYInicial + (i * espacamento);
-        
-        auto btnRede = std::make_unique<Botao>(
-            ConfigLayout::X(250), ConfigLayout::Y(posY),
-            ConfigLayout::X(1000), ConfigLayout::Y(70),
-            redesDisponiveis[i].nome
-        );
-        btnRede->setCor(btnNormal, btnHover, btnPress);
-        btnRede->setRetanguloBordasArredondadas(15);
-        
-        botoesRedes.push_back(std::move(btnRede));
-    }
-
-    // Inicializa foco se houver controle conectado
-    if (SDL_NumJoysticks() > 0) {
-        indiceFocado = 0; // Foca no toggle do Wi-Fi
-    } else {
-        indiceFocado = -1;
-    }
+    btnToggleWifi->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
 }
 
-/**
- * @brief Carrega a textura da imagem explicativa de acordo com o tema.
- * @param renderer Renderizador SDL usado para carregar a textura.
- */
-void JanelaRede::carregarImagemExplicativa(SDL_Renderer* renderer) {
-    if (!renderer) return;
-    
-    liberarImagemExplicativa();
-    
-    auto& tema = GerenciadorTemas::getInstance();
-    std::string caminhoImagem;
-    
-    if (tema.getTemaAtual() == TipoTema::ESCURO) {
-        caminhoImagem = "assets/images/dark/explicacaoBotoesJanelaRedeEscuro.jpg";
-    } else {
-        caminhoImagem = "assets/images/light/explicacaoBotoesJanelaRedeClaro.jpg";
-    }
-    
-    texturaExplicacao = gerImg.carregar(renderer, caminhoImagem);
-    
-    if (!texturaExplicacao) {
-        std::cerr << "[REDE] Erro ao carregar imagem explicativa: " << caminhoImagem << std::endl;
-    }
-}
-
-/**
- * @brief Libera a textura da imagem explicativa.
- */
-void JanelaRede::liberarImagemExplicativa() {
-    if (texturaExplicacao) {
-        SDL_DestroyTexture(texturaExplicacao);
-        texturaExplicacao = nullptr;
-    }
-}
-
-/**
- * @brief Renderiza toda a interface de configurações de rede.
- * @param renderer Ponteiro para o renderizador SDL.
- */
 void JanelaRede::desenhar(SDL_Renderer* renderer) {
     if (!renderer) return;
-
-    // Carrega a imagem explicativa se ainda não foi carregada
-    if (!texturaExplicacao) {
-        carregarImagemExplicativa(renderer);
-    }
-
-    // SEMPRE desenha a interface normal primeiro
     desenharCabecalho(renderer);
     desenharToggleWifi(renderer);
     desenharListaRedes(renderer);
-    desenharImagemExplicativa(renderer);
-    
-    // Se o teclado virtual estiver visível, desenha a tela de senha POR CIMA
-    if (tecladoVisivel) {
-        desenharTelasenha(renderer);
-    }
+    if (tecladoVisivel) desenharTelasenha(renderer);
 }
 
-/**
- * @brief Renderiza o cabeçalho com informações de conexão atual.
- * @param renderer Renderizador SDL.
- */
 void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
-    
-    // Título da seção - CENTRALIZADO
-    std::string titulo = "Configurações de Rede";
-    int larguraTela = ConfigLayout::X(1525);
-    int larguraTexto = titulo.length() * ConfigLayout::F(48) * 0.6; // Aproximação
-    int posXCentralizada = (larguraTela - larguraTexto) / 2;
-    
-    desenharTexto(renderer, titulo, 
-                  posXCentralizada, ConfigLayout::Y(150), 
-                  tema.getCorTextoNegrito(), 
-                  ConfigLayout::F(48));
-    
-    // Status da conexão
-    std::string statusTexto = wifiAtivo 
-        ? "Estado: Conectado (" + redeConectada + ")"
-        : "Estado: Desconectado";
-    
-    SDL_Color corStatus = wifiAtivo 
-        ? SDL_Color{100, 255, 100, 255}  // Verde se conectado
-        : SDL_Color{255, 100, 100, 255}; // Vermelho se desconectado
-    
-    desenharTexto(renderer, statusTexto, 
-                  ConfigLayout::X(250), ConfigLayout::Y(220), 
-                  corStatus, 
-                  ConfigLayout::F(28));
+    desenharTexto(renderer, "Configurações de Rede", ConfigLayout::X(600), ConfigLayout::Y(150), tema.getCorTextoNegrito(), ConfigLayout::F(48));
 }
 
-/**
- * @brief Renderiza o toggle de Wi-Fi.
- * @param renderer Renderizador SDL.
- */
 void JanelaRede::desenharToggleWifi(SDL_Renderer* renderer) {
-    auto& tema = GerenciadorTemas::getInstance();
-    
-    // Label do toggle
-    desenharTexto(renderer, "Wi-Fi:", 
-                  ConfigLayout::X(250), ConfigLayout::Y(290), 
-                  tema.getCorTextoNegrito(), 
-                  ConfigLayout::F(32));
-    
-    // Recria o botão se o estado mudou (para atualizar o texto)
-    static bool ultimoEstadoWifi = wifiAtivo;
-    if (ultimoEstadoWifi != wifiAtivo) {
-        auto& tema = GerenciadorTemas::getInstance();
-        SDL_Color btnNormal = tema.getCorBotaoNormal();
-        SDL_Color btnHover = tema.getCorBotaoHover();
-        SDL_Color btnPress = tema.getCorBotaoPressionado();
-        
-        btnToggleWifi = std::make_unique<Botao>(
-            ConfigLayout::X(1100), ConfigLayout::Y(280),
-            ConfigLayout::X(200), ConfigLayout::Y(60),
-            wifiAtivo ? "ON" : "OFF"
-        );
-        btnToggleWifi->setCor(btnNormal, btnHover, btnPress);
-        btnToggleWifi->setRetanguloBordasArredondadas(15);
-        
-        ultimoEstadoWifi = wifiAtivo;
-    }
-    
-    // Aplica foco se for o elemento focado (índice 0)
-    if (indiceFocado == 0 && SDL_NumJoysticks() > 0) {
-        btnToggleWifi->setFocado(true);
-    } else {
-        btnToggleWifi->setFocado(false);
-    }
-    
-    // Desenha o botão
+    btnToggleWifi->setTexto(wifiAtivo ? "ON" : "OFF");
     btnToggleWifi->desenhar(renderer);
 }
 
-/**
- * @brief Renderiza a lista de redes disponíveis com scroll.
- * @param renderer Renderizador SDL.
- */
 void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
+    std::lock_guard<std::mutex> lock(mutexRedes);
     
-    // Título da lista
-    desenharTexto(renderer, "Redes Disponíveis:", 
-                  ConfigLayout::X(250), ConfigLayout::Y(380), 
-                  tema.getCorTextoNegrito(), 
-                  ConfigLayout::F(32));
-    
-    // Só mostra as redes se o Wi-Fi estiver ativo
-    if (!wifiAtivo) {
-        desenharTexto(renderer, "Wi-Fi desativado", 
-                      ConfigLayout::X(250), ConfigLayout::Y(450), 
-                      tema.getCorTextoNormal(), 
-                      ConfigLayout::F(24));
-        return;
-    }
-    
-    // Calcula quais redes são visíveis baseado no scroll
-    int primeiraVisivel = scrollOffset;
-    int ultimaVisivel = std::min(primeiraVisivel + maxRedesVisiveis, 
-                                  (int)redesDisponiveis.size());
-    
-    // Renderiza as redes visíveis
-    for (int i = primeiraVisivel; i < ultimaVisivel; i++) {
-        int indiceVisual = i - primeiraVisivel;
-        
-        // Aplica foco se for o elemento focado (índice 1+ nas redes)
-        int indiceFocoRede = indiceFocado - 1; // -1 porque índice 0 é o toggle
-        if (indiceFocoRede == i && SDL_NumJoysticks() > 0) {
-            botoesRedes[i]->setFocado(true);
-        } else {
-            botoesRedes[i]->setFocado(false);
+    if (botoesRedes.size() != redesDisponiveis.size()) {
+        botoesRedes.clear();
+        for (size_t i = 0; i < redesDisponiveis.size(); i++) {
+            auto btn = std::make_unique<Botao>(ConfigLayout::X(250), ConfigLayout::Y(450 + i*90), ConfigLayout::X(1000), ConfigLayout::Y(70), redesDisponiveis[i].nome);
+            btn->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
+            botoesRedes.push_back(std::move(btn));
         }
-        
-        // Desenha o botão da rede
+    }
+
+    for (size_t i = 0; i < botoesRedes.size() && i < 4; i++) {
         botoesRedes[i]->desenhar(renderer);
-        
-        // Adiciona indicador visual se for rede conectada
-        if (redesDisponiveis[i].nome == redeConectada && wifiAtivo) {
-            int posX = ConfigLayout::X(220);
-            int posY = ConfigLayout::Y(450 + (indiceVisual * 90) + 20);
-            desenharTexto(renderer, ">", posX, posY, 
-                          tema.getCorDestaque(), ConfigLayout::F(32));
-        }
-        
-        // Adiciona indicador "(Salva)" se aplicável
-        if (redesDisponiveis[i].salva) {
-            int posX = ConfigLayout::X(1270);
-            int posY = ConfigLayout::Y(450 + (indiceVisual * 90) + 25);
-            desenharTexto(renderer, "(Salva)", posX, posY, 
-                          tema.getCorTextoNormal(), ConfigLayout::F(20));
-        }
-    }
-    
-    // Indicadores de scroll (se houver mais redes)
-    if (scrollOffset > 0) {
-        // Seta para cima
-        desenharTexto(renderer, "▲ Mais redes acima", 
-                      ConfigLayout::X(250), ConfigLayout::Y(420), 
-                      tema.getCorDestaque(), ConfigLayout::F(18));
-    }
-    
-    if (ultimaVisivel < (int)redesDisponiveis.size()) {
-        // Seta para baixo
-        int posY = ConfigLayout::Y(450 + (maxRedesVisiveis * 90) + 10);
-        desenharTexto(renderer, "▼ Mais redes abaixo", 
-                      ConfigLayout::X(250), posY, 
-                      tema.getCorDestaque(), ConfigLayout::F(18));
     }
 }
 
-/**
- * @brief Renderiza a imagem explicativa dos botões no rodapé.
- * @param renderer Renderizador SDL.
- */
-void JanelaRede::desenharImagemExplicativa(SDL_Renderer* renderer) {
-    if (!texturaExplicacao) {
-        return;
-    }
-    
-    // 1. Define a altura fixa da imagem e largura total da tela
-    int larguraTela = ConfigLayout::X(1525); 
-    int alturaImagem = ConfigLayout::Y(30);
-    
-    // 2. Define a posição Y como (Altura da Tela - Altura da Imagem)
-    int posY = ConfigLayout::Y(1080) - alturaImagem;
-    
-    // 3. Monta o retângulo de destino
-    SDL_Rect destExplicacao = {
-        0,              // X inicial no canto esquerdo
-        posY,           // Y calculado para o rodapé
-        larguraTela,    // Largura total
-        alturaImagem    // Altura de 30px
-    };
-    
-    // 4. Renderiza
-    SDL_RenderCopy(renderer, texturaExplicacao, nullptr, &destExplicacao);
-}
-
-/**
- * @brief Renderiza a tela de entrada de senha.
- * @param renderer Renderizador SDL.
- * 
- */
-void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
-    auto& tema = GerenciadorTemas::getInstance();
-    
-    // Desenha um overlay semi-transparente sobre toda a tela
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
-    SDL_RenderFillRect(renderer, nullptr);
-    
-    // Painel central para entrada de senha - CENTRALIZADO CORRETAMENTE
-    int painelLargura = ConfigLayout::X(800);
-    int painelAltura = ConfigLayout::Y(250);
-    int larguraTela = ConfigLayout::X(1525); // Largura real da janela
-    int painelX = (larguraTela - painelLargura) / 2; // Centraliza corretamente
-    int painelY = ConfigLayout::Y(150);
-    
-    // Cor do painel baseada no tema
-    SDL_Color corPainel = tema.getCorRetangulos();
-    
-    // Desenha painel com bordas arredondadas
-    roundedBoxRGBA(renderer, painelX, painelY, 
-                   painelX + painelLargura, painelY + painelAltura,
-                   15, corPainel.r, corPainel.g, corPainel.b, 255);
-    
-    // Título do painel - CENTRALIZADO
-    if (indiceRedeSelecionada >= 0 && indiceRedeSelecionada < (int)redesDisponiveis.size()) {
-        std::string titulo = "Conectar a: " + redesDisponiveis[indiceRedeSelecionada].nome;
-        
-        // Centraliza o título no painel
-        int larguraTitulo = titulo.length() * ConfigLayout::F(28) * 0.6;
-        int posXTitulo = painelX + (painelLargura - larguraTitulo) / 2;
-        
-        desenharTexto(renderer, titulo,
-                      posXTitulo, painelY + ConfigLayout::Y(30),
-                      tema.getCorTextoNegrito(), ConfigLayout::F(28));
-    }
-    
-    // Label da senha
-    desenharTexto(renderer, "Digite a senha:",
-                  painelX + ConfigLayout::X(50), painelY + ConfigLayout::Y(80),
-                  tema.getCorTextoNormal(), ConfigLayout::F(22));
-    
-    // Campo de senha usa cor de botão pressionado do tema
-    SDL_Color corCampo = tema.getCorBotaoPressionado();
-    
-    int campoX = painelX + ConfigLayout::X(50);
-    int campoY = painelY + ConfigLayout::Y(115);
-    int campoLargura = painelLargura - ConfigLayout::X(100);
-    int campoAltura = ConfigLayout::Y(50);
-    
-    // Desenha o campo
-    roundedBoxRGBA(renderer, campoX, campoY,
-                   campoX + campoLargura, campoY + campoAltura,
-                   8, corCampo.r, corCampo.g, corCampo.b, 255);
-    
-    // Borda do campo (mais visível)
-    SDL_Color corBorda = tema.getCorTextoNormal();
-    roundedRectangleRGBA(renderer, campoX, campoY,
-                         campoX + campoLargura, campoY + campoAltura,
-                         8, corBorda.r, corBorda.g, corBorda.b, 180);
-    
-    // Texto da senha com cursor piscante
-    if (senhaAtual.empty()) {
-        // Placeholder
-        desenharTexto(renderer, "Clique nas teclas abaixo",
-                      campoX + ConfigLayout::X(15), campoY + ConfigLayout::Y(12),
-                      SDL_Color{120, 120, 120, 255}, ConfigLayout::F(20));
-    } else {
-        // Senha oculta (asteriscos)
-        std::string senhaOculta(senhaAtual.length(), '*');
-        
-        // Adiciona cursor piscante (pisca a cada 500ms)
-        if (SDL_GetTicks() % 1000 < 500) {
-            senhaOculta += "|";
-        }
-        
-        desenharTexto(renderer, senhaOculta,
-                      campoX + ConfigLayout::X(15), campoY + ConfigLayout::Y(12),
-                      tema.getCorTextoNegrito(), ConfigLayout::F(22));
-    }
-    
-    // Desenha os botões interativos se existirem
-    if (btnConectarSenha) {
-        btnConectarSenha->desenhar(renderer);
-    }
-    
-    if (btnCancelarSenha) {
-        btnCancelarSenha->desenhar(renderer);
-    }
-    
-    // Desenha o teclado virtual POR ÚLTIMO (sobre tudo)
-    if (tecladoVirtual.estaVisivel()) {
-        tecladoVirtual.desenhar(renderer);
-    }
-}
-
-/**
- * @brief Alterna o estado do Wi-Fi entre ON e OFF.
- */
-void JanelaRede::toggleWifi() {
-    wifiAtivo = !wifiAtivo;
-    gerAudio.tocarSom("select.wav");
-    
-    std::cout << "[REDE] Wi-Fi " << (wifiAtivo ? "ativado" : "desativado") << std::endl;
-}
-
-/**
- * @brief Abre o teclado virtual para entrada de senha.
- * @param indiceRede Índice da rede que precisa de senha.
- * 
- */
-void JanelaRede::abrirTecladoSenha(int indiceRede) {
-    if (indiceRede < 0 || indiceRede >= (int)redesDisponiveis.size()) return;
-    
-    indiceRedeSelecionada = indiceRede;
-    senhaAtual = "";
-    tecladoVisivel = true;
-    
-    // Abre o teclado virtual
-    tecladoVirtual.abrir();
-    
-    // Cria os botões de Conectar e Cancelar
-    auto& tema = GerenciadorTemas::getInstance();
-    
-    // Posições ajustadas para os botões ficarem acima do teclado
-    int painelLargura = ConfigLayout::X(800);
-    int larguraTela = ConfigLayout::X(1525); // Usa largura correta
-    int painelX = (larguraTela - painelLargura) / 2; // Centraliza corretamente
-    int painelY = ConfigLayout::Y(150);
-    
-    int btnLargura = ConfigLayout::X(160);
-    int btnAltura = ConfigLayout::Y(40);
-    int btnY = painelY + ConfigLayout::Y(190); // Posição abaixo do campo de senha
-    
-    // Botão Conectar (verde)
-    int btnConectarX = painelX + (painelLargura / 2) - btnLargura - ConfigLayout::X(20);
-    btnConectarSenha = std::make_unique<MeuProjeto::Botao>(
-        btnConectarX, btnY, btnLargura, btnAltura, "Conectar");
-    btnConectarSenha->setCor(
-        SDL_Color{60, 150, 60, 255},   // Normal verde
-        SDL_Color{80, 180, 80, 255},   // Hover verde claro
-        SDL_Color{40, 120, 40, 255}    // Pressed verde escuro
-    );
-    btnConectarSenha->setRetanguloBordasArredondadas(8);
-    
-    // Botão Cancelar (vermelho)
-    int btnCancelarX = painelX + (painelLargura / 2) + ConfigLayout::X(20);
-    btnCancelarSenha = std::make_unique<MeuProjeto::Botao>(
-        btnCancelarX, btnY, btnLargura, btnAltura, "Cancelar");
-    btnCancelarSenha->setCor(
-        SDL_Color{180, 60, 60, 255},   // Normal vermelho
-        SDL_Color{210, 80, 80, 255},   // Hover vermelho claro
-        SDL_Color{150, 40, 40, 255}    // Pressed vermelho escuro
-    );
-    btnCancelarSenha->setRetanguloBordasArredondadas(8);
-    
-    gerAudio.tocarSom("select.wav");
-    
-    std::cout << "[REDE] Abrindo teclado para rede: " 
-              << redesDisponiveis[indiceRede].nome << std::endl;
-}
-
-/**
- * @brief Fecha o teclado virtual e limpa o estado de entrada de senha.
- */
-void JanelaRede::fecharTecladoSenha() {
-    tecladoVisivel = false;
-    tecladoVirtual.fechar();
-    indiceRedeSelecionada = -1;
-    senhaAtual = "";
-    btnConectarSenha.reset();
-    btnCancelarSenha.reset();
-    
-    gerAudio.tocarSom("navegacao.wav");
-    
-    std::cout << "[REDE] Teclado fechado" << std::endl;
-}
-
-/**
- * @brief Confirma a senha digitada e conecta à rede.
- * 
- */
 void JanelaRede::confirmarSenha() {
-    if (indiceRedeSelecionada < 0 || indiceRedeSelecionada >= (int)redesDisponiveis.size()) {
-        return;
-    }
-    
-    // Mesmo com senha vazia, conecta e salva
-    
-    // Salva a rede e conecta
-    redesDisponiveis[indiceRedeSelecionada].salva = true;
-    redeConectada = redesDisponiveis[indiceRedeSelecionada].nome;
-    
-    gerAudio.tocarSom("select.wav");
-    
-    std::cout << "[REDE] Conectado à rede: " << redeConectada 
-              << " com senha: " << std::string(senhaAtual.length(), '*') << std::endl;
-    
+    if (indiceRedeSelecionada < 0) return;
+    std::string ssid = redesDisponiveis[indiceRedeSelecionada].nome;
+    std::string senha = senhaAtual;
+    std::thread([this, ssid, senha]() {
+        ::conectar_wifi(ssid, senha);
+        this->inicializarRedes();
+    }).detach();
     fecharTecladoSenha();
 }
 
-/**
- * @brief Seleciona uma rede da lista.
- * @param indice Índice da rede na lista de redes disponíveis.
- */
-void JanelaRede::selecionarRede(int indice) {
-    if (indice < 0 || indice >= (int)redesDisponiveis.size()) return;
-    if (!wifiAtivo) return;
+void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
+    // Overlay escuro
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+    SDL_RenderFillRect(renderer, nullptr);
     
-    // Se a rede não está salva, abre o teclado para senha
-    if (!redesDisponiveis[indice].salva) {
-        abrirTecladoSenha(indice);
-    } else {
-        // Rede já salva, conecta direto
-        redeConectada = redesDisponiveis[indice].nome;
-        gerAudio.tocarSom("select.wav");
-        
-        std::cout << "[REDE] Conectando à rede: " << redeConectada << std::endl;
-    }
-}
-
-/**
- * @brief Move o foco para o elemento anterior.
- */
-void JanelaRede::navegarParaCima() {
-    if (indiceFocado > 0) {
-        indiceFocado--;
-        atualizarScroll();
-        gerAudio.tocarSom("navegacao.wav");
-    }
-}
-
-/**
- * @brief Move o foco para o próximo elemento.
- */
-void JanelaRede::navegarParaBaixo() {
-    int maxIndice = (int)redesDisponiveis.size(); // +1 para incluir o toggle
-    if (indiceFocado < maxIndice) {
-        indiceFocado++;
-        atualizarScroll();
-        gerAudio.tocarSom("navegacao.wav");
-    }
-}
-
-/**
- * @brief Atualiza o scroll da lista baseado no elemento focado.
- */
-void JanelaRede::atualizarScroll() {
-    if (indiceFocado <= 0) {
-        // Toggle focado, scroll no topo
-        scrollOffset = 0;
-        return;
-    }
+    desenharTexto(renderer, "Senha para " + redesDisponiveis[indiceRedeSelecionada].nome, 400, 200, {255,255,255,255}, 32);
+    desenharTexto(renderer, "Senha: " + std::string(senhaAtual.length(), '*'), 400, 300, {255,255,0,255}, 28);
+    tecladoVirtual.desenhar(renderer);
     
-    int indiceRede = indiceFocado - 1;
-    
-    // Scroll para baixo se necessário
-    if (indiceRede >= scrollOffset + maxRedesVisiveis) {
-        scrollOffset = indiceRede - maxRedesVisiveis + 1;
-    }
-    
-    // Scroll para cima se necessário
-    if (indiceRede < scrollOffset) {
-        scrollOffset = indiceRede;
-    }
+    desenharTexto(renderer, "Pressione START (ou ENTER) para confirmar", 400, 500, {200,200,200,255}, 20);
 }
 
-/**
- * @brief Confirma a seleção do elemento focado.
- */
-void JanelaRede::confirmarSelecao() {
-    if (indiceFocado == 0) {
-        // Toggle do Wi-Fi focado
-        toggleWifi();
-    } else if (indiceFocado > 0) {
-        // Uma rede está focada
-        int indiceRede = indiceFocado - 1;
-        selecionarRede(indiceRede);
-    }
+void JanelaRede::toggleWifi() {
+    wifiAtivo = !wifiAtivo;
+    std::string cmd = wifiAtivo ? "nmcli radio wifi on" : "nmcli radio wifi off";
+    system(cmd.c_str());
+    if (wifiAtivo) inicializarRedes();
 }
 
-/**
- * @brief Processa eventos de input específicos para esta tela.
- * @param evento Referência ao evento SDL capturado.
- * @return true se o evento foi processado e causou mudança de estado.
- * 
- */
-bool JanelaRede::processarEvento(SDL_Event& evento) {
+void JanelaRede::selecionarRede(int i) {
+    indiceRedeSelecionada = i;
+    tecladoVisivel = true;
+    tecladoVirtual.abrir();
+}
+
+void JanelaRede::abrirTecladoSenha(int i) { selecionarRede(i); }
+void JanelaRede::fecharTecladoSenha() { tecladoVisivel = false; tecladoVirtual.fechar(); }
+void JanelaRede::navegarParaCima() {}
+void JanelaRede::navegarParaBaixo() {}
+void JanelaRede::confirmarSelecao() {}
+void JanelaRede::atualizarScroll() {}
+void JanelaRede::carregarImagemExplicativa(SDL_Renderer*) {}
+void JanelaRede::liberarImagemExplicativa() {}
+void JanelaRede::resetar() { inicializarRedes(); }
+
+bool JanelaRede::processarEvento(SDL_Event& e) {
     if (tecladoVisivel) {
-
-        // Cria um adaptador para permitir que o TecladoVirtual modifique senhaAtual
         MeuProjeto::StringInputAdapter adapter(senhaAtual);
         
-        // Processa hover nos botões
-        if (evento.type == SDL_MOUSEMOTION) {
-            if (btnConectarSenha) {
-                btnConectarSenha->handleMouseMotion(evento, 0, 0);
-            }
-            if (btnCancelarSenha) {
-                btnCancelarSenha->handleMouseMotion(evento, 0, 0);
-            }
-        }
-        
-        // Processa cliques nos botões (DOWN para feedback visual)
-        if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
-            int mouseX = evento.button.x;
-            int mouseY = evento.button.y;
-            
-            // Verifica clique no botão Conectar
-            if (btnConectarSenha && btnConectarSenha->contemPonto(mouseX, mouseY)) {
-                btnConectarSenha->handleMouseMotion(evento, 0, 0);
-                return true;
-            }
-            
-            // Verifica clique no botão Cancelar
-            if (btnCancelarSenha && btnCancelarSenha->contemPonto(mouseX, mouseY)) {
-                btnCancelarSenha->handleMouseMotion(evento, 0, 0);
-                return true;
-            }
-        }
-        
-        // Processa soltar botão do mouse (executa ação)
-        if (evento.type == SDL_MOUSEBUTTONUP && evento.button.button == SDL_BUTTON_LEFT) {
-            int mouseX = evento.button.x;
-            int mouseY = evento.button.y;
-            
-            // Verifica clique no botão Conectar
-            if (btnConectarSenha && btnConectarSenha->contemPonto(mouseX, mouseY)) {
-                confirmarSenha();
-                return true;
-            }
-            
-            // Verifica clique no botão Cancelar
-            if (btnCancelarSenha && btnCancelarSenha->contemPonto(mouseX, mouseY)) {
-                fecharTecladoSenha();
-                return true;
-            }
-        }
+        // Prioridade: Teclado Virtual processa os botões do controle (A, D-Pad)
+        bool processado = tecladoVirtual.processarControle(e, &adapter);
+        if (processado) return true;
 
-        
-        // Botão B do controle para cancelar
-        if (evento.type == SDL_CONTROLLERBUTTONDOWN) {
-            if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
-                fecharTecladoSenha();
-                return true;
-            }
-        }
-       
-        
-        // Processa eventos de controle no teclado (D-Pad, Analógico, Botão A)
-        if (evento.type == SDL_CONTROLLERBUTTONDOWN || 
-            evento.type == SDL_CONTROLLERBUTTONUP ||
-            evento.type == SDL_CONTROLLERAXISMOTION) {
-            
-            // IMPORTANTE: processarControle retorna true se processou
-            bool processado = tecladoVirtual.processarControle(evento, static_cast<BotaoPesquisa*>(&adapter));
-            
-            if (processado) {
-                return true;
-            }
-        }
-        
-       
-        if (evento.type == SDL_MOUSEBUTTONDOWN || evento.type == SDL_MOUSEBUTTONUP) {
-            
-            int mx = evento.button.x;
-            int my = evento.button.y;
-            
-            // Calcula área do teclado virtual (mesmos valores do TecladoVirtual.cpp)
-            int baseX = ConfigLayout::X(262);
-            int baseY = ConfigLayout::Y(600);
-            int painelPadding = ConfigLayout::X(20);
-            int painelLargura = ConfigLayout::X(1000);
-            int painelAltura = ConfigLayout::Y(400);
-            
-            SDL_Rect areaTeclado = {
-                baseX - painelPadding, 
-                baseY - painelPadding, 
-                painelLargura, 
-                painelAltura
-            };
-            
-            // Verifica se o clique está DENTRO da área do teclado
-            bool dentroTeclado = (mx >= areaTeclado.x && mx <= areaTeclado.x + areaTeclado.w &&
-                                  my >= areaTeclado.y && my <= areaTeclado.y + areaTeclado.h);
-            
-            // Calcula área do painel de senha (para evitar processar clicks lá)
-            int painelLargura2 = ConfigLayout::X(800);
-            int painelAltura2 = ConfigLayout::Y(250);
-            int larguraTela = ConfigLayout::X(1525);
-            int painelX = (larguraTela - painelLargura2) / 2;
-            int painelY = ConfigLayout::Y(150);
-            
-            SDL_Rect areaPainelSenha = {
-                painelX, painelY,
-                painelLargura2, painelAltura2
-            };
-            
-            bool dentroPainelSenha = (mx >= areaPainelSenha.x && mx <= areaPainelSenha.x + areaPainelSenha.w &&
-                                      my >= areaPainelSenha.y && my <= areaPainelSenha.y + areaPainelSenha.h);
-            
-     
-            if (dentroTeclado && !dentroPainelSenha && tecladoVirtual.estaVisivel()) {
-                
-                bool processado = tecladoVirtual.processarMouse(evento, static_cast<BotaoPesquisa*>(&adapter));
-                
-                if (processado) {
-                    return true;
-                }
-            }
-            
-        }
-        
-        
-        // Tecla física para adicionar caracteres
-        if (evento.type == SDL_TEXTINPUT) {
-            senhaAtual += evento.text.text;
-            std::cout << "[REDE] Texto físico adicionado: " << evento.text.text << std::endl;
+        // Se o teclado não processou, verificamos se o usuário quer confirmar (START ou ENTER)
+        if ((e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_START) ||
+            (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN)) {
+            confirmarSenha();
             return true;
         }
         
-        if (evento.type == SDL_KEYDOWN) {
-            SDL_Keycode key = evento.key.keysym.sym;
-            
-            // Backspace
-            if (key == SDLK_BACKSPACE && !senhaAtual.empty()) {
-                senhaAtual.pop_back();
-                std::cout << "[REDE] Backspace físico" << std::endl;
-                return true;
-            }
-            
-            // Enter para confirmar
-            if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
-                confirmarSenha();
-                return true;
-            }
-            
-            // ESC para cancelar
-            if (key == SDLK_ESCAPE) {
-                fecharTecladoSenha();
-                return true;
-            }
-        }
-        
-        // Consome TODOS os eventos quando o teclado está visível
-        return true;
-    }
-        
-    // Processa cliques do mouse
-    if (evento.type == SDL_MOUSEBUTTONDOWN) {
-        if (evento.button.button == SDL_BUTTON_LEFT) {
-            int mouseX = evento.button.x;
-            int mouseY = evento.button.y;
-            
-            // Verifica clique no toggle do Wi-Fi
-            if (btnToggleWifi && btnToggleWifi->contemPonto(mouseX, mouseY)) {
-                toggleWifi();
-                return true;
-            }
-            
-            // Verifica clique nas redes (apenas se Wi-Fi estiver ativo)
-            if (wifiAtivo) {
-                for (size_t i = 0; i < botoesRedes.size(); i++) {
-                    if (botoesRedes[i]->contemPonto(mouseX, mouseY)) {
-                        selecionarRede(i);
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Processa movimento do mouse (hover)
-    if (evento.type == SDL_MOUSEMOTION) {
-        if (btnToggleWifi) {
-            btnToggleWifi->handleMouseMotion(evento, 0, 0);
-        }
-        
-        for (auto& btn : botoesRedes) {
-            btn->handleMouseMotion(evento, 0, 0);
-        }
-    }
-    
-    // Navegação por controle/teclado
-    if (evento.type == SDL_KEYDOWN || evento.type == SDL_CONTROLLERBUTTONDOWN) {
-        bool paraAcao = false;
-        bool paraBaixo = false;
-        bool confirmar = false;
-        
-        if (evento.type == SDL_KEYDOWN) {
-            switch (evento.key.keysym.sym) {
-                case SDLK_UP:
-                case SDLK_w:
-                    paraAcao = true;
-                    break;
-                case SDLK_DOWN:
-                case SDLK_s:
-                    paraBaixo = true;
-                    break;
-                case SDLK_RETURN:
-                case SDLK_SPACE:
-                    confirmar = true;
-                    break;
-            }
-        } else if (evento.type == SDL_CONTROLLERBUTTONDOWN) {
-            switch (evento.cbutton.button) {
-                case SDL_CONTROLLER_BUTTON_DPAD_UP:
-                    paraAcao = true;
-                    break;
-                case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-                    paraBaixo = true;
-                    break;
-                case SDL_CONTROLLER_BUTTON_A:
-                    confirmar = true;
-                    break;
-            }
-        }
-        
-        if (paraAcao) {
-            navegarParaCima();
+        if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
+            fecharTecladoSenha();
             return true;
         }
-        if (paraBaixo) {
-            navegarParaBaixo();
-            return true;
-        }
-        if (confirmar) {
-            confirmarSelecao();
-            return true;
+        return false;
+    }
+
+    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (btnToggleWifi->contemPonto(e.button.x, e.button.y)) toggleWifi();
+        for(size_t i=0; i<botoesRedes.size(); i++) {
+            if (botoesRedes[i]->contemPonto(e.button.x, e.button.y)) selecionarRede(i);
         }
     }
-    
-    // Navegação por analógico
-    if (evento.type == SDL_CONTROLLERAXISMOTION) {
-        Uint32 agora = SDL_GetTicks();
-        if (agora - ultimoInputAnalogico < INTERVALO_ANALOGICO) {
-            return false;
-        }
-        
-        if (evento.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
-            if (evento.caxis.value < -DEADZONE) {
-                navegarParaCima();
-                ultimoInputAnalogico = agora;
-                return true;
-            } else if (evento.caxis.value > DEADZONE) {
-                navegarParaBaixo();
-                ultimoInputAnalogico = agora;
-                return true;
-            }
-        }
-    }
-    
     return false;
-}
-
-/**
- * @brief Reseta o estado da janela para valores padrão.
- */
-void JanelaRede::resetar() {
-    indiceFocado = SDL_NumJoysticks() > 0 ? 0 : -1;
-    scrollOffset = 0;
-    tecladoVisivel = false;
-    indiceRedeSelecionada = -1;
-    senhaAtual = "";
-    inicializarBotoes();
-    
-    // Recarrega a imagem explicativa (pode ter mudado o tema)
-    liberarImagemExplicativa();
 }
