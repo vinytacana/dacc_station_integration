@@ -16,6 +16,9 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #include "Botao.hpp"
 #include "TecladoVirtual.hpp"
 #include "ConfigLayout.hpp"
@@ -34,15 +37,10 @@ struct RedeInfo {
     std::string nome;      /**< Nome (SSID) da rede Wi-Fi. */
     bool salva;            /**< Indica se a rede está salva no sistema. */
     int intensidade;       /**< Intensidade do sinal (0-100). */
+    bool emUso;            /**< Indica se esta rede está conectada atualmente. */
     
-    /**
-     * @brief Construtor da estrutura RedeInfo.
-     * @param n Nome da rede.
-     * @param s Se a rede está salva.
-     * @param i Intensidade do sinal (padrão: 100).
-     */
-    RedeInfo(const std::string& n, bool s, int i = 100) 
-        : nome(n), salva(s), intensidade(i) {}
+    RedeInfo(const std::string& n, bool s, int i = 100, bool u = false) 
+        : nome(n), salva(s), intensidade(i), emUso(u) {}
 };
 
 /**
@@ -97,7 +95,12 @@ public:
 private:
     // Estado do Wi-Fi
     bool wifiAtivo = true;                /**< Estado atual do Wi-Fi (ON/OFF). */
-    std::string redeConectada = "Casa_Wifi"; /**< Nome da rede atualmente conectada. */
+    std::string redeConectada = "";       /**< Nome da rede atualmente conectada. */
+    
+    // Controle Assíncrono
+    std::atomic<bool> buscandoRedes{false}; 
+    std::thread threadScan;
+    std::mutex mutexRedes;
     
     // Lista de redes disponíveis
     std::vector<RedeInfo> redesDisponiveis; /**< Vetor com todas as redes detectadas. */
