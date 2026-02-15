@@ -326,8 +326,8 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     // Define área da barra para interação com mouse
     int barraX = ConfigLayout::X(330);
     int barraY = ConfigLayout::Y(320);
-    int barraLargura = ConfigLayout::X(910);
-    int barraAltura = ConfigLayout::Y(60);
+    int barraLargura = ConfigLayout::F(910); // USAR F PARA LARGURA
+    int barraAltura = ConfigLayout::F(60);   // USAR F PARA ALTURA
     
     areaBarraVolume = {barraX, barraY, barraLargura, barraAltura};
     
@@ -459,8 +459,8 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     // Define área da barra para interação com mouse
     int barraX = ConfigLayout::X(330);
     int barraY = ConfigLayout::Y(800);
-    int barraLargura = ConfigLayout::X(910);
-    int barraAltura = ConfigLayout::Y(60);
+    int barraLargura = ConfigLayout::F(910); // USAR F PARA LARGURA
+    int barraAltura = ConfigLayout::F(60);   // USAR F PARA ALTURA
     
     areaBarraEscala = {barraX, barraY, barraLargura, barraAltura};
     
@@ -739,21 +739,41 @@ void JanelaAudioEVideo::confirmarSelecao() {
 }
 
 /**
- * @brief Calcula o volume baseado na posição X do mouse.
+ * @brief Calcula o volume baseado no quadrado (segmento) clicado.
  */
 int JanelaAudioEVideo::calcularVolumeAPartirDoPonto(int mouseX) {
+    if (areaBarraVolume.w <= 0) return 0;
+
+    // 1. Calcula a posição relativa dentro da barra
     int posicaoRelativa = mouseX - areaBarraVolume.x;
-    float percentual = (float)posicaoRelativa / areaBarraVolume.w;
-    return (int)(percentual * MAX_VOLUME);
+    
+    // 2. Determina a largura de um segmento individual (incluindo o espaço de design)
+    float larguraSegmento = (float)areaBarraVolume.w / NUM_BARRAS_VOLUME;
+    
+    // 3. Calcula qual o índice do segmento (0 a NUM_BARRAS_VOLUME-1)
+    int indiceSegmento = (int)(posicaoRelativa / larguraSegmento);
+    
+    // 4. Converte para volume (cada segmento representa um degrau)
+    // Se clicou no primeiro pixel do primeiro segmento, volume = (0 + 1) * passo
+    int novoVolume = (indiceSegmento + 1) * (MAX_VOLUME / NUM_BARRAS_VOLUME);
+
+    return std::clamp(novoVolume, 0, MAX_VOLUME);
 }
 
 /**
- * @brief Calcula a escala baseada na posição X do mouse.
+ * @brief Calcula a escala baseada no quadrado (segmento) clicado.
  */
 float JanelaAudioEVideo::calcularEscalaAPartirDoPonto(int mouseX) {
+    if (areaBarraEscala.w <= 0) return MIN_ESCALA;
+
     int posicaoRelativa = mouseX - areaBarraEscala.x;
-    float percentual = (float)posicaoRelativa / areaBarraEscala.w;
-    return MIN_ESCALA + (percentual * (MAX_ESCALA - MIN_ESCALA));
+    float larguraSegmento = (float)areaBarraEscala.w / NUM_BARRAS_ESCALA;
+    int indiceSegmento = (int)(posicaoRelativa / larguraSegmento);
+    
+    float percentual = (float)indiceSegmento / (NUM_BARRAS_ESCALA - 1);
+    float escala = MIN_ESCALA + (percentual * (MAX_ESCALA - MIN_ESCALA));
+
+    return std::clamp(escala, MIN_ESCALA, MAX_ESCALA);
 }
 
 /**
@@ -762,9 +782,10 @@ float JanelaAudioEVideo::calcularEscalaAPartirDoPonto(int mouseX) {
 bool JanelaAudioEVideo::processarCliqueBarraVolume(int mouseX, int mouseY) {
     if (mouseX >= areaBarraVolume.x && mouseX <= areaBarraVolume.x + areaBarraVolume.w &&
         mouseY >= areaBarraVolume.y && mouseY <= areaBarraVolume.y + areaBarraVolume.h) {
+        
         int novoVolume = calcularVolumeAPartirDoPonto(mouseX);
-        setVolume(novoVolume);
-        gerAudio.tocarSom("select.wav");
+        volumeGeral = std::clamp(novoVolume, 0, MAX_VOLUME); // Atualiza apenas visualmente durante o arrasto
+        
         return true;
     }
     return false;
@@ -854,6 +875,14 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
     // Processa soltar botão do mouse (fim do arrasto)
     if (evento.type == SDL_MOUSEBUTTONUP) {
         if (evento.button.button == SDL_BUTTON_LEFT) {
+            if (arrastandoVolume) {
+                ::definir_volume(volumeGeral); // Aplica no hardware apenas ao soltar
+                gerAudio.tocarSom("select.wav");
+            }
+            if (arrastandoEscala) {
+                // Escala só é aplicada ao clicar em 'Aplicar', mas aqui podemos tocar um som
+                gerAudio.tocarSom("select.wav");
+            }
             arrastandoVolume = false;
             arrastandoEscala = false;
         }
