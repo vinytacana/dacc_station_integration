@@ -29,6 +29,8 @@
  */
 namespace MeuProjeto {
 
+class GerenciadorImagens;
+
 /**
  * @struct RedeInfo
  * @brief Estrutura para armazenar informações sobre uma rede Wi-Fi.
@@ -61,7 +63,7 @@ public:
     /**
      * @brief Construtor da classe JanelaRede.
      */
-    JanelaRede();
+    JanelaRede(GerenciadorImagens* gerImgLocal);
 
     /**
      * @brief Destrutor da classe JanelaRede.
@@ -96,6 +98,7 @@ private:
     // Estado do Wi-Fi
     bool wifiAtivo = true;                /**< Estado atual do Wi-Fi (ON/OFF). */
     std::string redeConectada = "";       /**< Nome da rede atualmente conectada. */
+    GerenciadorImagens* gerImgRef = nullptr; 
     
     // Controle Assíncrono
     std::atomic<bool> buscandoRedes{false}; 
@@ -125,7 +128,7 @@ private:
     std::string senhaAtual = "";            /**< Senha sendo digitada no momento. */
     // Centraliza o teclado para largura da janela (1525px)
     // Cálculo: (1525 - 1000) / 2 = 262px
-    TecladoVirtual tecladoVirtual{ConfigLayout::X(262), ConfigLayout::Y(600)};  /**< Instância do teclado virtual para entrada de senha. */
+    TecladoVirtual tecladoVirtual{ConfigLayout::F(262), ConfigLayout::F(600)};  /**< Instância do teclado virtual para entrada de senha. */
     
     // Textura para imagem explicativa dos botões
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa rodapé. */
