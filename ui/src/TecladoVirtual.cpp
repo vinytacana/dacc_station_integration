@@ -58,28 +58,28 @@ TecladoVirtual::TecladoVirtual(int customBaseX, int customBaseY) {
  */
 void TecladoVirtual::inicializarLayout() {
     // Configuração das dimensões das teclas alfanuméricas
-    teclaLargura = ConfigLayout::X(60);
-    teclaAltura = ConfigLayout::Y(60);
-    gapX = ConfigLayout::X(10);
-    gapY = ConfigLayout::Y(10);
+    teclaLargura = ConfigLayout::F(60);
+    teclaAltura = ConfigLayout::F(60);
+    gapX = ConfigLayout::F(10);
+    gapY = ConfigLayout::F(10);
 
     // Configuração do painel de fundo que abriga o teclado
-    painelLargura = ConfigLayout::X(1000);
-    painelAltura = ConfigLayout::Y(400);
-    painelPadding = ConfigLayout::X(20); 
+    painelLargura = ConfigLayout::F(1000);
+    painelAltura = ConfigLayout::F(400);
+    painelPadding = ConfigLayout::F(20); 
 
     // Configuração dos elementos da linha de funções especiais
-    offsetEspacoX = ConfigLayout::X(50);
-    larguraBotaoEsp = ConfigLayout::X(180);
-    larguraBotaoOk = ConfigLayout::X(100);
-    gapBotoesEsp = ConfigLayout::X(20);
-    offsetTextoY = ConfigLayout::Y(15);
+    offsetEspacoX = ConfigLayout::F(50);
+    larguraBotaoEsp = ConfigLayout::F(180);
+    larguraBotaoOk = ConfigLayout::F(100);
+    gapBotoesEsp = ConfigLayout::F(20);
+    offsetTextoY = ConfigLayout::F(15);
 
     // Configuração de fontes e ajustes de centralização de caracteres
     fonteTamanhoTecla = ConfigLayout::F(32);
     fonteTamanhoEsp = ConfigLayout::F(24);
-    offsetCharX = ConfigLayout::X(20);
-    offsetCharY = ConfigLayout::Y(10);
+    offsetCharX = ConfigLayout::F(20);
+    offsetCharY = ConfigLayout::F(10);
     
     std::cout << "[TECLADO] Layout inicializado - baseX:" << baseX << " baseY:" << baseY << std::endl;
 }
@@ -170,7 +170,7 @@ void TecladoVirtual::desenharTecla(SDL_Renderer* renderer, int x, int y, const s
     int raio = ConfigLayout::F(5); 
 
     if (focado) {
-        int padFoco = ConfigLayout::X(2);
+        int padFoco = ConfigLayout::F(2);
         // Desenha a borda de destaque externa
         roundedBoxRGBA(renderer, x - padFoco, y - padFoco, x + teclaLargura + padFoco, y + teclaAltura + padFoco, raio, 
                        corDestaque.r, corDestaque.g, corDestaque.b, 255);
@@ -203,7 +203,7 @@ void TecladoVirtual::desenharEspeciais(SDL_Renderer* renderer) {
     SDL_Color corTexto = tema.getCorTextoNegrito();
     SDL_Color corDestaque = tema.getCorDestaque();
     int raio = ConfigLayout::F(5);
-    int padFoco = ConfigLayout::X(2);
+    int padFoco = ConfigLayout::F(2);
 
     /**
      * @brief Lambda para facilitar a renderização recorrente de botões especiais.
@@ -231,7 +231,7 @@ void TecladoVirtual::desenharEspeciais(SDL_Renderer* renderer) {
     roundedBoxRGBA(renderer, espacoX, y, espacoX+larguraBotaoEsp, y+teclaAltura, raio, 
                    btnCor.r, btnCor.g, btnCor.b, 255);
     
-    desenharTexto(renderer, "ESPACO", espacoX + ConfigLayout::X(40), y + offsetTextoY, corTexto, fonteTamanhoEsp, TipoFonte::NEGRITO);
+    desenharTexto(renderer, "ESPACO", espacoX + ConfigLayout::F(40), y + offsetTextoY, corTexto, fonteTamanhoEsp, TipoFonte::NEGRITO);
 
     // Renderização dos demais botões com cores específicas de ação
     int limparX = espacoX + larguraBotaoEsp + gapBotoesEsp;
