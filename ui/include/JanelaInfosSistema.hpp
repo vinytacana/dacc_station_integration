@@ -24,6 +24,8 @@
  */
 namespace MeuProjeto {
 
+class GerenciadorImagens;
+
 /**
  * @struct InfoHardware
  * @brief Estrutura para armazenar informações de hardware.
@@ -83,7 +85,7 @@ public:
     /**
      * @brief Construtor da classe JanelaInfosSistema.
      */
-    JanelaInfosSistema();
+    JanelaInfosSistema(GerenciadorImagens* gerImgLocal);
 
     /**
      * @brief Destrutor da classe JanelaInfosSistema.
@@ -125,6 +127,7 @@ private:
     int maxScroll = 0;              /**< Limite máximo de scroll baseado no conteúdo. */
     int alturaConteudo = 0;         /**< Altura total do conteúdo renderizado. */
     
+    GerenciadorImagens* gerImgRef = nullptr;    /**< Referência ao gerenciador de imagens isolado. */
     SDL_Texture* texturaExplicacao = nullptr;   /**< Textura da imagem explicativa dos botões. */
     
     bool precisaRecalcularScroll = true;        /**< Flag para recalcular altura do conteúdo. */
