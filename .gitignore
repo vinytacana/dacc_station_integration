@@ -1,20 +1,24 @@
-# --- Compilados e Binários ---
-*.a
+# --- Binários e Compilados ---
 *.o
-*.obj
+*.a
+*.so
 *.exe
 *.out
 *.app
 
-# --- Pastas de Build ---
+# --- Pastas de Saída e Build ---
 bin/
 build/
+*/build/
+dist/
 
-# --- Logs e Dados Temporários ---
+# --- Logs e Dados ---
 *.log
-*.tmp
+data/
 
-# --- Editor e Sistema Operacional ---
-.vscode/
+# --- Arquivos do Sistema/IDE ---
 .DS_Store
-Thumbs.db
+.vscode/
+
+# --- Documentação Temporária ---
+GEMINI.md
