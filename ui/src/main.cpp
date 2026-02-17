@@ -203,275 +203,276 @@ int main(int argc, char* argv[]) {
         return 1; ///< Encerra com código de erro
     }
 
+    // Inicializa o layout com a resolução real da janela (importante para modo Fullscreen)
+    int wReal, hReal;
+    SDL_GetWindowSize(janela, &wReal, &hReal);
+    ConfigLayout::inicializar(wReal, hReal);
+
     /**
      * Reproduz vídeo de introdução usando MPV externo.
      * Bloqueia execução até término ou fechamento manual pelo usuário.
      */
     GerenciarSDL::tocarVideoIntro("ui/assets/images/TelaInicalDACCC.mp4");
 
-    /**
-     * Verifica presença física de controles/gamepads conectados.
-     * Exibe feedback visual (verde=OK, vermelho=erro) por alguns segundos.
-     * Se falhar, continua em modo mouse/teclado.
-     */
-    if (!GerenciarSDL::verificarControle(janela, renderer)) {
-        cout << "[AVISO] Nenhum controle detectado." << endl;
-        cout << "[SISTEMA] Iniciando em modo Mouse/Teclado..." << endl;
-    }
+    { // INÍCIO DO ESCOPO DE SEGURANÇA PARA DESTRUIÇÃO DE OBJETOS
 
-    /// Carrega catálogo de jogos dos arquivos .txt no disco
-    carregarJogosDoDisco();
-    
-    /**
-     * Estabelece conexão com o Process Manager daemon.
-     * Usado para iniciar jogos como processos filhos gerenciados externamente.
-     */
-    NetworkClient::getInstance().connectToManager();
+        /**
+         * Verifica presença física de controles/gamepads conectados.
+         * Exibe feedback visual (verde=OK, vermelho=erro) por alguns segundos.
+         * Se falhar, continua em modo mouse/teclado.
+         */
+        if (!GerenciarSDL::verificarControle(janela, renderer)) {
+            cout << "[AVISO] Nenhum controle detectado." << endl;
+            cout << "[SISTEMA] Iniciando em modo Mouse/Teclado..." << endl;
+        }
 
-    // INICIALIZAÇÃO DOS MÓDULOS DE INTERFACE
-    
-    GerenciarScroll estado;      ///< Estado global de navegação, scroll e flags
-    GerenciarInterface interface; ///< Orquestrador visual (grid, categorias, busca)
-    
-    /**
-     * Inicializa recursos visuais da interface (carrega imagens de UI).
-     * Se falhar, encerra o programa pois interface não pode ser renderizada.
-     */
-    if (!interface.inicializar(renderer)) {
-        cerr << "Erro Fatal: Falha ao carregar imagens da interface. Encerrando sistema." << endl;
-        GerenciarSDL::limpar(janela, renderer);
-        return 1;
-    }
-    
-    GerenciarInputs inputs;      ///< Processador de eventos de periféricos
-    inputs.inicializarControle(); ///< Abre conexão com gamepad detectado
-    
-    JanelaConfiguracao janelaConfig; ///< Janela modal de configurações/opções
-
-    /**
-     * Configuração inicial do carrossel de destaques (Hero Banners).
-     * Popula array com imagens de fundo dos primeiros 5 jogos do catálogo.
-     */
-    estado.imagensDestaques.clear();
-    vector<Jogo> todosJogos = gerenciadorJogos.listarJogos();
-    
-    for (int i = 0; i < std::min(5, (int)todosJogos.size()); i++) {
-        /// Adiciona caminho da imagem de fundo de cada jogo ao carrossel
-        estado.imagensDestaques.push_back(todosJogos[i].getFundoDestaque());
-    }
-    
-    /**
-     * Define o background inicial como primeira imagem do carrossel.
-     * Será rotacionado automaticamente a cada 60 segundos.
-     */
-    if (!estado.imagensDestaques.empty()) {
-        estado.backgroundImagePath = estado.imagensDestaques[0];
-    }
-    
-    /// Controle de tempo para rotação automática de backgrounds
-    Uint32 lastBackgroundChange = SDL_GetTicks();
-    const Uint32 CHANGE_INTERVAL = 60000; ///< Intervalo de 60 segundos (60000ms)
-
-    SDL_Event evento; ///< Estrutura para captura de eventos SDL
-    cout << "SISTEMA INICIADO!" << endl;
-
-    // FASE 2: LOOP PRINCIPAL (GAME LOOP)
-    
-    while (estado.rodando) {
+        /// Carrega catálogo de jogos dos arquivos .txt no disco
+        carregarJogosDoDisco();
         
         /**
-         * Atualização de sistemas em tempo real:
-         * - NetworkClient: Verifica eventos do Process Manager (jogo terminou, etc)
-         * - SystemStatus: Atualiza cache de horário, WiFi, bateria (throttled 1s)
+         * Estabelece conexão com o Process Manager daemon.
+         * Usado para iniciar jogos como processos filhos gerenciados externamente.
          */
-        NetworkClient::getInstance().checkEvents();
-        SystemStatus::getInstance().update();
-        
-        /**
-         * Gerenciamento automático do estado da janela de configuração.
-         * Sincroniza flag estado.configAberta com estado real da janela.
-         */
-        if (estado.configAberta && !janelaConfig.estaAberta()) 
-            janelaConfig.abrir();
-        else if (!estado.configAberta && janelaConfig.estaAberta()) 
-            janelaConfig.fechar();
-        else if (!janelaConfig.estaAberta() && estado.configAberta) 
-            estado.configAberta = false; 
+        NetworkClient::getInstance().connectToManager();
 
-        // 4.1 PROCESSAMENTO DE EVENTOS (EVENT POLLING)
+        // INICIALIZAÇÃO DOS MÓDULOS DE INTERFACE
+        
+        GerenciarScroll estado;      ///< Estado global de navegação, scroll e flags
+        GerenciarInterface interface; ///< Orquestrador visual (grid, categorias, busca)
         
         /**
-         * Loop de polling de eventos SDL.
-         * Processa todos os eventos acumulados na fila antes de renderizar.
+         * Inicializa recursos visuais da interface (carrega imagens de UI).
+         * Se falhar, encerra o programa pois interface não pode ser renderizada.
          */
-        while (SDL_PollEvent(&evento)) {
+        if (!interface.inicializar(renderer)) {
+            cerr << "Erro Fatal: Falha ao carregar imagens da interface. Encerrando sistema." << endl;
+            GerenciarSDL::limpar(janela, renderer);
+            return 1;
+        }
+        
+        GerenciarInputs inputs;      ///< Processador de eventos de periféricos
+        inputs.inicializarControle(); ///< Abre conexão com gamepad detectado
+        
+        JanelaConfiguracao janelaConfig; ///< Janela modal de configurações/opções
+
+        /**
+         * Configuração inicial do carrossel de destaques (Hero Banners).
+         * Popula array com imagens de fundo dos primeiros 5 jogos do catálogo.
+         */
+        estado.imagensDestaques.clear();
+        vector<Jogo> todosJogos = gerenciadorJogos.listarJogos();
+        
+        for (int i = 0; i < std::min(5, (int)todosJogos.size()); i++) {
+            /// Adiciona caminho da imagem de fundo de cada jogo ao carrossel
+            estado.imagensDestaques.push_back(todosJogos[i].getFundoDestaque());
+        }
+        
+        /**
+         * Define o background inicial como primeira imagem do carrossel.
+         * Será rotacionado automaticamente a cada 60 segundos.
+         */
+        if (!estado.imagensDestaques.empty()) {
+            estado.backgroundImagePath = estado.imagensDestaques[0];
+        }
+        
+        /// Controle de tempo para rotação automática de backgrounds
+        Uint32 lastBackgroundChange = SDL_GetTicks();
+        const Uint32 CHANGE_INTERVAL = 60000; ///< Intervalo de 60 segundos (60000ms)
+
+        SDL_Event evento; ///< Estrutura para captura de eventos SDL
+        cout << "SISTEMA INICIADO!" << endl;
+
+        // FASE 2: LOOP PRINCIPAL (GAME LOOP)
+        
+        while (estado.rodando) {
             
             /**
-             * PRIORIDADE 1: Janela de Configuração (Modo Modal)
-             * 
-             * Quando aberta, captura TODOS os eventos e bloqueia interface principal.
-             * O continue garante que nenhum outro sistema processe o evento.
+             * Atualização de sistemas em tempo real:
+             * - NetworkClient: Verifica eventos do Process Manager (jogo terminou, etc)
+             * - SystemStatus: Atualiza cache de horário, WiFi, bateria (throttled 1s)
              */
-            if (janelaConfig.estaAberta()) {
-                if (janelaConfig.processarEvento(evento)) {
-                    /// Se processarEvento retornar true, janela foi fechada
-                    if (!janelaConfig.estaAberta()) estado.configAberta = false;
-                    continue; ///< Bloqueia propagação do evento
+            NetworkClient::getInstance().checkEvents();
+            SystemStatus::getInstance().update();
+            
+            /**
+             * Gerenciamento automático do estado da janela de configuração.
+             * Sincroniza flag estado.configAberta com estado real da janela.
+             */
+            if (estado.configAberta && !janelaConfig.estaAberta()) 
+                janelaConfig.abrir();
+            else if (!estado.configAberta && janelaConfig.estaAberta()) 
+                janelaConfig.fechar();
+            else if (!janelaConfig.estaAberta() && estado.configAberta) 
+                estado.configAberta = false; 
+
+            // 4.1 PROCESSAMENTO DE EVENTOS (EVENT POLLING)
+            
+            /**
+             * Loop de polling de eventos SDL.
+             * Processa todos os eventos acumulados na fila antes de renderizar.
+             */
+            while (SDL_PollEvent(&evento)) {
+                
+                /**
+                 * PRIORIDADE 1: Janela de Configuração (Modo Modal)
+                 * 
+                 * Quando aberta, captura TODOS os eventos e bloqueia interface principal.
+                 * O continue garante que nenhum outro sistema processe o evento.
+                 */
+                if (janelaConfig.estaAberta()) {
+                    if (janelaConfig.processarEvento(evento)) {
+                        /// Se processarEvento retornar true, janela foi fechada
+                        if (!janelaConfig.estaAberta()) estado.configAberta = false;
+                        continue; ///< Bloqueia propagação do evento
+                    }
+                }
+
+                /**
+                 * Evento global de fechamento (Alt+F4, botão X, etc).
+                 * Encerra o loop principal e inicia shutdown.
+                 */
+                if (evento.type == SDL_QUIT) estado.rodando = false;
+
+                /**
+                 * PRIORIDADE 2: Janela de Detalhes do Jogo (Overlay)
+                 * 
+                 * Quando aberta, captura eventos mas permite visualização da interface.
+                 * Bloqueia apenas a navegação do grid principal.
+                 */
+                if (estado.janelaJogoAtual) {
+                    bool fecharJanela = false;
+                    
+                    /**
+                     * Processa eventos de controle (gamepad) separadamente
+                     * devido a diferenças na estrutura SDL_Event.
+                     */
+                    if (evento.type == SDL_CONTROLLERBUTTONDOWN || evento.type == SDL_CONTROLLERBUTTONUP) {
+                        if (estado.janelaJogoAtual->tratarEventoControle(evento)) 
+                            fecharJanela = true;
+                    } else {
+                        /// Eventos de mouse e teclado
+                        if (estado.janelaJogoAtual->tratarEvento(evento, 0, 0)) 
+                            fecharJanela = true;
+                    }
+
+                    /// Se tratamento retornou true, usuário fechou a janela
+                    if (fecharJanela) {
+                        MeuProjeto::janelaJogoAtual.reset();
+                        estado.janelaJogoAtual = nullptr;
+                    }
+                    
+                    /// Bloqueia inputs da interface principal
+                    continue;
+                }
+
+                /**
+                 * PRIORIDADE 3: Interface Principal (Navegação/Grid)
+                 * 
+                 * Apenas processa se nenhuma janela modal/overlay estiver aberta.
+                 * Gerencia navegação do grid, busca, seleção de jogos, etc.
+                 */
+                if (!janelaConfig.estaAberta()) {
+                    inputs.atualizar(evento, estado, interface, renderer);
                 }
             }
 
+            // 4.2 LÓGICA DE ATUALIZAÇÃO (UPDATE)
+            
             /**
-             * Evento global de fechamento (Alt+F4, botão X, etc).
-             * Encerra o loop principal e inicia shutdown.
+             * Rotação automática das imagens de destaque no fundo.
+             * Apenas ativa quando:
+             * - Há imagens no carrossel
+             * - Nenhuma janela de jogo está aberta
+             * - Janela de configuração está fechada
              */
-            if (evento.type == SDL_QUIT) estado.rodando = false;
+            if (!estado.imagensDestaques.empty() && !estado.janelaJogoAtual && !estado.configAberta) {
+                Uint32 currentTime = SDL_GetTicks();
+                
+                /// Verifica se passou tempo suficiente desde última troca
+                if (currentTime - lastBackgroundChange >= CHANGE_INTERVAL) {
+                    /**
+                     * Avança para próxima imagem com wraparound (0 após última).
+                     * Operador % garante que nunca exceda tamanho do array.
+                     */
+                    estado.currentDestaqueIndex = (estado.currentDestaqueIndex + 1) % estado.imagensDestaques.size();
+                    lastBackgroundChange = currentTime; ///< Reseta timer
+                }
+            }
 
+            // 4.3 RENDERIZAÇÃO (DRAW)
+            
             /**
-             * PRIORIDADE 2: Janela de Detalhes do Jogo (Overlay)
-             * 
-             * Quando aberta, captura eventos mas permite visualização da interface.
-             * Bloqueia apenas a navegação do grid principal.
+             * Define cor de fundo baseada no tema ativo.
+             * Limpa buffer de renderização com essa cor antes de desenhar elementos.
+             */
+            SDL_Color corFundo = GerenciadorTemas::getInstance().getCorFundo();
+            SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, corFundo.a);
+            SDL_RenderClear(renderer);
+            
+            /**
+             * Renderiza todos os elementos da interface principal:
+             * - Background animado (destaque atual)
+             * - Grid de jogos com scroll
+             * - Barra de categorias
+             * - Campo de busca
+             * - Barra superior (relógio, bateria, WiFi)
+             * - Barra inferior (dicas de navegação)
+             */
+            interface.desenhar(renderer, estado);
+            
+            /**
+             * Se houver janela de detalhes aberta, renderiza como overlay.
+             * Desenha por cima da interface principal (sistema de camadas).
              */
             if (estado.janelaJogoAtual) {
-                bool fecharJanela = false;
-                
-                /**
-                 * Processa eventos de controle (gamepad) separadamente
-                 * devido a diferenças na estrutura SDL_Event.
-                 */
-                if (evento.type == SDL_CONTROLLERBUTTONDOWN || evento.type == SDL_CONTROLLERBUTTONUP) {
-                    if (estado.janelaJogoAtual->tratarEventoControle(evento)) 
-                        fecharJanela = true;
-                } else {
-                    /// Eventos de mouse e teclado
-                    if (estado.janelaJogoAtual->tratarEvento(evento, 0, 0)) 
-                        fecharJanela = true;
-                }
-
-                /// Se tratamento retornou true, usuário fechou a janela
-                if (fecharJanela) {
-                    MeuProjeto::janelaJogoAtual.reset();
-                    estado.janelaJogoAtual = nullptr;
-                }
-                
-                /// Bloqueia inputs da interface principal
-                continue;
+                estado.janelaJogoAtual->desenhar(0, 0);
             }
 
             /**
-             * PRIORIDADE 3: Interface Principal (Navegação/Grid)
-             * 
-             * Apenas processa se nenhuma janela modal/overlay estiver aberta.
-             * Gerencia navegação do grid, busca, seleção de jogos, etc.
+             * Apresenta buffer de renderização na tela (swap de buffers).
+             * Com VSync ativo, aguarda próximo refresh do monitor.
              */
-            if (!janelaConfig.estaAberta()) {
-                inputs.atualizar(evento, estado, interface, renderer);
-            }
-        }
+            SDL_RenderPresent(renderer);
 
-        // 4.2 LÓGICA DE ATUALIZAÇÃO (UPDATE)
-        
-        /**
-         * Rotação automática das imagens de destaque no fundo.
-         * Apenas ativa quando:
-         * - Há imagens no carrossel
-         * - Nenhuma janela de jogo está aberta
-         * - Janela de configuração está fechada
-         */
-        if (!estado.imagensDestaques.empty() && !estado.janelaJogoAtual && !estado.configAberta) {
-            Uint32 currentTime = SDL_GetTicks();
+            /**
+             * Renderização da janela de configuração (se estiver aberta).
+             * Usa janela SDL separada, não afeta renderização principal.
+             */
+            if (janelaConfig.estaAberta()) {
+                janelaConfig.desenhar();
+            }
             
-            /// Verifica se passou tempo suficiente desde última troca
-            if (currentTime - lastBackgroundChange >= CHANGE_INTERVAL) {
-                /**
-                 * Avança para próxima imagem com wraparound (0 após última).
-                 * Operador % garante que nunca exceda tamanho do array.
-                 */
-                estado.currentDestaqueIndex = (estado.currentDestaqueIndex + 1) % estado.imagensDestaques.size();
-                lastBackgroundChange = currentTime; ///< Reseta timer
-            }
+            /**
+             * Controle de taxa de quadros.
+             * Aguarda 16ms (~62.5 FPS) para não sobrecarregar CPU.
+             * VSync já limita a 60 FPS, mas isso garante mínimo de CPU usage.
+             */
+            SDL_Delay(16);
         }
 
-        // 4.3 RENDERIZAÇÃO (DRAW)
-        
-        /**
-         * Define cor de fundo baseada no tema ativo.
-         * Limpa buffer de renderização com essa cor antes de desenhar elementos.
-         */
-        SDL_Color corFundo = GerenciadorTemas::getInstance().getCorFundo();
-        SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, corFundo.a);
-        SDL_RenderClear(renderer);
-        
-        /**
-         * Renderiza todos os elementos da interface principal:
-         * - Background animado (destaque atual)
-         * - Grid de jogos com scroll
-         * - Barra de categorias
-         * - Campo de busca
-         * - Barra superior (relógio, bateria, WiFi)
-         * - Barra inferior (dicas de navegação)
-         */
-        interface.desenhar(renderer, estado);
-        
-        /**
-         * Se houver janela de detalhes aberta, renderiza como overlay.
-         * Desenha por cima da interface principal (sistema de camadas).
-         */
-        if (estado.janelaJogoAtual) {
-            estado.janelaJogoAtual->desenhar(0, 0);
-        }
+        // FASE 3: FINALIZAÇÃO E LIMPEZA DE RECURSOS
 
         /**
-         * Apresenta buffer de renderização na tela (swap de buffers).
-         * Com VSync ativo, aguarda próximo refresh do monitor.
+         * Encerra controles de forma segura.
          */
-        SDL_RenderPresent(renderer);
+        inputs.fecharControle();
 
-        /**
-         * Renderização da janela de configuração (se estiver aberta).
-         * Usa janela SDL separada, não afeta renderização principal.
-         */
-        if (janelaConfig.estaAberta()) {
-            janelaConfig.desenhar();
-        }
-        
-        /**
-         * Controle de taxa de quadros.
-         * Aguarda 16ms (~62.5 FPS) para não sobrecarregar CPU.
-         * VSync já limita a 60 FPS, mas isso garante mínimo de CPU usage.
-         */
-        SDL_Delay(16);
-    }
+        // 1. Destruir janelas secundárias primeiro
+        janelaConfig.fechar();
+        if (estado.janelaJogoAtual) MeuProjeto::janelaJogoAtual.reset();
 
-    // FASE 3: FINALIZAÇÃO E LIMPEZA DE RECURSOS
-    
-    /**
-     * Encerra controles de forma segura, fechando conexão com gamepad.
-     * Previne memory leaks de handles de dispositivos.
-     */
-    inputs.fecharControle();
-    
-    /// Fecha janela de configuração se ainda estiver aberta
-    janelaConfig.fechar();
-    
-    /**
-     * Libera janela de jogo se houver instância ativa.
-     * unique_ptr::reset() chama destrutor automaticamente.
-     */
-    if (estado.janelaJogoAtual) MeuProjeto::janelaJogoAtual.reset();
-    
-    /**
-     * Libera cache de texturas ANTES de destruir o renderer.
-     * Ordem crítica: texturas devem ser destruídas enquanto renderer existe.
-     */
+    } // FIM DO ESCOPO DE SEGURANÇA - Objetos de interface são destruídos aqui
+
+    // 2. Limpar caches que dependem do renderizador
     gerImg.liberarTudo();
     MeuProjeto::limparCacheTexto();
-    
+
     /**
-     * Destrói janela, renderizador e finaliza todos os subsistemas SDL.
-     * Deve ser a última chamada relacionada à SDL no programa.
+     * Destrói janela e renderizador SDL.
      */
     GerenciarSDL::limpar(janela, renderer);
-    
-    return 0; ///< Retorna sucesso para o sistema operacional
+
+    return 0;
 }
+
+    
