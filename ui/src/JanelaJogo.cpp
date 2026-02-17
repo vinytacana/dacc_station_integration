@@ -59,8 +59,8 @@ JanelaJogo::JanelaJogo(SDL_Renderer* renderer, const std::string& codigo, const 
       botaoJogar(
           ConfigLayout::X(ConfigLayout::JANELA_JOGAR_POS_X), 
           ConfigLayout::Y(ConfigLayout::JANELA_JOGAR_POS_Y), 
-          ConfigLayout::X(ConfigLayout::JANELA_JOGAR_LARGURA), 
-          ConfigLayout::Y(ConfigLayout::JANELA_JOGAR_ALTURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_JOGAR_LARGURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_JOGAR_ALTURA), 
           "JOGAR"
       ),
       botaoFechar(
@@ -71,43 +71,43 @@ JanelaJogo::JanelaJogo(SDL_Renderer* renderer, const std::string& codigo, const 
           "X"
       ),
       areaJanela{0, 0, ConfigLayout::larguraTela, ConfigLayout::alturaTela},
-      areaTopo{0, 0, ConfigLayout::larguraTela, ConfigLayout::Y(ConfigLayout::JANELA_TOPO_ALTURA)},
+      areaTopo{0, 0, ConfigLayout::larguraTela, ConfigLayout::F(ConfigLayout::JANELA_TOPO_ALTURA)},
       areaFundo{
           ConfigLayout::X(ConfigLayout::JANELA_PAINEL_POS_X), 
           ConfigLayout::Y(ConfigLayout::JANELA_PAINEL_POS_Y), 
-          ConfigLayout::X(ConfigLayout::JANELA_PAINEL_LARGURA), 
-          ConfigLayout::Y(ConfigLayout::JANELA_PAINEL_ALTURA)
+          ConfigLayout::F(ConfigLayout::JANELA_PAINEL_LARGURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_PAINEL_ALTURA)
       },
       areaImagem{
           ConfigLayout::X(ConfigLayout::JANELA_CAPA_POS_X), 
           ConfigLayout::Y(ConfigLayout::JANELA_CAPA_POS_Y), 
-          ConfigLayout::X(ConfigLayout::JANELA_CAPA_LARGURA), 
-          ConfigLayout::Y(ConfigLayout::JANELA_CAPA_ALTURA)
+          ConfigLayout::F(ConfigLayout::JANELA_CAPA_LARGURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_CAPA_ALTURA)
       },
       areaDescricao{
           ConfigLayout::X(ConfigLayout::JANELA_DESC_POS_X), 
           ConfigLayout::Y(ConfigLayout::JANELA_DESC_POS_Y), 
-          ConfigLayout::X(ConfigLayout::JANELA_DESC_LARGURA), 
-          ConfigLayout::Y(ConfigLayout::JANELA_DESC_ALTURA)
+          ConfigLayout::F(ConfigLayout::JANELA_DESC_LARGURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_DESC_ALTURA)
       },
       areaFundoCapturas{
           0, 
           ConfigLayout::Y(ConfigLayout::JANELA_CARROSSEL_BG_POS_Y), 
           ConfigLayout::larguraTela, 
-          ConfigLayout::Y(ConfigLayout::JANELA_CARROSSEL_BG_ALTURA)
+          ConfigLayout::F(ConfigLayout::JANELA_CARROSSEL_BG_ALTURA)
       },
       setaEsquerda(
           ConfigLayout::X(ConfigLayout::JANELA_SETA_ESQ_POS_X), 
           ConfigLayout::Y(ConfigLayout::JANELA_SETA_POS_Y), 
-          ConfigLayout::X(ConfigLayout::JANELA_SETA_LARGURA), 
-          ConfigLayout::Y(ConfigLayout::JANELA_SETA_ALTURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_SETA_LARGURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_SETA_ALTURA), 
           "<"
       ),
       setaDireita(
           ConfigLayout::X(ConfigLayout::JANELA_SETA_DIR_POS_X), 
           ConfigLayout::Y(ConfigLayout::JANELA_SETA_POS_Y), 
-          ConfigLayout::X(ConfigLayout::JANELA_SETA_LARGURA), 
-          ConfigLayout::Y(ConfigLayout::JANELA_SETA_ALTURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_SETA_LARGURA), 
+          ConfigLayout::F(ConfigLayout::JANELA_SETA_ALTURA), 
           ">"
       ),
       capturaIndex(0),
@@ -118,11 +118,11 @@ JanelaJogo::JanelaJogo(SDL_Renderer* renderer, const std::string& codigo, const 
       animacaoSetaDireita(false),
       tempoAnimacaoEsquerda(0), 
       tempoAnimacaoDireita(0),
-      capturaLargura(ConfigLayout::X(ConfigLayout::JANELA_CAPTURA_LARGURA)),
-      capturaAltura(ConfigLayout::Y(ConfigLayout::JANELA_CAPTURA_ALTURA)),
+      capturaLargura(ConfigLayout::F(ConfigLayout::JANELA_CAPTURA_LARGURA)),
+      capturaAltura(ConfigLayout::F(ConfigLayout::JANELA_CAPTURA_ALTURA)),
       capturaPosY(ConfigLayout::Y(ConfigLayout::JANELA_CAPTURA_POS_Y)),
-      capturaEspacamento(ConfigLayout::X(ConfigLayout::JANELA_CAPTURA_GAP)),
-      margemSetas(ConfigLayout::X(ConfigLayout::JANELA_SETA_MARGEM))
+      capturaEspacamento(ConfigLayout::F(ConfigLayout::JANELA_CAPTURA_GAP)),
+      margemSetas(ConfigLayout::F(ConfigLayout::JANELA_SETA_MARGEM))
 {
     this->tempoAbertura = SDL_GetTicks();
     imagemJogo = gerImg.carregar(renderer, imagemPath.c_str());
@@ -373,11 +373,11 @@ void JanelaJogo::desenharTopo() {
     SDL_Color corTexto = GerenciadorTemas::getInstance().getCorTextoNegrito();
     
     int centroTela = ConfigLayout::larguraTela / 2;
-    int larguraTextoEstimada = nomeJogo.length() * ConfigLayout::X(12); 
+    int larguraTextoEstimada = nomeJogo.length() * ConfigLayout::F(12); 
     
     MeuProjeto::desenharTexto(renderer, nomeJogo, 
         centroTela - larguraTextoEstimada, 
-        ConfigLayout::Y(ConfigLayout::JANELA_TITULO_POS_Y), 
+        ConfigLayout::F(ConfigLayout::JANELA_TITULO_POS_Y), 
         corTexto, 
         ConfigLayout::F(ConfigLayout::JANELA_TITULO_FONT), 
         MeuProjeto::TipoFonte::NEGRITO);
@@ -418,8 +418,8 @@ void JanelaJogo::desenharImagem(int offsetX, int offsetY) {
  */
 void JanelaJogo::desenharDescricao(int offsetX, int offsetY) {
     int fontSize = ConfigLayout::F(ConfigLayout::JANELA_DESC_FONT);
-    int linhaAltura = ConfigLayout::Y(ConfigLayout::JANELA_DESC_LINE_H);
-    int padding = ConfigLayout::X(ConfigLayout::JANELA_DESC_PAD);
+    int linhaAltura = ConfigLayout::F(ConfigLayout::JANELA_DESC_LINE_H);
+    int padding = ConfigLayout::F(ConfigLayout::JANELA_DESC_PAD);
     
     int x = areaDescricao.x + offsetX + padding;
     int y = areaDescricao.y + offsetY + padding;
@@ -478,8 +478,8 @@ void JanelaJogo::desenharCapturas(int offsetX, int offsetY) {
         titulo += " (Use LB/RB para navegar)";
     }
     
-    int paddingX = ConfigLayout::X(ConfigLayout::JANELA_CARROSSEL_TIT_POS_X);
-    int paddingY = ConfigLayout::Y(ConfigLayout::JANELA_CARROSSEL_TIT_POS_Y);
+    int paddingX = ConfigLayout::F(ConfigLayout::JANELA_CARROSSEL_TIT_POS_X);
+    int paddingY = ConfigLayout::F(ConfigLayout::JANELA_CARROSSEL_TIT_POS_Y);
     int fontTitle = ConfigLayout::F(ConfigLayout::JANELA_CARROSSEL_TIT_FONT);
     
     MeuProjeto::desenharTexto(renderer, titulo, paddingX, areaFundoCapturas.y + paddingY, corTexto, fontTitle, MeuProjeto::TipoFonte::NEGRITO);
@@ -533,9 +533,9 @@ void JanelaJogo::desenharBotoes(int offsetX, int offsetY) {
     if (capturasTexturas.size() > 0 && SDL_NumJoysticks() > 0) {
         SDL_Color corTextoSec = GerenciadorTemas::getInstance().getCorTextoNegrito();
         int fontLB = ConfigLayout::F(ConfigLayout::JANELA_LABEL_FONT);
-        int posLabelY = capturaPosY - ConfigLayout::Y(ConfigLayout::JANELA_LABEL_OFFSET_Y);
+        int posLabelY = capturaPosY - ConfigLayout::F(ConfigLayout::JANELA_LABEL_OFFSET_Y);
         
-        MeuProjeto::desenharTexto(renderer, "LB", ConfigLayout::X(ConfigLayout::JANELA_LABEL_POS_X_LB), posLabelY, corTextoSec, fontLB, MeuProjeto::TipoFonte::NEGRITO);
-        MeuProjeto::desenharTexto(renderer, "RB", ConfigLayout::X(ConfigLayout::JANELA_LABEL_POS_X_RB), posLabelY, corTextoSec, fontLB, MeuProjeto::TipoFonte::NEGRITO);
+        MeuProjeto::desenharTexto(renderer, "LB", ConfigLayout::F(ConfigLayout::JANELA_LABEL_POS_X_LB), posLabelY, corTextoSec, fontLB, MeuProjeto::TipoFonte::NEGRITO);
+        MeuProjeto::desenharTexto(renderer, "RB", ConfigLayout::F(ConfigLayout::JANELA_LABEL_POS_X_RB), posLabelY, corTextoSec, fontLB, MeuProjeto::TipoFonte::NEGRITO);
     }
 }
