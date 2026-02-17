@@ -130,6 +130,7 @@ private:
     const Uint32 INTERVALO_ANALOGICO = 200; /**< Delay em ms entre movimentos de navegação. */
     const int DEADZONE = 16000;           /**< Limiar de sensibilidade para eixos do joystick. */
     
+    GerenciadorImagens gerImgLocal; /**< Gerenciador de imagens local para esta janela. */
     SDL_Texture* texturaBateria = nullptr; /**< Textura do ícone de bateria. */
     
     /**
