@@ -48,6 +48,12 @@ GerenciadorTexturasTexto::~GerenciadorTexturasTexto() {
  */
 SDL_Texture* GerenciadorTexturasTexto::obterTextura(SDL_Renderer* renderer, TTF_Font* font, const std::string& texto, 
                                                   const std::string& caminhoFonte, int tamanho, SDL_Color cor) {
+    // PROTEÇÃO CONTRA MUDANÇA DE RENDERER (Evita Segfault)
+    if (ultimoRenderer != renderer) {
+        liberarTudo();
+        ultimoRenderer = renderer;
+    }
+
     // 1. Criar a chave de busca
     // Consolida os metadados do texto em uma estrutura para busca única no container de cache.
     ChaveTexto chave = {texto, caminhoFonte, tamanho, cor};
