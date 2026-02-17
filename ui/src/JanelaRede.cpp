@@ -34,7 +34,7 @@ private:
 };
 }
 
-JanelaRede::JanelaRede() {
+JanelaRede::JanelaRede(GerenciadorImagens* gerImgLocal) : gerImgRef(gerImgLocal) {
     wifiAtivo = true;
     inicializarRedes();
     inicializarBotoes();
@@ -71,8 +71,8 @@ void JanelaRede::inicializarRedes() {
 void JanelaRede::inicializarBotoes() {
     auto& tema = GerenciadorTemas::getInstance();
     btnToggleWifi = std::make_unique<Botao>(
-        ConfigLayout::X(1100), ConfigLayout::Y(280),
-        ConfigLayout::X(200), ConfigLayout::Y(60),
+        ConfigLayout::F(1100), ConfigLayout::F(280),
+        ConfigLayout::F(200), ConfigLayout::F(60),
         wifiAtivo ? "ON" : "OFF"
     );
     btnToggleWifi->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
@@ -88,7 +88,7 @@ void JanelaRede::desenhar(SDL_Renderer* renderer) {
 
 void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
-    desenharTexto(renderer, "Configurações de Rede", ConfigLayout::X(600), ConfigLayout::Y(150), tema.getCorTextoNegrito(), ConfigLayout::F(48));
+    desenharTexto(renderer, "Configurações de Rede", ConfigLayout::F(600), ConfigLayout::F(150), tema.getCorTextoNegrito(), ConfigLayout::F(48));
 }
 
 void JanelaRede::desenharToggleWifi(SDL_Renderer* renderer) {
@@ -103,7 +103,7 @@ void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
     if (botoesRedes.size() != redesDisponiveis.size()) {
         botoesRedes.clear();
         for (size_t i = 0; i < redesDisponiveis.size(); i++) {
-            auto btn = std::make_unique<Botao>(ConfigLayout::X(250), ConfigLayout::Y(450 + i*90), ConfigLayout::X(1000), ConfigLayout::Y(70), redesDisponiveis[i].nome);
+            auto btn = std::make_unique<Botao>(ConfigLayout::F(250), ConfigLayout::F(450 + i*90), ConfigLayout::F(1000), ConfigLayout::F(70), redesDisponiveis[i].nome);
             btn->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
             botoesRedes.push_back(std::move(btn));
         }
@@ -127,15 +127,14 @@ void JanelaRede::confirmarSenha() {
 
 void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
     // Overlay escuro
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
     SDL_RenderFillRect(renderer, nullptr);
     
-    desenharTexto(renderer, "Senha para " + redesDisponiveis[indiceRedeSelecionada].nome, 400, 200, {255,255,255,255}, 32);
-    desenharTexto(renderer, "Senha: " + std::string(senhaAtual.length(), '*'), 400, 300, {255,255,0,255}, 28);
+    desenharTexto(renderer, "Senha para " + redesDisponiveis[indiceRedeSelecionada].nome, ConfigLayout::F(400), ConfigLayout::F(200), {255,255,255,255}, ConfigLayout::F(32));
+    desenharTexto(renderer, "Senha: " + std::string(senhaAtual.length(), '*'), ConfigLayout::F(400), ConfigLayout::F(300), {255,255,0,255}, ConfigLayout::F(28));
     tecladoVirtual.desenhar(renderer);
     
-    desenharTexto(renderer, "Pressione START (ou ENTER) para confirmar", 400, 500, {200,200,200,255}, 20);
+    desenharTexto(renderer, "Pressione START (ou ENTER) para confirmar", ConfigLayout::F(400), ConfigLayout::F(500), {200,200,200,255}, ConfigLayout::F(20));
 }
 
 void JanelaRede::toggleWifi() {
