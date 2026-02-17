@@ -35,10 +35,9 @@ extern GerenciadorImagens gerImg;       ///< Instância global do gerenciador de
 /**
  * @brief Construtor da classe JanelaConfiguracao.
  * 
- * @details Inicializa a janela de configurações e cria uma instância da janela de rede.
+ * @details Inicializa a janela de configurações.
  */
 JanelaConfiguracao::JanelaConfiguracao() {
-    janelaRede = std::make_unique<JanelaRede>();
 }
 
 /**
@@ -70,8 +69,8 @@ void JanelaConfiguracao::inicializarBotoes() {
     SDL_Color btnPress = tema.getCorBotaoPressionado();
 
     auto btn1 = std::make_unique<Botao>(
-        ConfigLayout::X(217), ConfigLayout::Y(200), 
-        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        ConfigLayout::F(217), ConfigLayout::F(200), 
+        ConfigLayout::F(1101), ConfigLayout::F(122), 
         "REDE"
     );
     btn1->setCor(btnNormal, btnHover, btnPress); 
@@ -79,8 +78,8 @@ void JanelaConfiguracao::inicializarBotoes() {
     botoesMenu.push_back(std::move(btn1));
     
     auto btn2 = std::make_unique<Botao>(
-        ConfigLayout::X(217), ConfigLayout::Y(370), 
-        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        ConfigLayout::F(217), ConfigLayout::F(370), 
+        ConfigLayout::F(1101), ConfigLayout::F(122), 
         "ÁUDIO & VÍDEO"
     );
     btn2->setCor(btnNormal, btnHover, btnPress);
@@ -88,8 +87,8 @@ void JanelaConfiguracao::inicializarBotoes() {
     botoesMenu.push_back(std::move(btn2));
     
     auto btn3 = std::make_unique<Botao>(
-        ConfigLayout::X(217), ConfigLayout::Y(540), 
-        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        ConfigLayout::F(217), ConfigLayout::F(540), 
+        ConfigLayout::F(1101), ConfigLayout::F(122), 
         "BLUETOOTH"
     );
     btn3->setCor(btnNormal, btnHover, btnPress);
@@ -97,8 +96,8 @@ void JanelaConfiguracao::inicializarBotoes() {
     botoesMenu.push_back(std::move(btn3));
 
     auto btn4 = std::make_unique<Botao>(
-        ConfigLayout::X(217), ConfigLayout::Y(710), 
-        ConfigLayout::X(1101), ConfigLayout::Y(122), 
+        ConfigLayout::F(217), ConfigLayout::F(710), 
+        ConfigLayout::F(1101), ConfigLayout::F(122), 
         "INFORMAÇÕES DO SISTEMA"
     );
     btn4->setCor(btnNormal, btnHover, btnPress);
@@ -106,16 +105,16 @@ void JanelaConfiguracao::inicializarBotoes() {
     botoesMenu.push_back(std::move(btn4));
 
     btnFechar = std::make_unique<Botao>(
-        ConfigLayout::X(1465), ConfigLayout::Y(10), 
-        ConfigLayout::X(50), ConfigLayout::Y(50), 
+        ConfigLayout::F(1465), ConfigLayout::F(10), 
+        ConfigLayout::F(50), ConfigLayout::F(50), 
         "X"
     );
     btnFechar->setCor({200, 20, 20, 255}, {250, 50, 50, 255}, {180, 0, 0, 255});
     btnFechar->setIsRound(true);
 
     btnVoltar = std::make_unique<Botao>(
-        ConfigLayout::X(50), ConfigLayout::Y(10), 
-        ConfigLayout::X(150), ConfigLayout::Y(50), 
+        ConfigLayout::F(50), ConfigLayout::F(10), 
+        ConfigLayout::F(150), ConfigLayout::F(50), 
         "< Voltar"
     );
     btnVoltar->setCor(btnNormal, btnHover, btnPress);
@@ -147,7 +146,7 @@ void JanelaConfiguracao::abrir() {
     janela = SDL_CreateWindow("Configurações", 
                              SDL_WINDOWPOS_CENTERED, 
                              SDL_WINDOWPOS_CENTERED, 
-                             ConfigLayout::X(1525), ConfigLayout::Y(1116), 
+                             ConfigLayout::F(1525), ConfigLayout::F(1116), 
                              SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP);
     
     if (janela) {
@@ -176,12 +175,20 @@ void JanelaConfiguracao::abrir() {
  * Inclui limpeza do cache de texto para evitar problemas de memória.
  */
 void JanelaConfiguracao::fechar() {
-    // CRÍTICO: Limpa cache ao fechar
+    // 1. Resetar submenus primeiro (IMPORTANTE: Ordem de destruição)
+    janelaBluetooth.reset();
+    janelaInfosSistema.reset();
+    janelaAudioVideo.reset();
+    janelaRede.reset();
+
+    // 2. Limpar caches locais antes de destruir o renderer
     if (renderer) {
         limparCacheTexto();
+        gerImgLocal.liberarTudo(); // Limpa apenas texturas desta janela
+        SDL_DestroyRenderer(renderer); 
+        renderer = nullptr; 
     }
     
-    if (renderer) { SDL_DestroyRenderer(renderer); renderer = nullptr; }
     if (janela) { SDL_DestroyWindow(janela); janela = nullptr; }
 
     botoesMenu.clear(); 
@@ -481,7 +488,6 @@ std::string JanelaConfiguracao::obterHoraAtual() {
  * @return Percentual da bateria (0-100), ou 100 se não for possível determinar.
  */
 int JanelaConfiguracao::obterNivelBateria() {
-    SDL_PowerState estado = SDL_GetPowerInfo(nullptr, nullptr);
     int percentual = -1;
     SDL_GetPowerInfo(nullptr, &percentual);
     
@@ -530,20 +536,20 @@ void JanelaConfiguracao::desenharBarraStatus() {
     ssBateria << bateria << "%";
     std::string textoBateria = ssBateria.str();
     
-    int posX = ConfigLayout::X(762);
-    int posY = ConfigLayout::Y(25);
+    int posX = ConfigLayout::F(762);
+    int posY = ConfigLayout::F(25);
     
     // Desenha hora com cor do tema
-    desenharTexto(renderer, hora, posX - ConfigLayout::X(100), posY, 
+    desenharTexto(renderer, hora, posX - ConfigLayout::F(100), posY, 
                   tema.getCorTextoNegrito(), ConfigLayout::F(24));
     
     if (texturaBateria) {
-        int larguraIcone = ConfigLayout::X(100);
-        int alturaIcone = ConfigLayout::Y(50);
+        int larguraIcone = ConfigLayout::F(100);
+        int alturaIcone = ConfigLayout::F(50);
         
         SDL_Rect destIcone = {
-            posX + ConfigLayout::X(0),
-            posY - ConfigLayout::Y(5),
+            posX + ConfigLayout::F(0),
+            posY - ConfigLayout::F(5),
             larguraIcone,
             alturaIcone
         };
@@ -551,10 +557,10 @@ void JanelaConfiguracao::desenharBarraStatus() {
         SDL_RenderCopy(renderer, texturaBateria, nullptr, &destIcone);
         
         desenharTexto(renderer, textoBateria, 
-                      posX + ConfigLayout::X(130), posY, 
+                      posX + ConfigLayout::F(130), posY, 
                       tema.getCorTextoNegrito(), ConfigLayout::F(24));
     } else {
-        desenharTexto(renderer, textoBateria, posX + ConfigLayout::X(50), posY, 
+        desenharTexto(renderer, textoBateria, posX + ConfigLayout::F(50), posY, 
                       tema.getCorTextoNegrito(), ConfigLayout::F(24));
     }
 }
@@ -577,7 +583,7 @@ void JanelaConfiguracao::carregarIconeBateria() {
         caminhoIcone = "assets/images/dark/bateriaEscuro.png";
     }
     
-    texturaBateria = gerImg.carregar(renderer, caminhoIcone);
+    texturaBateria = gerImgLocal.carregar(renderer, caminhoIcone);
     
     if (!texturaBateria) {
         SDL_Log("[AVISO] Ícone de bateria não encontrado: %s", caminhoIcone.c_str());
@@ -601,7 +607,7 @@ void JanelaConfiguracao::desenharMenuPrincipal() {
     auto& tema = GerenciadorTemas::getInstance();
     
     desenharTexto(renderer, "Configurações", 
-                  ConfigLayout::X(535), ConfigLayout::Y(90), 
+                  ConfigLayout::F(535), ConfigLayout::F(90), 
                   tema.getCorTextoNegrito(), 
                   ConfigLayout::F(60)); 
     
@@ -625,8 +631,8 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     auto& tema = GerenciadorTemas::getInstance();
     
     SDL_Rect fundoSubmenu = {
-        0, ConfigLayout::Y(80),
-        ConfigLayout::X(1525), ConfigLayout::Y(1036)
+        0, ConfigLayout::F(80),
+        ConfigLayout::F(1525), ConfigLayout::F(1036)
     };
     SDL_Color corFundoSubmenu = tema.getCorRetangulos();
     SDL_SetRenderDrawColor(renderer, corFundoSubmenu.r, corFundoSubmenu.g, 
@@ -635,9 +641,11 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     
     desenharBarraStatus();
     
-    if (janelaRede) {
-        janelaRede->desenhar(renderer);
+    if (!janelaRede) {
+        janelaRede = std::make_unique<JanelaRede>(&gerImgLocal);
     }
+    
+    janelaRede->desenhar(renderer);
     
     if(btnVoltar) btnVoltar->desenhar(renderer);
 }
@@ -652,8 +660,8 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     auto& tema = GerenciadorTemas::getInstance();
     
     SDL_Rect fundoSubmenu = {
-        0, ConfigLayout::Y(80),
-        ConfigLayout::X(1525), ConfigLayout::Y(1036)
+        0, ConfigLayout::F(80),
+        ConfigLayout::F(1525), ConfigLayout::F(1036)
     };
     SDL_Color corFundoSubmenu = tema.getCorRetangulos();
     SDL_SetRenderDrawColor(renderer, corFundoSubmenu.r, corFundoSubmenu.g, 
@@ -663,7 +671,7 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     desenharBarraStatus();
     
     if (!janelaAudioVideo) {
-        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>();
+        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(&gerImgLocal);
     }
     
     janelaAudioVideo->desenhar(renderer);
@@ -681,8 +689,8 @@ void JanelaConfiguracao::desenharSubmenuBluetooth() {
     auto& tema = GerenciadorTemas::getInstance();
     
     SDL_Rect fundoSubmenu = {
-        0, ConfigLayout::Y(80),
-        ConfigLayout::X(1525), ConfigLayout::Y(1036)
+        0, ConfigLayout::F(80),
+        ConfigLayout::F(1525), ConfigLayout::F(1036)
     };
     SDL_Color corFundoSubmenu = tema.getCorRetangulos();
     SDL_SetRenderDrawColor(renderer, corFundoSubmenu.r, corFundoSubmenu.g, 
@@ -692,7 +700,7 @@ void JanelaConfiguracao::desenharSubmenuBluetooth() {
     desenharBarraStatus();
     
     if (!janelaBluetooth) {
-        janelaBluetooth = std::make_unique<JanelaBluetooth>();
+        janelaBluetooth = std::make_unique<JanelaBluetooth>(&gerImgLocal);
     }
     
     janelaBluetooth->desenhar(renderer);
@@ -710,8 +718,8 @@ void JanelaConfiguracao::desenharSubmenuSistemaInfos() {
     auto& tema = GerenciadorTemas::getInstance();
     
     SDL_Rect fundoSubmenu = {
-        0, ConfigLayout::Y(80),
-        ConfigLayout::X(1525), ConfigLayout::Y(1036)
+        0, ConfigLayout::F(80),
+        ConfigLayout::F(1525), ConfigLayout::F(1036)
     };
     SDL_Color corFundoSubmenu = tema.getCorRetangulos();
     SDL_SetRenderDrawColor(renderer, corFundoSubmenu.r, corFundoSubmenu.g, 
@@ -721,7 +729,7 @@ void JanelaConfiguracao::desenharSubmenuSistemaInfos() {
     desenharBarraStatus();
     
     if (!janelaInfosSistema) {
-        janelaInfosSistema = std::make_unique<JanelaInfosSistema>();
+        janelaInfosSistema = std::make_unique<JanelaInfosSistema>(&gerImgLocal);
         janelaInfosSistema->carregarTexturas(renderer);
     }
     
