@@ -1175,17 +1175,23 @@ void GerenciarInterface::desenhar(SDL_Renderer* renderer, GerenciarScroll& estad
                                     explicacaoClaro : explicacaoEscuro;
     
     if (explicacaoAtual) {
-        // Obtém dimensões originais da imagem
+        // Obtém dimensões originais da imagem (esperado 1920x140 ou similar)
         int w = 0, h = 0;
         SDL_QueryTexture(explicacaoAtual, NULL, NULL, &w, &h);
         
-        // Posiciona no fundo da tela
-        int posY = ConfigLayout::Y(1080) - h;
+        // Escala as dimensões
+        int scaledW = ConfigLayout::F(w);
+        int scaledH = ConfigLayout::F(h);
+        
+        // Posiciona no fundo do design nativo (Y=1280)
+        // O topo da imagem será 1280 - h_nativo
+        int posY = ConfigLayout::Y(1280 - h);
+        
         SDL_Rect rectExplicacao = { 
-            (ConfigLayout::larguraTela - w) / 2,  // Centralizado
-            posY,                                  // No fundo
-            w, 
-            h 
+            ConfigLayout::X(0),  // Alinhado ao início do canvas virtual
+            posY,
+            scaledW, 
+            scaledH 
         };
         
         SDL_RenderCopy(renderer, explicacaoAtual, NULL, &rectExplicacao);
