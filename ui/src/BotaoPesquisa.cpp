@@ -53,16 +53,16 @@ BotaoPesquisa::BotaoPesquisa(SDL_Renderer* renderer, int x, int y, int largura, 
     tamanhoResultados = ConfigLayout::F(32);
 
     // Definição das dimensões da lista de resultados suspensa
-    itemHeight = ConfigLayout::Y(120);
-    itemPadding = ConfigLayout::Y(6);
+    itemHeight = ConfigLayout::F(120);
+    itemPadding = ConfigLayout::F(6);
     imgSize = ConfigLayout::F(90); 
-    imgOffsetX = ConfigLayout::X(15);
+    imgOffsetX = ConfigLayout::F(15);
     
     // Cálculo de centralização vertical da imagem dentro do item de resultado
     imgOffsetY = (itemHeight - imgSize) / 2;
     
     // Posicionamento do texto lateralmente em relação à imagem
-    textOffsetX = imgOffsetX + imgSize + ConfigLayout::X(20);
+    textOffsetX = imgOffsetX + imgSize + ConfigLayout::F(20);
 
     // Parâmetros estéticos de borda
     raioBorda = ConfigLayout::F(15);
@@ -199,7 +199,7 @@ bool BotaoPesquisa::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
         resultadoHoverIndex = -1;
 
         if (!resultadosAtuais.empty()) {
-            int yPos = area.y + area.h + ConfigLayout::Y(10); 
+            int yPos = area.y + area.h + ConfigLayout::F(10); 
             for (size_t i = 0; i < resultadosAtuais.size() && i < MAX_RESULTADOS; ++i) {
                 SDL_Rect nr = {area.x, yPos, area.w, itemHeight};
                 if (mx >= nr.x && mx <= nr.x + nr.w && my >= nr.y && my <= nr.y + nr.h) {
@@ -221,7 +221,7 @@ bool BotaoPesquisa::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
             solicitaTeclado = true; 
         } 
         else if (!resultadosAtuais.empty()) {
-             int yPos = area.y + area.h + ConfigLayout::Y(10);
+             int yPos = area.y + area.h + ConfigLayout::F(10);
              for (size_t i = 0; i < resultadosAtuais.size() && i < MAX_RESULTADOS; ++i) {
                 SDL_Rect nr = {area.x, yPos, area.w, itemHeight};
                 if (mx >= nr.x && mx <= nr.x + nr.w && my >= nr.y && my <= nr.y + nr.h) {
@@ -285,7 +285,7 @@ void BotaoPesquisa::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
     // Desenho do retângulo de destaque externo para foco via controle
     if (focadoPorControle && indiceFocoResultado == -1) {
         SDL_Color corDest = tema.getCorDestaque();
-        int offsetFoco = ConfigLayout::X(3);
+        int offsetFoco = ConfigLayout::F(3);
         roundedRectangleRGBA(renderer, adjustedArea.x - offsetFoco, adjustedArea.y - offsetFoco, adjustedArea.x + adjustedArea.w + offsetFoco, adjustedArea.y + adjustedArea.h + offsetFoco, raioDestaque, corDest.r, corDest.g, corDest.b, 255);
     }
 
@@ -306,7 +306,7 @@ void BotaoPesquisa::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
 
     if (!textoParaDesenhar.empty()) {
         int textY = adjustedArea.y + (adjustedArea.h / 2) - (tamanhoPlaceholder / 2);
-        MeuProjeto::desenharTexto(renderer, textoParaDesenhar, adjustedArea.x + ConfigLayout::X(20), textY, corTexto, tamanhoPlaceholder, fontePlaceholder);
+        MeuProjeto::desenharTexto(renderer, textoParaDesenhar, adjustedArea.x + ConfigLayout::F(20), textY, corTexto, tamanhoPlaceholder, fontePlaceholder);
     }
 
     if (!resultadosAtuais.empty()) {
@@ -322,7 +322,7 @@ void BotaoPesquisa::desenhar(SDL_Renderer* renderer, int offsetX, int offsetY) {
  * @param adjustedArea Retângulo da área da barra de pesquisa para cálculo de origem.
  */
 void BotaoPesquisa::desenharResultados(const SDL_Rect& adjustedArea) {
-    int yPos = adjustedArea.y + adjustedArea.h + ConfigLayout::Y(10);
+    int yPos = adjustedArea.y + adjustedArea.h + ConfigLayout::F(10);
     auto& tema = GerenciadorTemas::getInstance();
 
     for (size_t i = 0; i < resultadosAtuais.size() && i < MAX_RESULTADOS; ++i) {
@@ -338,7 +338,7 @@ void BotaoPesquisa::desenharResultados(const SDL_Rect& adjustedArea) {
         // Desenho de borda de destaque interna para itens selecionados via controle
         if ((int)i == indiceFocoResultado && focadoPorControle) {
             SDL_Color corDest = tema.getCorDestaque();
-            int offsetInterno = ConfigLayout::X(2);
+            int offsetInterno = ConfigLayout::F(2);
             int raioItem = ConfigLayout::F(5);
             roundedRectangleRGBA(renderer, nomeRect.x + offsetInterno, nomeRect.y + offsetInterno, nomeRect.x + nomeRect.w - offsetInterno, nomeRect.y + nomeRect.h - offsetInterno, raioItem, corDest.r, corDest.g, corDest.b, 255);
         }
