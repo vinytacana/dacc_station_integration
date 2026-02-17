@@ -45,7 +45,7 @@ extern GerenciadorImagens gerImg;
  * @see inicializarInfosProjeto()
  * @see inicializarColaboradores()
  */
-JanelaInfosSistema::JanelaInfosSistema() {
+JanelaInfosSistema::JanelaInfosSistema(GerenciadorImagens* gerImgLocal) : gerImgRef(gerImgLocal) {
     coletarInfosHardware();
     inicializarInfosProjeto();
     inicializarColaboradores();
@@ -332,8 +332,10 @@ void JanelaInfosSistema::carregarImagemExplicativa(SDL_Renderer* renderer) {
         std::cout << "[INFO_SISTEMA] Carregando imagem ESCURA: " << caminhoImagem << std::endl;
     }
     
-    // Carrega através do gerenciador
-    texturaExplicacao = gerImg.carregar(renderer, caminhoImagem);
+    // Carrega através do gerenciador isolado
+    if (gerImgRef) {
+        texturaExplicacao = gerImgRef->carregar(renderer, caminhoImagem);
+    }
     
     if (!texturaExplicacao) {
         SDL_Log("[AVISO] Imagem explicativa não encontrada: %s", caminhoImagem.c_str());
@@ -388,11 +390,11 @@ void JanelaInfosSistema::desenharImagemExplicativa(SDL_Renderer* renderer) {
     }
     
     // 1. Define a altura fixa da imagem e largura total da tela
-    int larguraTela = ConfigLayout::X(1525); 
-    int alturaImagem = ConfigLayout::Y(30);
+    int larguraTela = ConfigLayout::F(1525); 
+    int alturaImagem = ConfigLayout::F(30);
     
     // 2. Define a posição Y como (Altura da Tela - Altura da Imagem)
-    int posY = ConfigLayout::Y(1080) - alturaImagem;
+    int posY = ConfigLayout::F(1080) - alturaImagem;
     
     // 3. Monta o retângulo de destino
     SDL_Rect destExplicacao = {
@@ -446,22 +448,22 @@ void JanelaInfosSistema::desenhar(SDL_Renderer* renderer) {
     // Define área de clipping para o conteúdo rolável
     SDL_Rect clipRect = {
         0,
-        ConfigLayout::Y(220),
-        ConfigLayout::X(1525),
-        ConfigLayout::Y(1086) - ConfigLayout::Y(220)
+        ConfigLayout::F(220),
+        ConfigLayout::F(1525),
+        ConfigLayout::F(1086) - ConfigLayout::F(220)
     };
     SDL_RenderSetClipRect(renderer, &clipRect);
     
     // Desenha seções com offset de scroll
-    int posY = ConfigLayout::Y(220) - offsetScroll;
+    int posY = ConfigLayout::F(220) - offsetScroll;
     
     posY = desenharSecaoHardware(renderer, posY);
     desenharSeparador(renderer, posY);
-    posY += ConfigLayout::Y(40);
+    posY += ConfigLayout::F(40);
     
     posY = desenharSecaoProjeto(renderer, posY);
     desenharSeparador(renderer, posY);
-    posY += ConfigLayout::Y(40);
+    posY += ConfigLayout::F(40);
     
     posY = desenharSecaoColaboradores(renderer, posY);
     
@@ -505,11 +507,11 @@ void JanelaInfosSistema::desenharCabecalho(SDL_Renderer* renderer) {
     int tamanhoFonte = ConfigLayout::F(48);
     
     int larguraEstimada = (int)(titulo.length() * tamanhoFonte * 0.6f);
-    int larguraJanela = ConfigLayout::X(1525);
+    int larguraJanela = ConfigLayout::F(1525);
     int posX = (larguraJanela - larguraEstimada) / 2;
     
     desenharTexto(renderer, titulo, 
-                  posX, ConfigLayout::Y(150), 
+                  posX, ConfigLayout::F(150), 
                   tema.getCorTextoNegrito(), 
                   tamanhoFonte,
                   TipoFonte::NORMAL);
@@ -547,20 +549,20 @@ void JanelaInfosSistema::desenharCabecalho(SDL_Renderer* renderer) {
  */
 int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) {
     auto& tema = GerenciadorTemas::getInstance();
-    int baseX = ConfigLayout::X(250);
-    int espacamentoLinha = ConfigLayout::Y(40);
+    int baseX = ConfigLayout::F(250);
+    int espacamentoLinha = ConfigLayout::F(40);
     
     desenharTexto(renderer, "HARDWARE", 
                   baseX, posY, 
                   tema.getCorTextoNegrito(), 
                   ConfigLayout::F(36),
                   TipoFonte::NEGRITO);
-    posY += ConfigLayout::Y(60);
+    posY += ConfigLayout::F(60);
     
     std::stringstream ssCPU;
     ssCPU << "Processador: " << hardware.processador;
     desenharTexto(renderer, ssCPU.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -569,7 +571,7 @@ int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) 
     std::stringstream ssNucleos;
     ssNucleos << "Núcleos: " << hardware.nucleos;
     desenharTexto(renderer, ssNucleos.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -579,7 +581,7 @@ int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) 
     float ramGB = hardware.memoriaRAM / 1024.0f;
     ssRAM << "Memória RAM: " << std::fixed << std::setprecision(2) << ramGB << " GB";
     desenharTexto(renderer, ssRAM.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -588,7 +590,7 @@ int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) 
     std::stringstream ssGPU;
     ssGPU << "Placa de Vídeo: " << hardware.placaVideo;
     desenharTexto(renderer, ssGPU.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -597,7 +599,7 @@ int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) 
     std::stringstream ssSO;
     ssSO << "Sistema Operacional: " << hardware.sistemaOperacional;
     desenharTexto(renderer, ssSO.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -606,13 +608,13 @@ int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) 
     std::stringstream ssArq;
     ssArq << "Arquitetura: " << hardware.arquitetura;
     desenharTexto(renderer, ssArq.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
     posY += espacamentoLinha;
     
-    return posY + ConfigLayout::Y(20);
+    return posY + ConfigLayout::F(20);
 }
 
 /**
@@ -643,20 +645,20 @@ int JanelaInfosSistema::desenharSecaoHardware(SDL_Renderer* renderer, int posY) 
  */
 int JanelaInfosSistema::desenharSecaoProjeto(SDL_Renderer* renderer, int posY) {
     auto& tema = GerenciadorTemas::getInstance();
-    int baseX = ConfigLayout::X(250);
-    int espacamentoLinha = ConfigLayout::Y(40);
+    int baseX = ConfigLayout::F(250);
+    int espacamentoLinha = ConfigLayout::F(40);
     
     desenharTexto(renderer, "PROJETO", 
                   baseX, posY, 
                   tema.getCorTextoNegrito(), 
                   ConfigLayout::F(36),
                   TipoFonte::NEGRITO);
-    posY += ConfigLayout::Y(60);
+    posY += ConfigLayout::F(60);
     
     std::stringstream ssNome;
     ssNome << "Nome: " << projeto.nome;
     desenharTexto(renderer, ssNome.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -665,7 +667,7 @@ int JanelaInfosSistema::desenharSecaoProjeto(SDL_Renderer* renderer, int posY) {
     std::stringstream ssVersao;
     ssVersao << "Versão: " << projeto.versao;
     desenharTexto(renderer, ssVersao.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -674,7 +676,7 @@ int JanelaInfosSistema::desenharSecaoProjeto(SDL_Renderer* renderer, int posY) {
     std::stringstream ssData;
     ssData << "Compilado em: " << projeto.dataCompilacao;
     desenharTexto(renderer, ssData.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
@@ -683,13 +685,13 @@ int JanelaInfosSistema::desenharSecaoProjeto(SDL_Renderer* renderer, int posY) {
     std::stringstream ssDesc;
     ssDesc << "Descrição: " << projeto.descricao;
     desenharTexto(renderer, ssDesc.str(), 
-                  baseX + ConfigLayout::X(30), posY, 
+                  baseX + ConfigLayout::F(30), posY, 
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(24),
                   TipoFonte::NORMAL);
     posY += espacamentoLinha;
     
-    return posY + ConfigLayout::Y(20);
+    return posY + ConfigLayout::F(20);
 }
 
 /**
@@ -721,29 +723,29 @@ int JanelaInfosSistema::desenharSecaoProjeto(SDL_Renderer* renderer, int posY) {
  */
 int JanelaInfosSistema::desenharSecaoColaboradores(SDL_Renderer* renderer, int posY) {
     auto& tema = GerenciadorTemas::getInstance();
-    int baseX = ConfigLayout::X(250);
-    int espacamentoLinha = ConfigLayout::Y(40);
+    int baseX = ConfigLayout::F(250);
+    int espacamentoLinha = ConfigLayout::F(40);
     
     desenharTexto(renderer, "COLABORADORES", 
                   baseX, posY, 
                   tema.getCorTextoNegrito(), 
                   ConfigLayout::F(36),
                   TipoFonte::NEGRITO);
-    posY += ConfigLayout::Y(60);
+    posY += ConfigLayout::F(60);
     
     for (const auto& colaborador : colaboradores) {
         std::stringstream ss;
         ss << "• " << colaborador.nome << " - " << colaborador.funcao;
         
         desenharTexto(renderer, ss.str(), 
-                      baseX + ConfigLayout::X(30), posY, 
+                      baseX + ConfigLayout::F(30), posY, 
                       tema.getCorTextoNormal(), 
                       ConfigLayout::F(24),
                       TipoFonte::NORMAL);
         posY += espacamentoLinha;
     }
     
-    return posY + ConfigLayout::Y(20);
+    return posY + ConfigLayout::F(20);
 }
 
 /**
@@ -772,10 +774,10 @@ void JanelaInfosSistema::desenharSeparador(SDL_Renderer* renderer, int posY) {
     SDL_Color corSeparador = tema.getCorTextoNormal();
     
     SDL_Rect linha = {
-        ConfigLayout::X(250),
+        ConfigLayout::F(250),
         posY,
-        ConfigLayout::X(1020),
-        ConfigLayout::Y(2)
+        ConfigLayout::F(1020),
+        ConfigLayout::F(2)
     };
     
     SDL_SetRenderDrawColor(renderer, corSeparador.r, corSeparador.g, 
@@ -816,14 +818,14 @@ void JanelaInfosSistema::desenharBarraScroll(SDL_Renderer* renderer) {
     
     auto& tema = GerenciadorTemas::getInstance();
     
-    int areaScrollY = ConfigLayout::Y(220);
-    int areaScrollAltura = ConfigLayout::Y(1086) - areaScrollY;
-    int barraX = ConfigLayout::X(1525) - ConfigLayout::X(LARGURA_BARRA_SCROLL + 10);
+    int areaScrollY = ConfigLayout::F(220);
+    int areaScrollAltura = ConfigLayout::F(1086) - areaScrollY;
+    int barraX = ConfigLayout::F(1525) - ConfigLayout::F(LARGURA_BARRA_SCROLL + 10);
     
     SDL_Rect trilho = {
         barraX,
         areaScrollY,
-        ConfigLayout::X(LARGURA_BARRA_SCROLL),
+        ConfigLayout::F(LARGURA_BARRA_SCROLL),
         areaScrollAltura
     };
     
@@ -840,7 +842,7 @@ void JanelaInfosSistema::desenharBarraScroll(SDL_Renderer* renderer) {
     SDL_Rect handle = {
         barraX,
         posYHandle,
-        ConfigLayout::X(LARGURA_BARRA_SCROLL),
+        ConfigLayout::F(LARGURA_BARRA_SCROLL),
         alturaHandle
     };
     
@@ -872,8 +874,8 @@ void JanelaInfosSistema::desenharBarraScroll(SDL_Renderer* renderer) {
  */
 void JanelaInfosSistema::calcularAlturaConteudo(int alturaFinal) {
     alturaConteudo = alturaFinal;
-    int areaVisivel = ConfigLayout::Y(1086) - ConfigLayout::Y(220);
-    maxScroll = std::max(0, alturaConteudo - ConfigLayout::Y(220) - areaVisivel);
+    int areaVisivel = ConfigLayout::F(1086) - ConfigLayout::F(220);
+    maxScroll = std::max(0, alturaConteudo - ConfigLayout::F(220) - areaVisivel);
 }
 
 /**
