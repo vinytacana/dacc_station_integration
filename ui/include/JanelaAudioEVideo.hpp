@@ -25,6 +25,8 @@
  */
 namespace MeuProjeto {
 
+class GerenciadorImagens;
+
 /**
  * @struct DispositivoAudio
  * @brief Estrutura para armazenar informações sobre um dispositivo de áudio.
@@ -80,7 +82,7 @@ public:
     /**
      * @brief Construtor da classe JanelaAudioEVideo.
      */
-    JanelaAudioEVideo();
+    JanelaAudioEVideo(GerenciadorImagens* gerImgLocal);
 
     /**
      * @brief Destrutor da classe JanelaAudioEVideo.
@@ -158,10 +160,10 @@ private:
     bool arrastandoVolume = false;          /**< Flag para controle de arrasto do volume. */
     bool arrastandoEscala = false;          /**< Flag para controle de arrasto da escala. */
     
+    GerenciadorImagens* gerImgRef = nullptr; /**< Referência ao gerenciador de imagens isolado. */
     // IMAGEM EXPLICATIVA
     
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
-    GerenciadorImagens gerenciadorImagens;    /**< Gerenciador de cache de texturas. */
     
 
     /**
