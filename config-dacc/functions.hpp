@@ -15,6 +15,8 @@ struct wifi_network{
 struct device_bt {
     std::string mac;
     std::string nome;
+    bool conectado = false;
+    bool pareado = false;
 };
 
 struct device_audio{
@@ -65,6 +67,7 @@ void desconectar_wifi(const std::string &id);
 std::vector<device_bt> scan_dispositivos_bluetooth(int segundos = 10);
 bool conectar_bluetooth(const std::string &mac);
 bool desconectar_bluetooth(const std::string &mac);
+bool remover_bluetooth(const std::string &mac);
 void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos);
 void gerenciar_bluetooth();
 bool obter_estado_bluetooth();
