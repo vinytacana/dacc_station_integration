@@ -56,6 +56,8 @@ private:
     /** @brief Deleter customizado para SDL_Texture. */
     static void destruirTextura(SDL_Texture* tex) { if (tex) SDL_DestroyTexture(tex); }
 
+    SDL_Renderer* ultimoRenderer = nullptr; /**< Rastreia se o renderizador mudou (evita Segfault). */
+
 public:
     GerenciadorTexturasTexto();
     ~GerenciadorTexturasTexto();
