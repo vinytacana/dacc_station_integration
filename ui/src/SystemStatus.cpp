@@ -66,13 +66,15 @@ void SystemStatus::update() {
     std::time_t t = std::time(nullptr);
     std::tm* nowTm = std::localtime(&t);
     
-    /**
-     * Formata o horário no padrão HH:MM usando std::put_time.
-     * Exemplo de saída: "14:35", "09:07"
-     */
-    std::stringstream ss;
-    ss << std::put_time(nowTm, "%H:%M");
-    cache.currentTime = ss.str();
+    if (nowTm) {
+        /**
+         * Formata o horário no padrão HH:MM usando std::put_time.
+         * Exemplo de saída: "14:35", "09:07"
+         */
+        std::stringstream ss;
+        ss << std::put_time(nowTm, "%H:%M");
+        cache.currentTime = ss.str();
+    }
 
     /**
      * Mock de dados de hardware que serão implementados futuramente.
