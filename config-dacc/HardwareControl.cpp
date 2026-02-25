@@ -30,6 +30,23 @@ static std::mutex g_audio_mutex;
 // --- UTILITÁRIOS ---
 // ==========================================
 
+std::string remover_ansi(std::string str) {
+    std::string resultado;
+    bool dentro = false;
+    for (size_t i = 0; i < str.size(); ++i) {
+        if (str[i] == '\033') {
+            dentro = true;
+            continue;
+        }
+        if (dentro) {
+            if (isalpha(str[i])) dentro = false;
+            continue;
+        }
+        resultado += str[i];
+    }
+    return resultado;
+}
+
 bool comando_existe(const std::string &cmd) {
     std::string check = "which " + cmd + " > /dev/null 2>&1";
     return (system(check.c_str()) == 0);
@@ -391,56 +408,77 @@ void desconectar_wifi(const string &id) {
 // ==========================================
 
 void parsing_bluetooth_stream(std::istream &input, std::unordered_map<std::string, device_bt> &mapa, std::string &ultimo_mac_context) {
-    std::string linha;
-    while (std::getline(input, linha)) {
-        if (linha.find("Device ") != std::string::npos) {
-            std::stringstream ss(linha);
-            std::string device_kw, mac;
-            ss >> device_kw >> mac;
+    std::string linha_raw;
+    while (std::getline(input, linha_raw)) {
+        std::string linha = remover_ansi(linha_raw);
+        if (linha.empty()) continue;
+        
+        // 1. Linha com identificador de dispositivo
+        size_t pos_device = linha.find("Device ");
+        if (pos_device != std::string::npos) {
+            std::string sub = linha.substr(pos_device + 7);
+            std::stringstream ss(sub);
+            std::string mac;
+            ss >> mac;
 
-            if (device_kw != "Device" || mac.empty()) continue;
-            if (linha.find("[DEL]") != std::string::npos) {
-                mapa.erase(mac);
-                ultimo_mac_context = "";
+            if (mac.length() >= 17 && mac.find(':') != std::string::npos) {
+                ultimo_mac_context = mac;
+                auto &dev = mapa[mac];
+                dev.mac = mac;
+
+                if (linha.find("[DEL]") != std::string::npos) {
+                    mapa.erase(mac);
+                    ultimo_mac_context = "";
+                    continue;
+                }
+
+                // Tenta extrair o restante da linha para ver se é um nome ou propriedade
+                std::string resto;
+                std::getline(ss, resto);
+                size_t first = resto.find_first_not_of(" \t");
+                if (first != std::string::npos) {
+                    std::string payload = resto.substr(first);
+                    size_t pos_colon = payload.find(": ");
+                    
+                    // Se não tem ": ", é o nome do dispositivo (formato [NEW] Device MAC Name)
+                    if (pos_colon == std::string::npos) {
+                        while(!payload.empty() && isspace(payload.back())) payload.pop_back();
+                        if (!payload.empty()) dev.nome = payload;
+                    } else {
+                        // É uma propriedade na mesma linha (formato [CHG] Device MAC Prop: Val)
+                        std::string prop = payload.substr(0, pos_colon);
+                        std::string val = payload.substr(pos_colon + 2);
+                        while(!val.empty() && isspace(val.back())) val.pop_back();
+
+                        if (prop == "Name" || prop == "Alias") dev.nome = val;
+                        else if (prop == "Icon") dev.icon = val;
+                        else if (prop == "Connected") dev.conectado = (val == "yes");
+                        else if (prop == "Paired") dev.pareado = (val == "yes");
+                    }
+                }
                 continue;
             }
-
-            auto &dev = mapa[mac];
-            dev.mac = mac;
-            ultimo_mac_context = mac;
-
-            std::string resto;
-            std::getline(ss, resto);
-            size_t first = resto.find_first_not_of(" \t");
-            if (first != std::string::npos) {
-                std::string nome = resto.substr(first);
-                if (!nome.empty()) dev.nome = nome;
-            }
-            continue;
         }
 
+        // 2. Linha de propriedade isolada (comum no output do 'info' ou atualizações de scan)
         if (!ultimo_mac_context.empty()) {
             auto &dev = mapa[ultimo_mac_context];
-            
-            if (linha.find("Name:") != std::string::npos) {
-                std::string nome = linha.substr(linha.find("Name:") + 5);
-                size_t first = nome.find_first_not_of(" \t");
-                size_t last = nome.find_last_not_of(" \t\r\n");
-                if (first != std::string::npos && last != std::string::npos) {
-                    nome = nome.substr(first, last - first + 1);
-                    if (nome.size() >= 2) dev.nome = nome;
+            size_t pos_colon = linha.find(": ");
+            if (pos_colon != std::string::npos) {
+                std::string prop_part = linha.substr(0, pos_colon);
+                size_t start = prop_part.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    std::string prop = prop_part.substr(start);
+                    std::string val = linha.substr(pos_colon + 2);
+                    while(!val.empty() && isspace(val.back())) val.pop_back();
+
+                    if (prop == "Name" || prop == "Alias") {
+                        if (!val.empty()) dev.nome = val;
+                    }
+                    else if (prop == "Icon") dev.icon = val;
+                    else if (prop == "Connected") dev.conectado = (val == "yes");
+                    else if (prop == "Paired") dev.pareado = (val == "yes");
                 }
-            }
-            else if (linha.find("Icon:") != std::string::npos) {
-                std::string icon = linha.substr(linha.find("Icon:") + 5);
-                size_t first = icon.find_first_not_of(" \t");
-                size_t last = icon.find_last_not_of(" \t\r\n");
-                if (first != std::string::npos && last != std::string::npos) {
-                    dev.icon = icon.substr(first, last - first + 1);
-                }
-            }
-            else if (linha.find("Connected:") != std::string::npos) {
-                dev.conectado = (linha.find("yes") != std::string::npos);
             }
         }
     }
@@ -478,22 +516,33 @@ void definir_estado_bt(bool ligar) {
 
 std::vector<device_bt> get_list_device() {
     std::unordered_map<std::string, device_bt> mapa;
-    std::string saida = exec_command("bluetoothctl devices 2>/dev/null");
+    
+    // 1. Lista dispositivos conhecidos usando echo para evitar modo interativo
+    std::string saida = exec_command("echo 'devices' | bluetoothctl 2>/dev/null");
     std::stringstream ss(saida);
     std::string ctx_dummy = "";
     
     parsing_bluetooth_stream(ss, mapa, ctx_dummy);
 
-    // Para cada dispositivo encontrado, busca informações detalhadas
+    // 2. Para cada dispositivo encontrado, busca informações detalhadas (Paired, Connected, Icon)
     for (auto &pair : mapa) {
-        std::string info_saida = exec_command(("bluetoothctl info " + pair.first + " 2>/dev/null").c_str());
+        std::string cmd = "echo 'info " + pair.first + "' | bluetoothctl 2>/dev/null";
+        std::string info_saida = exec_command(cmd.c_str());
         std::stringstream ss_info(info_saida);
         std::string ctx_info = pair.first;
         parsing_bluetooth_stream(ss_info, mapa, ctx_info);
+        
+        // Fallback para nome se estiver vazio
+        if (pair.second.nome.empty()) pair.second.nome = "Dispositivo " + pair.first;
     }
 
     std::vector<device_bt> lista;
-    for (auto &[_, d] : mapa) lista.push_back(d);
+    for (auto &[_, d] : mapa) {
+        // Exibimos na lista de "Pareados" apenas os dispositivos que o sistema confirma o pareamento
+        if (d.pareado) {
+            lista.push_back(d);
+        }
+    }
     return lista;
 }
 
@@ -508,8 +557,11 @@ std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
         _exit(1);
     }
 
+    // Aumenta o tempo de espera entre comandos de inicialização do controlador
     write(master_fd, "power on\n", 9);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     write(master_fd, "agent on\ndefault-agent\n", 24);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     write(master_fd, "scan on\n", 8);
 
     auto inicio = std::chrono::steady_clock::now();

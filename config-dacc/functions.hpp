@@ -18,6 +18,7 @@ struct device_bt {
     std::string nome;
     std::string icon;
     bool conectado = false;
+    bool pareado = false;
 };
 
 struct device_audio{
