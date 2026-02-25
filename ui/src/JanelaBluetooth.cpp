@@ -9,6 +9,7 @@
  */
 
 #include "JanelaBluetooth.hpp"
+#include "functions.hpp"
 #include "Utils.hpp"
 #include "GerenciadorTemas.hpp"
 #include "ConfigLayout.hpp"
@@ -16,6 +17,7 @@
 #include "GerenciadorImagens.hpp"
 #include <iostream>
 #include <algorithm>
+#include <thread>
 
 using namespace MeuProjeto;
 
@@ -31,9 +33,45 @@ extern GerenciadorImagens gerImg;       ///< Instância global do gerenciador de
  * listas de dispositivos pareados e disponíveis.
  */
 JanelaBluetooth::JanelaBluetooth() {
+    sincronizarComHardware();
     inicializarBotoes();
-    inicializarDispositivosPareados();
-    inicializarDispositivosDisponiveis();
+}
+
+/**
+ * @brief Converte string de ícone do Bluetooth para TipoDispositivoBT.
+ */
+static TipoDispositivoBT stringParaTipoBT(const std::string& icon) {
+    if (icon == "input-gaming" || icon == "input-keyboard" || icon == "input-mouse") 
+        return TipoDispositivoBT::CONTROLE;
+    if (icon == "audio-headset" || icon == "audio-card" || icon == "audio-headphones") 
+        return TipoDispositivoBT::HEADPHONE;
+    if (icon == "phone" || icon == "smartphone") 
+        return TipoDispositivoBT::SMARTPHONE;
+    if (icon == "tv" || icon == "video-display") 
+        return TipoDispositivoBT::TV;
+    if (icon == "computer" || icon == "laptop") 
+        return TipoDispositivoBT::COMPUTADOR;
+    return TipoDispositivoBT::OUTRO;
+}
+
+/**
+ * @brief Sincroniza o estado da UI com o hardware real.
+ */
+void JanelaBluetooth::sincronizarComHardware() {
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
+    
+    this->bluetoothAtivo = ::obter_estado_bluetooth();
+    
+    if (bluetoothAtivo) {
+        dispositivosPareados.clear();
+        auto reais = ::get_list_device(); // Pega dispositivos pareados/conhecidos
+        
+        for (const auto& d : reais) {
+            dispositivosPareados.push_back(DispositivoBluetooth(
+                d.nome, stringParaTipoBT(d.icon), true, d.conectado, d.mac
+            ));
+        }
+    }
 }
 
 /**
@@ -53,7 +91,6 @@ JanelaBluetooth::~JanelaBluetooth() {
  * @brief Inicializa os botões da interface.
  * 
  * @details Cria e configura o botão toggle para ativar/desativar o Bluetooth.
- * As cores são obtidas do gerenciador de temas e as dimensões do ConfigLayout.
  */
 void JanelaBluetooth::inicializarBotoes() {
     auto& tema = GerenciadorTemas::getInstance();
@@ -61,53 +98,46 @@ void JanelaBluetooth::inicializarBotoes() {
     SDL_Color btnHover = tema.getCorBotaoHover();
     SDL_Color btnPress = tema.getCorBotaoPressionado();
 
+    // Posições relativas à janela de configurações (1525x1116)
+    // Usamos F() apenas para escala, sem o offset centralizador global do X() e Y()
+    int btnW = ConfigLayout::F(500);
+    int btnH = ConfigLayout::F(80);
+    int btnX = (ConfigLayout::F(1525) - btnW) / 2; // Centralizado na janela
+    int btnY = ConfigLayout::F(180);
+
     btnToggleBluetooth = std::make_unique<Botao>(
-        ConfigLayout::X(513), ConfigLayout::Y(180),
-        ConfigLayout::X(500), ConfigLayout::Y(80),
+        btnX, btnY, btnW, btnH,
         bluetoothAtivo ? "Bluetooth: ON" : "Bluetooth: OFF"
     );
     btnToggleBluetooth->setCor(btnNormal, btnHover, btnPress);
     btnToggleBluetooth->setRetanguloBordasArredondadas(15);
+
+    // --- Botão Escanear (Rodapé) ---
+    int scanW = ConfigLayout::F(350); 
+    int scanH = ConfigLayout::F(60);
+    int scanX = (ConfigLayout::F(1525) - scanW) / 2;
+    int scanY = ConfigLayout::F(980); 
+
+    btnEscanear = std::make_unique<Botao>(
+        scanX, scanY, scanW, scanH,
+        "Escanear"
+    );
+    btnEscanear->setCor(btnNormal, btnHover, btnPress);
+    btnEscanear->setRetanguloBordasArredondadas(15);
 }
 
 /**
  * @brief Inicializa a lista de dispositivos pareados.
- * 
- * @details Cria uma lista inicial de dispositivos Bluetooth pareados (hardcoded para demonstração).
- * Cada dispositivo contém nome, tipo, status de pareamento, status de conexão e endereço MAC.
  */
 void JanelaBluetooth::inicializarDispositivosPareados() {
-    dispositivosPareados.clear();
-    
-    dispositivosPareados.push_back(DispositivoBluetooth(
-        "DualShock 4", TipoDispositivoBT::CONTROLE, true, true, "A1:B2:C3:D4:E5:F6"
-    ));
-    
-    dispositivosPareados.push_back(DispositivoBluetooth(
-        "Sony WH-1000XM4", TipoDispositivoBT::HEADPHONE, true, false, "11:22:33:44:55:66"
-    ));
-    
-    dispositivosPareados.push_back(DispositivoBluetooth(
-        "Galaxy S21", TipoDispositivoBT::SMARTPHONE, true, false, "AA:BB:CC:DD:EE:FF"
-    ));
+    // Agora gerido pelo sincronizarComHardware
 }
 
 /**
  * @brief Inicializa a lista de dispositivos disponíveis.
- * 
- * @details Cria uma lista inicial de dispositivos Bluetooth disponíveis para pareamento
- * (hardcoded para demonstração).
  */
 void JanelaBluetooth::inicializarDispositivosDisponiveis() {
-    dispositivosDisponiveis.clear();
-    
-    dispositivosDisponiveis.push_back(DispositivoBluetooth(
-        "JBL Flip 5", TipoDispositivoBT::HEADPHONE, false, false, "12:34:56:78:90:AB"
-    ));
-    
-    dispositivosDisponiveis.push_back(DispositivoBluetooth(
-        "Samsung TV", TipoDispositivoBT::TV, false, false, "98:76:54:32:10:FE"
-    ));
+    // Agora gerido pelo iniciarEscaneamento
 }
 
 // CARREGAMENTO DE TEXTURAS
@@ -133,13 +163,6 @@ void JanelaBluetooth::carregarTexturas(SDL_Renderer* renderer) {
     }
     
     texturaExplicacao = gerImg.carregar(renderer, caminhoExplicacao);
-    
-    if (!texturaExplicacao) {
-        SDL_Log("[ERRO] Imagem explicativa não encontrada: %s", caminhoExplicacao.c_str());
-        SDL_Log("[INFO] Certifique-se de que o arquivo existe no caminho correto");
-    } else {
-        SDL_Log("[INFO] Imagem explicativa carregada com sucesso: %s", caminhoExplicacao.c_str());
-    }
 }
 
 // DESENHO
@@ -171,9 +194,8 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
         desenharDispositivosPareados(renderer);
         desenharDispositivosDisponiveis(renderer);
         
-        if (escaneando) {
-            desenharMensagemEscaneamento(renderer);
-        }
+        // Desenha o novo botão aqui
+        desenharBotaoEscanear(renderer);
     } else {
         // Mensagem centralizada quando Bluetooth está desligado
         desenharTexto(renderer, "Bluetooth desativado. Ative para ver dispositivos.",
@@ -203,31 +225,43 @@ void JanelaBluetooth::desenharToggleBluetooth(SDL_Renderer* renderer) {
 }
 
 /**
+ * @brief Renderiza o botão de escanear.
+ */
+void JanelaBluetooth::desenharBotaoEscanear(SDL_Renderer* renderer) {
+    if (!btnEscanear || !bluetoothAtivo) return;
+
+    if (escaneando) {
+        btnEscanear->setTexto("Escaneando...");
+    } else {
+        btnEscanear->setTexto("Escanear (Y)");
+    }
+
+    btnEscanear->desenhar(renderer);
+}
+
+/**
  * @brief Desenha a seção de dispositivos pareados.
- * 
- * @details Renderiza a lista de dispositivos Bluetooth pareados.
- * Inclui título, lista de dispositivos e indicadores de scroll.
- * 
- * @param renderer Ponteiro para o renderizador SDL.
  */
 void JanelaBluetooth::desenharDispositivosPareados(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     
-    int baseY = ConfigLayout::Y(320);
+    int baseY = ConfigLayout::F(320);
+    int baseX = ConfigLayout::F(217);
     
     desenharTexto(renderer, "Dispositivos Pareados",
-                  ConfigLayout::X(217), baseY,
+                  baseX, baseY,
                   tema.getCorTextoNegrito(), ConfigLayout::F(32));
     
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
     if (dispositivosPareados.empty()) {
         desenharTexto(renderer, "Nenhum dispositivo pareado",
-                      ConfigLayout::X(250), baseY + ConfigLayout::Y(60),
+                      baseX + ConfigLayout::F(33), baseY + ConfigLayout::F(60),
                       tema.getCorTextoNormal(), ConfigLayout::F(24));
         return;
     }
     
-    int offsetY = baseY + ConfigLayout::Y(60);
-    int espacamento = ConfigLayout::Y(90);
+    int offsetY = baseY + ConfigLayout::F(60);
+    int espacamento = ConfigLayout::F(90);
     
     size_t maxIndex = static_cast<size_t>(scrollOffsetPareados + maxDispositivosVisiveis);
     for (size_t i = scrollOffsetPareados; 
@@ -239,65 +273,62 @@ void JanelaBluetooth::desenharDispositivosPareados(SDL_Renderer* renderer) {
         bool focado = (indiceFocado == static_cast<int>(i));
         
         desenharDispositivo(renderer, dispositivosPareados[i], 
-                           ConfigLayout::X(250), posY, focado);
+                           ConfigLayout::F(250), posY, focado);
     }
     
     if (scrollOffsetPareados > 0) {
         desenharTexto(renderer, "▲ Mais acima",
-                      ConfigLayout::X(250), baseY + ConfigLayout::Y(40),
+                      ConfigLayout::F(250), baseY + ConfigLayout::F(40),
                       tema.getCorTextoNormal(), ConfigLayout::F(18));
     }
     
     if (static_cast<size_t>(scrollOffsetPareados + maxDispositivosVisiveis) < dispositivosPareados.size()) {
-        int posIndicador = offsetY + (maxDispositivosVisiveis * espacamento) - ConfigLayout::Y(30);
+        int posIndicador = offsetY + (maxDispositivosVisiveis * espacamento) - ConfigLayout::F(30);
         desenharTexto(renderer, "▼ Mais abaixo",
-                      ConfigLayout::X(250), posIndicador,
+                      ConfigLayout::F(250), posIndicador,
                       tema.getCorTextoNormal(), ConfigLayout::F(18));
     }
 }
 
 /**
  * @brief Desenha a seção de dispositivos disponíveis.
- * 
- * @details Renderiza a lista de dispositivos Bluetooth disponíveis para pareamento.
- * Inclui título, lista de dispositivos e indicadores de scroll.
- * 
- * @param renderer Ponteiro para o renderizador SDL.
  */
 void JanelaBluetooth::desenharDispositivosDisponiveis(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
     int numPareadosVisiveis = std::min(
         static_cast<int>(dispositivosPareados.size()), 
         maxDispositivosVisiveis
     );
     
-    int baseYPareados = ConfigLayout::Y(320);
-    int espacamentoPareados = ConfigLayout::Y(90);
-    int alturaSecaoPareados = ConfigLayout::Y(60) + (numPareadosVisiveis * espacamentoPareados);
-    int baseY = baseYPareados + alturaSecaoPareados + ConfigLayout::Y(40);
+    int baseYPareados = ConfigLayout::F(320);
+    int espacamentoPareados = ConfigLayout::F(90);
+    int alturaSecaoPareados = ConfigLayout::F(60) + (numPareadosVisiveis * espacamentoPareados);
+    int baseY = baseYPareados + alturaSecaoPareados + ConfigLayout::F(40);
+    int baseX = ConfigLayout::F(217);
     
     std::string textoDisponiveis = escaneando ? 
         "Dispositivos Disponíveis (Escaneando...)" : 
         "Dispositivos Disponíveis";
     
     desenharTexto(renderer, textoDisponiveis,
-                  ConfigLayout::X(217), baseY,
+                  baseX, baseY,
                   tema.getCorTextoNegrito(), ConfigLayout::F(32));
     
     if (dispositivosDisponiveis.empty()) {
         std::string mensagem = escaneando ? 
             "Buscando dispositivos..." : 
-            "Nenhum dispositivo encontrado (Pressione Y para escanear)";
+            "Nenhum dispositivo encontrado.";
             
         desenharTexto(renderer, mensagem,
-                      ConfigLayout::X(250), baseY + ConfigLayout::Y(60),
+                      baseX + ConfigLayout::F(33), baseY + ConfigLayout::F(60),
                       tema.getCorTextoNormal(), ConfigLayout::F(24));
         return;
     }
     
-    int offsetY = baseY + ConfigLayout::Y(60);
-    int espacamento = ConfigLayout::Y(90);
+    int offsetY = baseY + ConfigLayout::F(60);
+    int espacamento = ConfigLayout::F(90);
     
     size_t maxIndex = static_cast<size_t>(scrollOffsetDisponiveis + maxDispositivosVisiveis);
     for (size_t i = scrollOffsetDisponiveis; 
@@ -310,34 +341,25 @@ void JanelaBluetooth::desenharDispositivosDisponiveis(SDL_Renderer* renderer) {
         bool focado = (indiceFocado == indiceGlobal);
         
         desenharDispositivo(renderer, dispositivosDisponiveis[i], 
-                           ConfigLayout::X(250), posY, focado);
+                           ConfigLayout::F(250), posY, focado);
     }
     
     if (scrollOffsetDisponiveis > 0) {
         desenharTexto(renderer, "▲ Mais acima",
-                      ConfigLayout::X(250), baseY + ConfigLayout::Y(40),
+                      ConfigLayout::F(250), baseY + ConfigLayout::F(40),
                       tema.getCorTextoNormal(), ConfigLayout::F(18));
     }
     
     if (static_cast<size_t>(scrollOffsetDisponiveis + maxDispositivosVisiveis) < dispositivosDisponiveis.size()) {
-        int posIndicador = offsetY + (maxDispositivosVisiveis * espacamento) - ConfigLayout::Y(30);
+        int posIndicador = offsetY + (maxDispositivosVisiveis * espacamento) - ConfigLayout::F(30);
         desenharTexto(renderer, "▼ Mais abaixo",
-                      ConfigLayout::X(250), posIndicador,
+                      ConfigLayout::F(250), posIndicador,
                       tema.getCorTextoNormal(), ConfigLayout::F(18));
     }
 }
 
 /**
  * @brief Desenha um dispositivo individual na lista.
- * 
- * @details Renderiza as informações de um dispositivo Bluetooth, incluindo nome,
- * status (conectado/pareado/disponível) e destaque visual quando focado.
- * 
- * @param renderer Ponteiro para o renderizador SDL.
- * @param dispositivo Referência constante ao dispositivo a ser desenhado.
- * @param x Posição horizontal (em coordenadas ajustadas pelo ConfigLayout).
- * @param y Posição vertical (em coordenadas ajustadas pelo ConfigLayout).
- * @param focado Indica se o dispositivo está atualmente focado (selecionado).
  */
 void JanelaBluetooth::desenharDispositivo(SDL_Renderer* renderer, 
                                           const DispositivoBluetooth& dispositivo,
@@ -347,21 +369,20 @@ void JanelaBluetooth::desenharDispositivo(SDL_Renderer* renderer,
     // Fundo do dispositivo (se focado)
     if (focado) {
         SDL_Rect fundoFoco = {
-            x - ConfigLayout::X(10),
-            y - ConfigLayout::Y(5),
-            ConfigLayout::X(1000),
-            ConfigLayout::Y(70)
+            x - ConfigLayout::F(10),
+            y - ConfigLayout::F(5),
+            ConfigLayout::F(1000),
+            ConfigLayout::F(70)
         };
         SDL_Color corFoco = tema.getCorDestaque();
         SDL_SetRenderDrawColor(renderer, corFoco.r, corFoco.g, corFoco.b, corFoco.a);
         SDL_RenderFillRect(renderer, &fundoFoco);
     }
     
-    
     // Nome do dispositivo
     SDL_Color corNome = focado ? tema.getCorTextoNegrito() : tema.getCorTextoNormal();
     desenharTexto(renderer, dispositivo.nome, 
-                  x + ConfigLayout::X(60), y,
+                  x + ConfigLayout::F(60), y,
                   corNome, ConfigLayout::F(28));
     
     // Status (Conectado/Pareado/Disponível)
@@ -370,7 +391,7 @@ void JanelaBluetooth::desenharDispositivo(SDL_Renderer* renderer,
     
     if (dispositivo.conectado) {
         status = "● Conectado";
-        corStatus = {0, 200, 0, 255}; // Verde
+        corStatus = {100, 255, 100, 255}; // Verde
     } else if (dispositivo.pareado) {
         status = "○ Pareado";
         corStatus = tema.getCorTextoNormal();
@@ -380,43 +401,30 @@ void JanelaBluetooth::desenharDispositivo(SDL_Renderer* renderer,
     }
     
     desenharTexto(renderer, status,
-                  x + ConfigLayout::X(60), y + ConfigLayout::Y(35),
+                  x + ConfigLayout::F(60), y + ConfigLayout::F(35),
                   corStatus, ConfigLayout::F(20));
-    
 }
 
 /**
  * @brief Desenha a mensagem de escaneamento em andamento.
- * 
- * @details Renderiza uma mensagem animada com barra de progresso durante o
- * escaneamento de dispositivos Bluetooth. A animação dura DURACAO_ESCANEAMENTO ms.
- * 
- * @param renderer Ponteiro para o renderizador SDL.
  */
 void JanelaBluetooth::desenharMensagemEscaneamento(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     Uint32 tempoAtual = SDL_GetTicks();
     
-    if (tempoAtual - tempoInicioEscanear >= DURACAO_ESCANEAMENTO) {
-        escaneando = false;
-        return;
-    }
-    
-    int posX = ConfigLayout::X(500);
-    int posY = ConfigLayout::Y(900);
-    
-    float progresso = static_cast<float>(tempoAtual - tempoInicioEscanear) / DURACAO_ESCANEAMENTO;
+    int posX = ConfigLayout::F(500);
+    int posY = ConfigLayout::F(900);
     
     // Animação de pontos
-    int numPontos = static_cast<int>(progresso * 10) % 4;
+    int numPontos = (tempoAtual / 500) % 4;
     std::string pontos(numPontos, '.');
     std::string mensagem = "Escaneando" + pontos;
     
     SDL_Rect fundoMsg = {
-        posX - ConfigLayout::X(50),
-        posY - ConfigLayout::Y(20),
-        ConfigLayout::X(400),
-        ConfigLayout::Y(60)
+        posX - ConfigLayout::F(50),
+        posY - ConfigLayout::F(20),
+        ConfigLayout::F(400),
+        ConfigLayout::F(60)
     };
     SDL_Color corFundo = tema.getCorRetangulos();
     SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, 230);
@@ -424,56 +432,19 @@ void JanelaBluetooth::desenharMensagemEscaneamento(SDL_Renderer* renderer) {
     
     desenharTexto(renderer, mensagem, posX, posY,
                   tema.getCorTextoNegrito(), ConfigLayout::F(28));
-    
-    // Barra de progresso
-    int larguraBarra = ConfigLayout::X(300);
-    int alturaBarra = ConfigLayout::Y(8);
-    int posBarraX = posX + ConfigLayout::X(20);
-    int posBarraY = posY + ConfigLayout::Y(40);
-    
-    // Fundo da barra (cor de retângulos mais escura)
-    SDL_Rect fundoBarra = {posBarraX, posBarraY, larguraBarra, alturaBarra};
-    SDL_Color corFundoBarra = tema.getCorFundo();
-    SDL_SetRenderDrawColor(renderer, corFundoBarra.r, corFundoBarra.g, corFundoBarra.b, 255);
-    SDL_RenderFillRect(renderer, &fundoBarra);
-    
-    // Barra de progresso (cor de destaque do tema)
-    int larguraProgresso = static_cast<int>(larguraBarra * progresso);
-    SDL_Rect barraProgresso = {posBarraX, posBarraY, larguraProgresso, alturaBarra};
-    SDL_Color corProgresso = tema.getCorDestaque();
-    SDL_SetRenderDrawColor(renderer, corProgresso.r, corProgresso.g, corProgresso.b, 255);
-    SDL_RenderFillRect(renderer, &barraProgresso);
 }
 
 /**
  * @brief Desenha a imagem explicativa no rodapé da tela.
- * 
- * @details Renderiza uma imagem com explicações dos controles na parte inferior da tela.
- * A imagem ocupa toda a largura da tela e tem altura fixa de 30 pixels.
- * 
- * @param renderer Ponteiro para o renderizador SDL.
  */
 void JanelaBluetooth::desenharImagemExplicativa(SDL_Renderer* renderer) {
-    if (!texturaExplicacao) {
-        return;
-    }
+    if (!texturaExplicacao) return;
     
-    // 1. Define a altura fixa da imagem e largura total da tela
-    int larguraTela = ConfigLayout::X(1525); 
-    int alturaImagem = ConfigLayout::Y(30);
+    int larguraTela = ConfigLayout::F(1525); 
+    int alturaImagem = ConfigLayout::F(30);
+    int posY = ConfigLayout::F(1080) - alturaImagem;
     
-    // 2. Define a posição Y como (Altura da Tela - Altura da Imagem)
-    int posY = ConfigLayout::Y(1080) - alturaImagem;
-    
-    // 3. Monta o retângulo de destino
-    SDL_Rect destExplicacao = {
-        0,              // X inicial no canto esquerdo
-        posY,           // Y calculado para o rodapé
-        larguraTela,    // Largura total
-        alturaImagem    // Altura de 30px
-    };
-    
-    // 4. Renderiza
+    SDL_Rect destExplicacao = { 0, posY, larguraTela, alturaImagem };
     SDL_RenderCopy(renderer, texturaExplicacao, nullptr, &destExplicacao);
 }
 
@@ -482,124 +453,120 @@ void JanelaBluetooth::desenharImagemExplicativa(SDL_Renderer* renderer) {
 
 /**
  * @brief Alterna o estado do Bluetooth (ON/OFF).
- * 
- * @details Ativa ou desativa o Bluetooth. Quando desativado, limpa o estado de foco
- * e para qualquer escaneamento em andamento.
  */
 void JanelaBluetooth::toggleBluetooth() {
     bluetoothAtivo = !bluetoothAtivo;
+    ::definir_estado_bt(bluetoothAtivo);
     
-    if (!bluetoothAtivo) {
-        indiceFocado = -1;
-        escaneando = false;
+    // Pequeno delay para permitir que o comando do sistema seja processado antes de ler o estado
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+    // Sincroniza para garantir que a variável bluetoothAtivo reflita a realidade
+    this->bluetoothAtivo = ::obter_estado_bluetooth();
+
+    if (btnToggleBluetooth) {
+        btnToggleBluetooth->setTexto(bluetoothAtivo ? "Bluetooth: ON" : "Bluetooth: OFF");
     }
     
-    std::cout << "[BLUETOOTH] Estado alterado: " 
-              << (bluetoothAtivo ? "ON" : "OFF") << std::endl;
+    if (!bluetoothAtivo) {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        indiceFocado = -1;
+        escaneando = false;
+        dispositivosDisponiveis.clear();
+    } else {
+        sincronizarComHardware();
+    }
 }
 
 /**
  * @brief Inicia o escaneamento de dispositivos Bluetooth.
- * 
- * @details Inicia um processo de escaneamento por novos dispositivos.
- * Só funciona se o Bluetooth estiver ativado.
- * O escaneamento dura DURACAO_ESCANEAMENTO milissegundos.
  */
 void JanelaBluetooth::iniciarEscaneamento() {
-    if (!bluetoothAtivo) return;
+    if (!bluetoothAtivo || escaneando) return;
     
     escaneando = true;
     tempoInicioEscanear = SDL_GetTicks();
     
-    std::cout << "[BLUETOOTH] Iniciando escaneamento..." << std::endl;
+    std::thread([this]() {
+        auto detectados = ::scan_dispositivos_bluetooth(5); // Scan de 5 segundos
+        
+        std::lock_guard<std::mutex> lock(this->mtx_dispositivos);
+        this->dispositivosDisponiveis.clear();
+        for (const auto& d : detectados) {
+            // Verifica se já está nos pareados
+            bool ja_pareado = false;
+            for (const auto& p : this->dispositivosPareados) {
+                if (p.endereco == d.mac) {
+                    ja_pareado = true;
+                    break;
+                }
+            }
+            if (!ja_pareado) {
+                this->dispositivosDisponiveis.push_back(DispositivoBluetooth(
+                    d.nome, stringParaTipoBT(d.icon), false, false, d.mac
+                ));
+            }
+        }
+        this->escaneando = false;
+    }).detach();
 }
 
 /**
  * @brief Alterna a conexão de um dispositivo pareado.
- * 
- * @details Conecta ou desconecta um dispositivo já pareado.
- * 
- * @param indice Índice do dispositivo na lista de dispositivos pareados.
  */
 void JanelaBluetooth::toggleConexaoDispositivo(int indice) {
-    if (indice < 0 || indice >= static_cast<int>(dispositivosPareados.size())) {
-        return;
-    }
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
+    if (indice < 0 || indice >= static_cast<int>(dispositivosPareados.size())) return;
     
     DispositivoBluetooth& dispositivo = dispositivosPareados[indice];
-    dispositivo.conectado = !dispositivo.conectado;
-    
-    std::cout << "[BLUETOOTH] " 
-              << (dispositivo.conectado ? "Conectando" : "Desconectando") 
-              << " dispositivo: " << dispositivo.nome << std::endl;
+    if (dispositivo.conectado) {
+        if (::desconectar_bluetooth(dispositivo.endereco)) {
+            dispositivo.conectado = false;
+        }
+    } else {
+        // Conectar também tenta parear se necessário no bluetoothctl
+        if (::conectar_bluetooth(dispositivo.endereco)) {
+            dispositivo.conectado = true;
+        }
+    }
 }
 
 /**
  * @brief Pareia um dispositivo disponível.
- * 
- * @details Move um dispositivo da lista de disponíveis para a lista de pareados.
- * 
- * @param indice Índice do dispositivo na lista de dispositivos disponíveis.
  */
 void JanelaBluetooth::parearDispositivo(int indice) {
-    if (indice < 0 || indice >= static_cast<int>(dispositivosDisponiveis.size())) {
-        return;
-    }
+    std::unique_lock<std::mutex> lock(mtx_dispositivos);
+    if (indice < 0 || indice >= static_cast<int>(dispositivosDisponiveis.size())) return;
     
     DispositivoBluetooth dispositivo = dispositivosDisponiveis[indice];
-    dispositivo.pareado = true;
-    
-    dispositivosPareados.push_back(dispositivo);
-    dispositivosDisponiveis.erase(dispositivosDisponiveis.begin() + indice);
-    
-    if (indiceFocado >= static_cast<int>(dispositivosPareados.size())) {
-        indiceFocado = dispositivosPareados.size() - 1;
+    lock.unlock(); // Destrava para a chamada de sistema
+
+    if (::conectar_bluetooth(dispositivo.endereco)) {
+        sincronizarComHardware(); // Recarrega listas
     }
-    
-    atualizarScroll();
-    
-    std::cout << "[BLUETOOTH] Pareando dispositivo: " << dispositivo.nome << std::endl;
 }
 
 /**
  * @brief Esquece um dispositivo pareado.
- * 
- * @details Remove um dispositivo da lista de pareados e o move de volta para
- * a lista de disponíveis (com status de pareamento resetado).
- * 
- * @param indice Índice do dispositivo na lista de dispositivos pareados.
  */
 void JanelaBluetooth::esquecerDispositivo(int indice) {
-    if (indice < 0 || indice >= static_cast<int>(dispositivosPareados.size())) {
-        return;
+    std::unique_lock<std::mutex> lock(mtx_dispositivos);
+    if (indice < 0 || indice >= static_cast<int>(dispositivosPareados.size())) return;
+    
+    std::string mac = dispositivosPareados[indice].endereco;
+    lock.unlock();
+
+    // Executa comando de remoção via bluetoothctl
+    std::string cmd = "bluetoothctl remove " + mac + " > /dev/null 2>&1";
+    if (system(cmd.c_str()) == 0) {
+        sincronizarComHardware();
     }
-    
-    DispositivoBluetooth dispositivo = dispositivosPareados[indice];
-    dispositivo.pareado = false;
-    dispositivo.conectado = false;
-    
-    dispositivosDisponiveis.push_back(dispositivo);
-    dispositivosPareados.erase(dispositivosPareados.begin() + indice);
-    
-    if (indiceFocado >= static_cast<int>(dispositivosPareados.size()) && 
-        indiceFocado > 0) {
-        indiceFocado--;
-    }
-    
-    atualizarScroll();
-    
-    std::cout << "[BLUETOOTH] Esquecendo dispositivo: " << dispositivo.nome << std::endl;
-    
-    gerAudio.tocarSom("navegacao.wav");
 }
 
 // NAVEGAÇÃO
 
 /**
  * @brief Navega para o elemento acima na lista.
- * 
- * @details Move o foco para o elemento anterior na lista de elementos focáveis.
- * Só funciona se o Bluetooth estiver ativado.
  */
 void JanelaBluetooth::navegarParaCima() {
     if (!bluetoothAtivo) return;
@@ -613,9 +580,6 @@ void JanelaBluetooth::navegarParaCima() {
 
 /**
  * @brief Navega para o elemento abaixo na lista.
- * 
- * @details Move o foco para o próximo elemento na lista de elementos focáveis.
- * Só funciona se o Bluetooth estiver ativado.
  */
 void JanelaBluetooth::navegarParaBaixo() {
     if (!bluetoothAtivo) return;
@@ -630,14 +594,9 @@ void JanelaBluetooth::navegarParaBaixo() {
 
 /**
  * @brief Confirma a seleção do elemento focado.
- * 
- * @details Executa a ação apropriada para o elemento atualmente focado:
- * - Se o botão toggle estiver focado: alterna o estado do Bluetooth
- * - Se um dispositivo pareado estiver focado: alterna a conexão
- * - Se um dispositivo disponível estiver focado: pareia o dispositivo
  */
 void JanelaBluetooth::confirmarSelecao() {
-    if (!bluetoothAtivo && indiceFocado == -1) {
+    if (!bluetoothAtivo) {
         toggleBluetooth();
         gerAudio.tocarSom("select.wav");
         return;
@@ -646,23 +605,35 @@ void JanelaBluetooth::confirmarSelecao() {
     if (indiceFocado == -1) {
         toggleBluetooth();
         gerAudio.tocarSom("select.wav");
-    } else if (indiceFocado < static_cast<int>(dispositivosPareados.size())) {
-        toggleConexaoDispositivo(indiceFocado);
-        gerAudio.tocarSom("select.wav");
     } else {
-        int indiceDisponivel = indiceFocado - dispositivosPareados.size();
-        parearDispositivo(indiceDisponivel);
+        int idx = -1;
+        bool isPareado = false;
+
+        {
+            std::lock_guard<std::mutex> lock(mtx_dispositivos);
+            if (indiceFocado < static_cast<int>(dispositivosPareados.size())) {
+                idx = indiceFocado;
+                isPareado = true;
+            } else {
+                idx = indiceFocado - dispositivosPareados.size();
+                isPareado = false;
+            }
+        }
+
+        if (isPareado) {
+            toggleConexaoDispositivo(idx);
+        } else {
+            parearDispositivo(idx);
+        }
         gerAudio.tocarSom("select.wav");
     }
 }
 
 /**
- * @brief Atualiza os offsets de scroll conforme a navegação.
- * 
- * @details Ajusta as variáveis de scroll (scrollOffsetPareados e scrollOffsetDisponiveis)
- * para garantir que o elemento focado esteja sempre visível na tela.
+ * @brief Atualiza o scroll das listas baseado no foco.
  */
 void JanelaBluetooth::atualizarScroll() {
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
     if (indiceFocado >= 0 && indiceFocado < static_cast<int>(dispositivosPareados.size())) {
         if (indiceFocado < scrollOffsetPareados) {
             scrollOffsetPareados = indiceFocado;
@@ -685,12 +656,9 @@ void JanelaBluetooth::atualizarScroll() {
 
 /**
  * @brief Calcula o total de elementos focáveis na interface.
- * 
- * @details Inclui o botão toggle + dispositivos pareados + dispositivos disponíveis.
- * 
- * @return Número total de elementos que podem receber foco.
  */
 int JanelaBluetooth::calcularTotalElementosFocaveis() {
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
     return 1 + dispositivosPareados.size() + dispositivosDisponiveis.size();
 }
 
@@ -698,23 +666,48 @@ int JanelaBluetooth::calcularTotalElementosFocaveis() {
 
 /**
  * @brief Processa eventos SDL (mouse, controle, etc.).
- * 
- * @details Gerencia a interação do usuário com a interface, incluindo cliques do mouse,
- * botões do controle e movimentos do analógico.
- * 
- * @param evento Referência ao evento SDL a ser processado.
- * @return true se o evento foi processado, false caso contrário.
  */
 bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
     Uint32 tempoAtual = SDL_GetTicks();
     
+    // Processa movimento do mouse para hover
+    if (evento.type == SDL_MOUSEMOTION) {
+        if (btnToggleBluetooth) {
+            btnToggleBluetooth->handleMouseMotion(evento, 0, 0);
+        }
+        if (bluetoothAtivo && btnEscanear) {
+            btnEscanear->handleMouseMotion(evento, 0, 0);
+        }
+    }
+
     if (evento.type == SDL_MOUSEBUTTONDOWN) {
+        int mx = evento.button.x;
+        int my = evento.button.y;
+        
+        if (btnToggleBluetooth && btnToggleBluetooth->contemPonto(mx, my)) {
+            // Apenas para feedback visual de pressionado
+            return true;
+        }
+        if (bluetoothAtivo && btnEscanear && btnEscanear->contemPonto(mx, my)) {
+            return true;
+        }
+    }
+
+    if (evento.type == SDL_MOUSEBUTTONUP) {
         int mx = evento.button.x;
         int my = evento.button.y;
         
         if (btnToggleBluetooth && btnToggleBluetooth->contemPonto(mx, my)) {
             toggleBluetooth();
             gerAudio.tocarSom("select.wav");
+            return true;
+        }
+
+        if (bluetoothAtivo && btnEscanear && btnEscanear->contemPonto(mx, my)) {
+            if (!escaneando) {
+                iniciarEscaneamento();
+                gerAudio.tocarSom("select.wav");
+            }
             return true;
         }
     }
@@ -734,11 +727,13 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
                 return true;
                 
             case SDL_CONTROLLER_BUTTON_X:
-                if (bluetoothAtivo && 
-                    indiceFocado >= 0 && 
-                    indiceFocado < static_cast<int>(dispositivosPareados.size())) {
-                    esquecerDispositivo(indiceFocado);
-                    return true;
+                if (bluetoothAtivo && indiceFocado >= 0) {
+                    std::unique_lock<std::mutex> lock(mtx_dispositivos);
+                    if (indiceFocado < (int)dispositivosPareados.size()) {
+                        lock.unlock();
+                        esquecerDispositivo(indiceFocado);
+                        return true;
+                    }
                 }
                 break;
                 
@@ -775,11 +770,9 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
 
 /**
  * @brief Reseta o estado da janela Bluetooth.
- * 
- * @details Retorna a interface ao estado inicial, removendo foco,
- * resetando scrolls e parando escaneamentos.
  */
 void JanelaBluetooth::resetar() {
+    sincronizarComHardware();
     indiceFocado = -1;
     scrollOffsetPareados = 0;
     scrollOffsetDisponiveis = 0;

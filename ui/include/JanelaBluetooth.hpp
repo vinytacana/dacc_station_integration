@@ -17,6 +17,8 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <mutex>
+#include <thread>
 #include "Botao.hpp"
 
 /**
@@ -113,11 +115,17 @@ public:
      */
     void carregarTexturas(SDL_Renderer* renderer);
 
+    /**
+     * @brief Sincroniza o estado da UI com o hardware real.
+     */
+    void sincronizarComHardware();
+
 private:
     // ESTADO DO BLUETOOTH
     
     bool bluetoothAtivo = true;             /**< Estado do Bluetooth (ON/OFF). */
     bool escaneando = false;                /**< Se está em processo de escaneamento. */
+    std::mutex mtx_dispositivos;            /**< Mutex para proteção das listas de dispositivos. */
     
     // LISTAS DE DISPOSITIVOS
     
@@ -127,6 +135,7 @@ private:
     // BOTÕES INTERATIVOS
     
     std::unique_ptr<Botao> btnToggleBluetooth;  /**< Botão toggle ON/OFF. */
+    std::unique_ptr<Botao> btnEscanear;         /**< Botão para iniciar escaneamento. */
     
     // NOTA: btnEscanear removido - agora é função acionada por Y
     // Botões dos dispositivos serão criados automaticamente quando
@@ -175,6 +184,12 @@ private:
      * @param renderer Renderizador SDL.
      */
     void desenharToggleBluetooth(SDL_Renderer* renderer);
+
+    /**
+     * @brief Renderiza o botão de escanear.
+     * @param renderer Renderizador SDL.
+     */
+    void desenharBotaoEscanear(SDL_Renderer* renderer);
 
     /**
      * @brief Renderiza a lista de dispositivos pareados.
