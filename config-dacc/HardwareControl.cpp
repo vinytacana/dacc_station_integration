@@ -20,11 +20,134 @@
 #include <cstdio>
 #include <iomanip>
 #include <mutex>
+#include <cerrno>
+#include <cstring>
 
 using namespace std;
 
 // Mutex para proteger concorrência
 static std::mutex g_audio_mutex;
+static std::mutex g_bluetooth_mutex;
+
+std::string remover_ansi(std::string str);
+
+namespace {
+
+bluetooth_result executar_bluetoothctl(const std::string &comando) {
+    std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
+    bluetooth_result resultado;
+    int master_fd;
+    pid_t pid = forkpty(&master_fd, nullptr, nullptr, nullptr);
+    if (pid < 0) {
+        resultado.ok = false;
+        resultado.mensagem = "forkpty() falhou: " + std::string(std::strerror(errno));
+        return resultado;
+    }
+
+    if (pid == 0) {
+        execlp("bluetoothctl", "bluetoothctl", nullptr);
+        _exit(1);
+    }
+
+    const std::string entrada = comando + "\nquit\n";
+    ssize_t escritos = write(master_fd, entrada.c_str(), entrada.size());
+    if (escritos < 0) {
+        resultado.ok = false;
+        resultado.mensagem = "Falha ao escrever no bluetoothctl.";
+        close(master_fd);
+        waitpid(pid, nullptr, 0);
+        return resultado;
+    }
+
+    char buffer[1024];
+    std::string saida;
+
+    while (true) {
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(master_fd, &fds);
+        struct timeval tv{1, 0};
+
+        int ret = select(master_fd + 1, &fds, nullptr, nullptr, &tv);
+        if (ret > 0 && FD_ISSET(master_fd, &fds)) {
+            ssize_t lidos = read(master_fd, buffer, sizeof(buffer) - 1);
+            if (lidos > 0) {
+                buffer[lidos] = '\0';
+                saida += buffer;
+                continue;
+            }
+            if (lidos == 0) {
+                break;
+            }
+            if (errno == EIO) {
+                break;
+            }
+        } else if (ret == 0) {
+            int status = 0;
+            pid_t waited = waitpid(pid, &status, WNOHANG);
+            if (waited == pid) {
+                break;
+            }
+        } else if (ret < 0) {
+            resultado.ok = false;
+            resultado.mensagem = "Falha ao ler resposta do bluetoothctl.";
+            close(master_fd);
+            waitpid(pid, nullptr, 0);
+            return resultado;
+        }
+    }
+
+    close(master_fd);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    resultado.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    resultado.mensagem = remover_ansi(saida);
+    return resultado;
+}
+
+bool bluetoothctl_saida_indica_sucesso(const std::string &saida) {
+    return saida.find("Failed") == std::string::npos &&
+           saida.find("not available") == std::string::npos &&
+           saida.find("No default controller available") == std::string::npos;
+}
+
+std::string resumir_bluetooth_status(const bluetooth_adapter_status &status) {
+    std::ostringstream oss;
+    oss << "powered=" << (status.powered ? "yes" : "no")
+        << ", soft_blocked=" << (status.soft_blocked ? "yes" : "no")
+        << ", hard_blocked=" << (status.hard_blocked ? "yes" : "no")
+        << ", controller_disponivel=" << (status.controller_disponivel ? "yes" : "no");
+    return oss.str();
+}
+
+device_bt consultar_dispositivo_bluetooth(const std::string &mac) {
+    device_bt dispositivo;
+    dispositivo.mac = mac;
+
+    std::unordered_map<std::string, device_bt> mapa;
+    mapa[mac] = dispositivo;
+
+    bluetooth_result resultado = executar_bluetoothctl("info " + mac);
+    if (!resultado.ok || resultado.mensagem.empty()) {
+        return dispositivo;
+    }
+
+    std::stringstream ss_info(resultado.mensagem);
+    std::string ctx_info = mac;
+    parsing_bluetooth_stream(ss_info, mapa, ctx_info);
+    return mapa[mac];
+}
+
+void mesclar_dispositivo_bluetooth(device_bt &destino, const device_bt &origem) {
+    if (!origem.mac.empty()) destino.mac = origem.mac;
+    if (!origem.nome.empty()) destino.nome = origem.nome;
+    if (!origem.icon.empty()) destino.icon = origem.icon;
+    destino.conectado = origem.conectado;
+    destino.pareado = origem.pareado;
+    destino.confiavel = origem.confiavel;
+}
+
+} // namespace
 
 // ==========================================
 // --- UTILITÁRIOS ---
@@ -454,6 +577,7 @@ void parsing_bluetooth_stream(std::istream &input, std::unordered_map<std::strin
                         else if (prop == "Icon") dev.icon = val;
                         else if (prop == "Connected") dev.conectado = (val == "yes");
                         else if (prop == "Paired") dev.pareado = (val == "yes");
+                        else if (prop == "Trusted") dev.confiavel = (val == "yes");
                     }
                 }
                 continue;
@@ -478,78 +602,121 @@ void parsing_bluetooth_stream(std::istream &input, std::unordered_map<std::strin
                     else if (prop == "Icon") dev.icon = val;
                     else if (prop == "Connected") dev.conectado = (val == "yes");
                     else if (prop == "Paired") dev.pareado = (val == "yes");
+                    else if (prop == "Trusted") dev.confiavel = (val == "yes");
                 }
             }
         }
     }
 }
 
-bool obter_estado_bluetooth() {
-    // Tenta via pipe para garantir que não fique preso por ser interativo
-    std::string saida = exec_command("echo 'show' | bluetoothctl 2>/dev/null");
-    if (saida.find("Powered: yes") != std::string::npos) return true;
-    
-    // Fallback via rfkill
-    std::string rf = exec_command("rfkill list bluetooth 2>/dev/null");
-    if (!rf.empty() && rf.find("Soft blocked: no") != std::string::npos) {
-        // Se rfkill diz que está OK, mas bluetoothctl não respondeu "yes", 
-        // tentamos ligar explicitamente se o usuário pediu, mas aqui retornamos false 
-        // para manter a consistência com o que o bluetoothctl relata como real "Powered".
+bluetooth_adapter_status obter_status_bluetooth() {
+    bluetooth_adapter_status status;
+
+    bluetooth_result show_result = executar_bluetoothctl("show");
+    status.show_output = show_result.mensagem;
+    if (!show_result.ok ||
+        status.show_output.find("No default controller available") != std::string::npos) {
+        status.controller_disponivel = false;
     }
 
-    return false;
+    if (status.show_output.find("Powered: yes") != std::string::npos) {
+        status.powered = true;
+    }
+
+    try {
+        status.rfkill_output = exec_command("rfkill list bluetooth 2>/dev/null");
+        status.soft_blocked = status.rfkill_output.find("Soft blocked: yes") != std::string::npos;
+        status.hard_blocked = status.rfkill_output.find("Hard blocked: yes") != std::string::npos;
+    } catch (...) {
+    }
+
+    return status;
 }
 
-void definir_estado_bt(bool ligar) {
+bool obter_estado_bluetooth() {
+    return obter_status_bluetooth().powered;
+}
+
+bool definir_estado_bt(bool ligar) {
     std::string acao = ligar ? "on" : "off";
-    // Usa pipe também para garantir execução
-    std::string comando = "echo 'power " + acao + "' | bluetoothctl > /dev/null 2>&1";
-    system(comando.c_str());
-    
-    // Adicionalmente tenta rfkill para garantir que não haja block de software
+
     if (ligar) {
         system("rfkill unblock bluetooth > /dev/null 2>&1");
     }
 
+    bluetooth_result resultado = executar_bluetoothctl("power " + acao);
+    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
+        std::cerr << "Falha ao definir Bluetooth para: " << acao
+                  << " | bluetoothctl: " << resultado.mensagem << "\n";
+        return false;
+    }
+
+    bluetooth_adapter_status status_final;
+    bool refletiu_estado = false;
+    for (int tentativa = 0; tentativa < 10; ++tentativa) {
+        status_final = obter_status_bluetooth();
+        if (status_final.powered == ligar) {
+            refletiu_estado = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    if (!refletiu_estado) {
+        std::cerr << "Bluetooth nao refletiu o estado solicitado: " << acao
+                  << " | status: " << resumir_bluetooth_status(status_final)
+                  << " | bluetoothctl: " << resultado.mensagem << "\n";
+        return false;
+    }
+
     std::cout << "Bluetooth definido para: " << acao << "\n";
+    return true;
 }
 
-std::vector<device_bt> get_list_device() {
+std::vector<device_bt> listar_dispositivos_bluetooth_conhecidos() {
     std::unordered_map<std::string, device_bt> mapa;
-    
-    // 1. Lista dispositivos conhecidos usando echo para evitar modo interativo
-    std::string saida = exec_command("echo 'devices' | bluetoothctl 2>/dev/null");
+    bluetooth_result resultado = executar_bluetoothctl("devices");
+    if (!resultado.ok) {
+        return {};
+    }
+
+    std::string saida = resultado.mensagem;
     std::stringstream ss(saida);
     std::string ctx_dummy = "";
-    
     parsing_bluetooth_stream(ss, mapa, ctx_dummy);
 
-    // 2. Para cada dispositivo encontrado, busca informações detalhadas (Paired, Connected, Icon)
     for (auto &pair : mapa) {
-        std::string cmd = "echo 'info " + pair.first + "' | bluetoothctl 2>/dev/null";
-        std::string info_saida = exec_command(cmd.c_str());
-        std::stringstream ss_info(info_saida);
-        std::string ctx_info = pair.first;
-        parsing_bluetooth_stream(ss_info, mapa, ctx_info);
-        
-        // Fallback para nome se estiver vazio
+        device_bt enriquecido = consultar_dispositivo_bluetooth(pair.first);
+        mesclar_dispositivo_bluetooth(pair.second, enriquecido);
         if (pair.second.nome.empty()) pair.second.nome = "Dispositivo " + pair.first;
     }
 
     std::vector<device_bt> lista;
     for (auto &[_, d] : mapa) {
-        // Exibimos na lista de "Pareados" apenas os dispositivos que o sistema confirma o pareamento
-        if (d.pareado) {
-            lista.push_back(d);
-        }
+        lista.push_back(d);
     }
     return lista;
 }
 
+std::vector<device_bt> listar_dispositivos_bluetooth_pareados() {
+    std::vector<device_bt> conhecidos = listar_dispositivos_bluetooth_conhecidos();
+    std::vector<device_bt> pareados;
+    for (const auto &dispositivo : conhecidos) {
+        if (dispositivo.pareado) {
+            pareados.push_back(dispositivo);
+        }
+    }
+    return pareados;
+}
+
 std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
+    std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
     std::unordered_map<std::string, device_bt> mapa;
     int master_fd;
     pid_t pid = forkpty(&master_fd, nullptr, nullptr, nullptr);
+    if (pid < 0) {
+        return {};
+    }
 
     if (pid == 0) {
         setbuf(stdout, NULL);
@@ -557,7 +724,7 @@ std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
         _exit(1);
     }
 
-    // Aumenta o tempo de espera entre comandos de inicialização do controlador
+    system("rfkill unblock bluetooth > /dev/null 2>&1");
     write(master_fd, "power on\n", 9);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     write(master_fd, "agent on\ndefault-agent\n", 24);
@@ -606,23 +773,75 @@ std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
 }
 
 bool conectar_bluetooth(const string &mac) {
-    string comando = "bluetoothctl connect " + mac + " > /dev/null 2>&1";
-    if (system(comando.c_str()) == 0) {
-        cout << "Conectado com sucesso: " << mac << endl;
-        return true;
+    bluetooth_result resultado = executar_bluetoothctl("connect " + mac);
+    if (resultado.ok && bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
+        device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
+        if (dispositivo.conectado) {
+            cout << "Conectado com sucesso: " << mac << endl;
+            return true;
+        }
     }
     cerr << "Falha ao conectar: " << mac << endl;
     return false;
 }
 
 bool desconectar_bluetooth(const string &mac) {
-    string comando = "bluetoothctl disconnect " + mac + " > /dev/null 2>&1";
-    if (system(comando.c_str()) == 0) {
-        cout << "Desconectado com sucesso: " << mac << endl;
-        return true;
+    bluetooth_result resultado = executar_bluetoothctl("disconnect " + mac);
+    if (resultado.ok && bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
+        device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
+        if (!dispositivo.conectado) {
+            cout << "Desconectado com sucesso: " << mac << endl;
+            return true;
+        }
     }
     cerr << "Falha ao desconectar: " << mac << endl;
     return false;
+}
+
+bluetooth_result parear_bluetooth(const std::string &mac) {
+    system("rfkill unblock bluetooth > /dev/null 2>&1");
+    bluetooth_result resultado = executar_bluetoothctl("pair " + mac);
+    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
+        resultado.ok = false;
+        if (resultado.mensagem.empty()) resultado.mensagem = "Falha ao parear dispositivo.";
+        return resultado;
+    }
+
+    device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
+    if (!dispositivo.pareado) {
+        return {false, "Comando executado, mas o dispositivo nao apareceu como pareado."};
+    }
+    return {true, "Dispositivo pareado com sucesso."};
+}
+
+bluetooth_result confiar_bluetooth(const std::string &mac) {
+    bluetooth_result resultado = executar_bluetoothctl("trust " + mac);
+    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
+        resultado.ok = false;
+        if (resultado.mensagem.empty()) resultado.mensagem = "Falha ao confiar no dispositivo.";
+        return resultado;
+    }
+
+    device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
+    if (!dispositivo.confiavel) {
+        return {false, "Comando executado, mas o dispositivo nao apareceu como confiavel."};
+    }
+    return {true, "Dispositivo marcado como confiavel."};
+}
+
+bluetooth_result remover_bluetooth(const std::string &mac) {
+    bluetooth_result resultado = executar_bluetoothctl("remove " + mac);
+    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
+        resultado.ok = false;
+        if (resultado.mensagem.empty()) resultado.mensagem = "Falha ao remover dispositivo.";
+        return resultado;
+    }
+
+    device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
+    if (dispositivo.pareado || dispositivo.confiavel || !dispositivo.nome.empty()) {
+        return {false, "Comando executado, mas o dispositivo ainda aparece como conhecido."};
+    }
+    return {true, "Dispositivo removido com sucesso."};
 }
 
 void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos) {
@@ -638,7 +857,7 @@ void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos) {
 
 void gerenciar_bluetooth() {
     std::cout << "Carregando lista de dispositivos...\n";
-    std::vector<device_bt> dispositivos = get_list_device();
+    std::vector<device_bt> dispositivos = listar_dispositivos_bluetooth_pareados();
 
     if (dispositivos.empty()) {
         std::cout << "Nenhum dispositivo pareado encontrado.\n";

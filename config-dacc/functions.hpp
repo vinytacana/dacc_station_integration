@@ -19,6 +19,21 @@ struct device_bt {
     std::string icon;
     bool conectado = false;
     bool pareado = false;
+    bool confiavel = false;
+};
+
+struct bluetooth_result {
+    bool ok = false;
+    std::string mensagem;
+};
+
+struct bluetooth_adapter_status {
+    bool powered = false;
+    bool soft_blocked = false;
+    bool hard_blocked = false;
+    bool controller_disponivel = true;
+    std::string show_output;
+    std::string rfkill_output;
 };
 
 struct device_audio{
@@ -74,11 +89,16 @@ void desconectar_wifi(const std::string &id);
 
 // --- Bluetooth ---
 bool obter_estado_bluetooth();
-void definir_estado_bt(bool ligar);
-std::vector<device_bt> get_list_device();
+bluetooth_adapter_status obter_status_bluetooth();
+bool definir_estado_bt(bool ligar);
+std::vector<device_bt> listar_dispositivos_bluetooth_conhecidos();
+std::vector<device_bt> listar_dispositivos_bluetooth_pareados();
 std::vector<device_bt> scan_dispositivos_bluetooth(int segundos = 10);
+bluetooth_result parear_bluetooth(const std::string &mac);
+bluetooth_result confiar_bluetooth(const std::string &mac);
 bool conectar_bluetooth(const std::string &mac);
 bool desconectar_bluetooth(const std::string &mac);
+bluetooth_result remover_bluetooth(const std::string &mac);
 void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos);
 void gerenciar_bluetooth();
 void parsing_bluetooth_stream(
