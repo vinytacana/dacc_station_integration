@@ -19,6 +19,7 @@
 #include <string>
 #include <mutex>
 #include <thread>
+#include <atomic>
 #include "Botao.hpp"
 
 /**
@@ -125,7 +126,10 @@ private:
     
     bool bluetoothAtivo = true;             /**< Estado do Bluetooth (ON/OFF). */
     bool escaneando = false;                /**< Se está em processo de escaneamento. */
+    std::atomic<bool> alternandoBluetooth{false}; /**< Evita spam de toggle enquanto a troca de estado ocorre. */
     std::mutex mtx_dispositivos;            /**< Mutex para proteção das listas de dispositivos. */
+    std::thread scanThread;                 /**< Thread dedicada ao escaneamento. */
+    std::atomic<bool> encerrando{false};    /**< Sinaliza destruição da janela. */
     
     // LISTAS DE DISPOSITIVOS
     

@@ -61,10 +61,10 @@ void JanelaBluetooth::sincronizarComHardware() {
     std::lock_guard<std::mutex> lock(mtx_dispositivos);
     
     this->bluetoothAtivo = ::obter_estado_bluetooth();
-    
+
+    dispositivosPareados.clear();
     if (bluetoothAtivo) {
-        dispositivosPareados.clear();
-        auto reais = ::get_list_device(); // Pega dispositivos pareados/conhecidos
+        auto reais = ::listar_dispositivos_bluetooth_pareados();
         
         for (const auto& d : reais) {
             dispositivosPareados.push_back(DispositivoBluetooth(
@@ -80,6 +80,11 @@ void JanelaBluetooth::sincronizarComHardware() {
  * @details Libera recursos alocados, especialmente a textura explicativa.
  */
 JanelaBluetooth::~JanelaBluetooth() {
+    encerrando = true;
+    if (scanThread.joinable()) {
+        scanThread.join();
+    }
+
     if (texturaExplicacao) {
         texturaExplicacao = nullptr;
     }
@@ -200,8 +205,6 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
     if (bluetoothAtivo) {
         desenharDispositivosPareados(renderer);
         desenharDispositivosDisponiveis(renderer);
-        
-        // Desenha o novo botão aqui
         desenharBotaoEscanear(renderer);
     } else {
         // Mensagem centralizada quando Bluetooth está desligado
@@ -210,9 +213,7 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
                       tema.getCorTextoNormal(), ConfigLayout::F(28));
     }
 
-    // Desenha imagem explicativa no rodapé
     desenharImagemExplicativa(renderer);
-    
 }
 
 /**
@@ -459,14 +460,15 @@ void JanelaBluetooth::desenharImagemExplicativa(SDL_Renderer* renderer) {
  * @brief Alterna o estado do Bluetooth (ON/OFF).
  */
 void JanelaBluetooth::toggleBluetooth() {
-    bluetoothAtivo = !bluetoothAtivo;
-    ::definir_estado_bt(bluetoothAtivo);
-    
-    // Pequeno delay para permitir que o comando do sistema seja processado antes de ler o estado
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    
-    // Sincroniza para garantir que a variável bluetoothAtivo reflita a realidade
-    this->bluetoothAtivo = ::obter_estado_bluetooth();
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        if (alternandoBluetooth) return;
+        alternandoBluetooth = true;
+    }
+
+    bool estado_desejado = !bluetoothAtivo;
+    ::definir_estado_bt(estado_desejado);
+    sincronizarComHardware();
 
     if (btnToggleBluetooth) {
         btnToggleBluetooth->setTexto(bluetoothAtivo ? "Bluetooth: ON" : "Bluetooth: OFF");
@@ -477,8 +479,13 @@ void JanelaBluetooth::toggleBluetooth() {
         indiceFocado = -1;
         escaneando = false;
         dispositivosDisponiveis.clear();
-    } else {
-        sincronizarComHardware();
+        alternandoBluetooth = false;
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        alternandoBluetooth = false;
     }
 }
 
@@ -487,17 +494,32 @@ void JanelaBluetooth::toggleBluetooth() {
  */
 void JanelaBluetooth::iniciarEscaneamento() {
     if (!bluetoothAtivo || escaneando) return;
-    
-    escaneando = true;
+
+    if (scanThread.joinable()) {
+        scanThread.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        escaneando = true;
+    }
     tempoInicioEscanear = SDL_GetTicks();
-    
-    std::thread([this]() {
+
+    scanThread = std::thread([this]() {
         auto detectados = ::scan_dispositivos_bluetooth(5); // Scan de 5 segundos
-        
+
+        if (encerrando) {
+            return;
+        }
+
         // Sincroniza dispositivos pareados (status de conexão pode ter mudado)
         this->sincronizarComHardware();
 
         std::lock_guard<std::mutex> lock(this->mtx_dispositivos);
+        if (encerrando) {
+            this->escaneando = false;
+            return;
+        }
         this->dispositivosDisponiveis.clear();
         for (const auto& d : detectados) {
             // Verifica se já está nos pareados (lista já atualizada acima)
@@ -518,27 +540,29 @@ void JanelaBluetooth::iniciarEscaneamento() {
             }
         }
         this->escaneando = false;
-    }).detach();
+    });
 }
 
 /**
  * @brief Alterna a conexão de um dispositivo pareado.
  */
 void JanelaBluetooth::toggleConexaoDispositivo(int indice) {
-    std::lock_guard<std::mutex> lock(mtx_dispositivos);
-    if (indice < 0 || indice >= static_cast<int>(dispositivosPareados.size())) return;
-    
-    DispositivoBluetooth& dispositivo = dispositivosPareados[indice];
-    if (dispositivo.conectado) {
-        if (::desconectar_bluetooth(dispositivo.endereco)) {
-            dispositivo.conectado = false;
-        }
-    } else {
-        // Conectar também tenta parear se necessário no bluetoothctl
-        if (::conectar_bluetooth(dispositivo.endereco)) {
-            dispositivo.conectado = true;
-        }
+    std::string endereco;
+    bool conectado = false;
+
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        if (indice < 0 || indice >= static_cast<int>(dispositivosPareados.size())) return;
+        endereco = dispositivosPareados[indice].endereco;
+        conectado = dispositivosPareados[indice].conectado;
     }
+
+    bool sucesso = conectado ? ::desconectar_bluetooth(endereco)
+                             : ::conectar_bluetooth(endereco);
+    if (!sucesso) {
+        return;
+    }
+    sincronizarComHardware();
 }
 
 /**
@@ -550,6 +574,17 @@ void JanelaBluetooth::parearDispositivo(int indice) {
     
     DispositivoBluetooth dispositivo = dispositivosDisponiveis[indice];
     lock.unlock(); // Destrava para a chamada de sistema
+
+    bluetooth_result pareamento = ::parear_bluetooth(dispositivo.endereco);
+    if (!pareamento.ok) {
+        return;
+    }
+
+    bluetooth_result confianca = ::confiar_bluetooth(dispositivo.endereco);
+    if (!confianca.ok) {
+        sincronizarComHardware();
+        return;
+    }
 
     if (::conectar_bluetooth(dispositivo.endereco)) {
         sincronizarComHardware(); // Recarrega listas
@@ -566,9 +601,8 @@ void JanelaBluetooth::esquecerDispositivo(int indice) {
     std::string mac = dispositivosPareados[indice].endereco;
     lock.unlock();
 
-    // Executa comando de remoção via bluetoothctl
-    std::string cmd = "bluetoothctl remove " + mac + " > /dev/null 2>&1";
-    if (system(cmd.c_str()) == 0) {
+    bluetooth_result remocao = ::remover_bluetooth(mac);
+    if (remocao.ok) {
         sincronizarComHardware();
     }
 }
@@ -708,6 +742,7 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
         int my = evento.button.y;
         
         if (btnToggleBluetooth && btnToggleBluetooth->contemPonto(mx, my)) {
+            if (alternandoBluetooth) return true;
             toggleBluetooth();
             gerAudio.tocarSom("select.wav");
             return true;
@@ -733,6 +768,9 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
                 return true;
                 
             case SDL_CONTROLLER_BUTTON_A:
+                if (alternandoBluetooth && indiceFocado == -1) {
+                    return true;
+                }
                 confirmarSelecao();
                 return true;
                 
@@ -782,6 +820,9 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
  * @brief Reseta o estado da janela Bluetooth.
  */
 void JanelaBluetooth::resetar() {
+    if (scanThread.joinable()) {
+        scanThread.join();
+    }
     sincronizarComHardware();
     indiceFocado = -1;
     scrollOffsetPareados = 0;
