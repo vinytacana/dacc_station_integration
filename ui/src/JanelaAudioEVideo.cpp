@@ -248,6 +248,7 @@ void JanelaAudioEVideo::desenhar(SDL_Renderer* renderer) {
 
     desenharCabecalho(renderer);
     desenharInfoSistema(renderer);
+    desenharStatusOperacional(renderer);
     desenharControleVolume(renderer);
     desenharSeletorDispositivo(renderer);
     desenharSeletorResolucao(renderer);
@@ -490,21 +491,19 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
  */
 void JanelaAudioEVideo::desenharImagemExplicativa(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
-    
-    // Carrega a imagem apropriada baseada no tema atual
-    std::string caminhoImagem;
+    static TipoTema ultimoTema = static_cast<TipoTema>(-1);
 
+    std::string caminhoImagem;
     if (tema.getTemaAtual() == TipoTema::CLARO) {
         caminhoImagem = "assets/images/light/explicacaoBotoesJanelaAudioEVideoClaro.jpg";
-
-        std::cout << "[AUDIO_E_VIDEO] Carregando imagem CLARA: " << caminhoImagem << std::endl;
     } else {
         caminhoImagem = "assets/images/dark/explicacaoBotoesJanelaAudioEVideoEscuro.jpg";
-        std::cout << "[AUDIO_E_VIDEO] Carregando imagem ESCURA: " << caminhoImagem << std::endl;
     }
-    
-    // Carrega a textura usando o gerenciador (com cache)
-    texturaExplicacao = gerenciadorImagens.carregar(renderer, caminhoImagem);
+
+    if (texturaExplicacao == nullptr || ultimoTema != tema.getTemaAtual()) {
+        texturaExplicacao = gerenciadorImagens.carregar(renderer, caminhoImagem);
+        ultimoTema = tema.getTemaAtual();
+    }
     
     if (!texturaExplicacao) {
         return;
@@ -675,6 +674,22 @@ void JanelaAudioEVideo::diminuirEscala() {
 void JanelaAudioEVideo::setEscala(float novaEscala) {
     escalaJanela = std::clamp(novaEscala, MIN_ESCALA, MAX_ESCALA);
     std::cout << "[VIDEO] Escala ajustada para: " << escalaJanela << "x" << std::endl;
+}
+
+void JanelaAudioEVideo::definirMensagemStatus(const std::string& mensagem, bool erro) {
+    mensagemStatus = mensagem;
+    mensagemErro = erro;
+}
+
+void JanelaAudioEVideo::desenharStatusOperacional(SDL_Renderer* renderer) {
+    if (mensagemStatus.empty()) {
+        return;
+    }
+    SDL_Color cor = mensagemErro ? SDL_Color{255, 120, 120, 255}
+                                 : SDL_Color{120, 255, 120, 255};
+    desenharTexto(renderer, mensagemStatus,
+                  ConfigLayout::X(250), ConfigLayout::Y(220),
+                  cor, ConfigLayout::F(20));
 }
 
 /**
@@ -1006,13 +1021,18 @@ void JanelaAudioEVideo::resetar() {
 }
 
 void JanelaAudioEVideo::aplicarAlteracoes() {
-    std::cout << "=== Aplicando Configurações ===" << std::endl;
+    definirMensagemStatus("Aplicando configuracoes...");
 
     // 1. Aplicar Áudio
     if (!dispositivos.empty() && indiceDispositivoAtual >= 0) {
         int idReal = dispositivos[indiceDispositivoAtual].id;
-        ::selecionar_dispositivo_audio(idReal);
-        std::cout << "Áudio definido para ID: " << idReal << std::endl;
+        if (idReal >= 0) {
+            audio_result audio = ::selecionar_dispositivo_audio_result(idReal);
+            if (!audio.ok) {
+                definirMensagemStatus(audio.mensagem.empty() ? "Falha ao definir audio." : audio.mensagem, true);
+                return;
+            }
+        }
     }
 
     // ---------------------------------------------------------
@@ -1036,28 +1056,33 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         
         // A nova função pede (nome, largura, altura, refresh_rate)
         // Usamos 60.0f como padrão seguro, já que a UI ainda não escolhe Hz
-        bool sucesso = ::alterarResolucao(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
-        
-        if (sucesso)
-            std::cout << "[UI] Resolução definida para: " << alvo.toString() << " em " << nomeMonitor << std::endl;
-        else
-            std::cerr << "[UI] Falha ao definir resolução.\n";
+        display_result resolucao = ::alterarResolucao_result(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
+        if (!resolucao.ok) {
+            definirMensagemStatus(
+                resolucao.mensagem.empty() ? "Falha ao definir resolucao." : resolucao.mensagem,
+                true
+            );
+            return;
+        }
     }
 
   //---------------------------------------------------------
     // 4. APLICAR ESCALA
     // ---------------------------------------------------------
     // A nova função pede apenas (nome, float escala)
-    bool scaleSucesso = ::alterarEscala(nomeMonitor, escalaJanela);
-    
-    if (scaleSucesso)
-        std::cout << "[UI] Escala definida para: " << escalaJanela << "x" << std::endl;
-    else
-        std::cerr << "[UI] Falha ao definir escala.\n";
+    display_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
+    if (!escala.ok) {
+        definirMensagemStatus(
+            escala.mensagem.empty() ? "Falha ao definir escala." : escala.mensagem,
+            true
+        );
+        return;
+    }
 
     // ---------------------------------------------------------
     // 5. FEEDBACK
     // ---------------------------------------------------------
+    definirMensagemStatus("Configuracoes aplicadas com sucesso.");
     gerAudio.tocarSom("select.wav");
 }
 
@@ -1066,20 +1091,21 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
  */
 void JanelaAudioEVideo::desenharInfoSistema(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
-    
-    // Obter informações do backend (cachear isso numa variável de classe seria melhor para performance)
-    std::string sessao = ::obter_tipo_sessao(); // "wayland" ou "x11"
-    
-    // Pega o nome do monitor (fallback se vazio)
-    std::string nomeMonitor = "Desconhecido";
-    auto displays = ::obter_info_displays();
-    if (!displays.empty()) {
-        nomeMonitor = displays[0].name; // Ex: "HDMI-1"
+
+    static Uint32 ultimoRefresh = 0;
+    static std::string sessaoCache = "unknown";
+    static std::string nomeMonitor = "Desconhecido";
+    Uint32 agora = SDL_GetTicks();
+    if (agora - ultimoRefresh > 2000 || ultimoRefresh == 0) {
+        sessaoCache = ::obter_tipo_sessao();
+        auto displays = ::obter_info_displays();
+        nomeMonitor = displays.empty() ? "Desconhecido" : displays[0].name;
+        ultimoRefresh = agora;
     }
 
     // Formata o texto: "Monitor: HDMI-1 | Sessão: wayland"
     std::stringstream ss;
-    ss << "Monitor: " << nomeMonitor << " | Sessão: " << sessao;
+    ss << "Monitor: " << nomeMonitor << " | Sessão: " << sessaoCache;
     
     // Desenha logo abaixo do título (ajuste Y conforme necessário)
     desenharTexto(renderer, ss.str(), 

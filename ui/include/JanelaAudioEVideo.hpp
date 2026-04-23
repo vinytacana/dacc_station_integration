@@ -162,6 +162,8 @@ private:
     
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
     GerenciadorImagens gerenciadorImagens;    /**< Gerenciador de cache de texturas. */
+    std::string mensagemStatus;
+    bool mensagemErro = false;
     
 
     /**
@@ -219,6 +221,8 @@ private:
      * @param renderer Renderizador SDL onde a imagem será desenhada.
      */
     void desenharImagemExplicativa(SDL_Renderer* renderer);
+    void desenharStatusOperacional(SDL_Renderer* renderer);
+    void definirMensagemStatus(const std::string& mensagem, bool erro = false);
 
     /**
      * @brief Desenha uma barra de progresso visual.
