@@ -12,8 +12,8 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -g \
            -I../logs/third-party/spdlog/include
 
 # Bibliotecas (Onde achar os .a e quais linkar)
-LDFLAGS = -L../config-dacc -ldacc-config \
-          -L../logs -ldacc-logs \
+LDFLAGS = ../config-dacc/libdacc-config.a \
+          ../logs/libdacc-logs.a \
           -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer
 
 SRC_DIR = src
