@@ -1,4 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
 
-java -jar "/home/joao/Área de trabalho/dacc-station-os/games/Ashley.jar"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+java -jar "${SCRIPT_DIR}/Ashley.jar"
