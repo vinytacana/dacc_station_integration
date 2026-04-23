@@ -20,6 +20,7 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <functional>
 #include "Botao.hpp"
 
 /**
@@ -124,11 +125,13 @@ public:
 private:
     // ESTADO DO BLUETOOTH
     
-    bool bluetoothAtivo = true;             /**< Estado do Bluetooth (ON/OFF). */
-    bool escaneando = false;                /**< Se está em processo de escaneamento. */
+    std::atomic<bool> bluetoothAtivo{true}; /**< Estado do Bluetooth (ON/OFF). */
+    std::atomic<bool> escaneando{false};    /**< Se está em processo de escaneamento. */
     std::atomic<bool> alternandoBluetooth{false}; /**< Evita spam de toggle enquanto a troca de estado ocorre. */
+    std::atomic<bool> operacaoEmAndamento{false}; /**< Evita disparar multiplas operacoes bloqueantes em paralelo. */
     std::mutex mtx_dispositivos;            /**< Mutex para proteção das listas de dispositivos. */
     std::thread scanThread;                 /**< Thread dedicada ao escaneamento. */
+    std::thread workerThread;               /**< Thread para parear/conectar/toggle sem travar a UI. */
     std::atomic<bool> encerrando{false};    /**< Sinaliza destruição da janela. */
     
     // LISTAS DE DISPOSITIVOS
@@ -167,6 +170,10 @@ private:
     
     Uint32 tempoInicioEscanear = 0;         /**< Timestamp do início do escaneamento. */
     const Uint32 DURACAO_ESCANEAMENTO = 2000; /**< Duração da animação (2 segundos). */
+    std::string mensagemStatus;             /**< Feedback operacional exibido na UI. */
+    bool mensagemErro = false;              /**< Diferencia feedback de erro e sucesso. */
+    std::atomic<bool> adaptadorDisponivel{true}; /**< Indica se existe um controller Bluetooth real. */
+    std::atomic<bool> adaptadorBloqueado{false}; /**< Indica bloqueio rfkill do adaptador. */
     
     /**
      * @brief Inicializa os botões e elementos interativos.
@@ -230,6 +237,10 @@ private:
      * @param renderer Renderizador SDL.
      */
     void desenharImagemExplicativa(SDL_Renderer* renderer);
+    void desenharStatusOperacional(SDL_Renderer* renderer);
+    bool localizarDispositivoPorPonto(int x, int y, bool& pareado, int& indiceLocal);
+    void definirMensagemStatus(const std::string& mensagem, bool erro = false);
+    bool iniciarTarefaEmSegundoPlano(std::function<void()> tarefa);
 
     /**
      * @brief Alterna o estado do Bluetooth (ON/OFF).
