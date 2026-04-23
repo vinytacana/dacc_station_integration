@@ -37,9 +37,7 @@ extern GerenciadorImagens gerImg;       ///< Instância global do gerenciador de
  * 
  * @details Inicializa a janela de configurações e cria uma instância da janela de rede.
  */
-JanelaConfiguracao::JanelaConfiguracao() {
-    janelaRede = std::make_unique<JanelaRede>();
-}
+JanelaConfiguracao::JanelaConfiguracao() {}
 
 /**
  * @brief Destrutor da classe JanelaConfiguracao.
@@ -635,9 +633,11 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     
     desenharBarraStatus();
     
-    if (janelaRede) {
-        janelaRede->desenhar(renderer);
+    if (!janelaRede) {
+        janelaRede = std::make_unique<JanelaRede>();
     }
+
+    janelaRede->desenhar(renderer);
     
     if(btnVoltar) btnVoltar->desenhar(renderer);
 }

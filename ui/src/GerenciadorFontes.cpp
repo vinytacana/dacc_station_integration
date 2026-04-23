@@ -22,7 +22,14 @@ using namespace MeuProjeto;
  * @param font Ponteiro para a fonte a ser liberada.
  */
 void GerenciadorFontes::destruirFonte(TTF_Font* font) {
-    if (font) TTF_CloseFont(font);
+    if (!font) return;
+
+    // Durante o encerramento existem caches estaticos de fontes espalhados pela UI.
+    // Alguns sao destruídos depois de TTF_Quit(), então chamar TTF_CloseFont nesse
+    // momento causa segfault dentro do FreeType/SDL_ttf.
+    if (!TTF_WasInit()) return;
+
+    TTF_CloseFont(font);
 }
 
 /**
