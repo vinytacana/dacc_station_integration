@@ -9,6 +9,7 @@
  */
 
 #include "JanelaRede.hpp"
+#include "functions.hpp"
 #include "Utils.hpp"
 #include "GerenciadorTemas.hpp"
 #include "GerenciadorAudio.hpp"
@@ -66,14 +67,18 @@ private:
  * Inicializa o estado e os componentes da tela.
  */
 JanelaRede::JanelaRede() {
-    inicializarRedes();
     inicializarBotoes();
+    definirMensagemStatus("Carregando redes Wi-Fi...");
+    agendarSincronizacaoComBackend();
 }
 
 /**
  * @brief Destrutor da classe JanelaRede.
  */
 JanelaRede::~JanelaRede() {
+    if (workerThread.joinable()) {
+        workerThread.join();
+    }
     botoesRedes.clear();
     btnToggleWifi.reset();
     btnConectarSenha.reset();
@@ -89,13 +94,73 @@ JanelaRede::~JanelaRede() {
  */
 void JanelaRede::inicializarRedes() {
     redesDisponiveis.clear();
-    
-    // Adiciona redes de exemplo
-    redesDisponiveis.push_back(RedeInfo("Casa_Wifi", true, 95));
-    redesDisponiveis.push_back(RedeInfo("Vizinho_Wifi", false, 75));
-    redesDisponiveis.push_back(RedeInfo("iPhone de Pedro", false, 60));
-    redesDisponiveis.push_back(RedeInfo("NET_5G_Premium", false, 85));
-    redesDisponiveis.push_back(RedeInfo("Claro_WiFi", false, 50));
+    auto redes = ::listar_wifi_parsed();
+    for (const auto& rede : redes) {
+        redesDisponiveis.push_back(RedeInfo(rede.ssid, rede.em_uso, rede.sinal));
+        if (rede.em_uso) {
+            redeConectada = rede.ssid;
+        }
+    }
+}
+
+void JanelaRede::sincronizarComBackend() {
+    wifi_adapter_status status = ::obter_status_wifi();
+    std::vector<RedeInfo> novasRedes;
+    std::string novaRedeConectada;
+
+    auto redes = ::listar_wifi_parsed();
+    for (const auto& rede : redes) {
+        novasRedes.emplace_back(rede.ssid, rede.em_uso, rede.sinal);
+        if (rede.em_uso) {
+            novaRedeConectada = rede.ssid;
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(mtxRede);
+    wifiAtivo = status.enabled;
+    redeConectada = std::move(novaRedeConectada);
+    redesDisponiveis = std::move(novasRedes);
+    if (redesDisponiveis.empty() && wifiAtivo) {
+        mensagemStatus = "Nenhuma rede Wi-Fi detectada.";
+        mensagemErro = false;
+    } else if (!wifiAtivo) {
+        mensagemStatus = "Wi-Fi desativado.";
+        mensagemErro = false;
+    } else if (mensagemStatus == "Carregando redes Wi-Fi..." || mensagemStatus == "Atualizando redes Wi-Fi...") {
+        mensagemStatus.clear();
+        mensagemErro = false;
+    }
+    precisaAtualizarInterface = true;
+}
+
+void JanelaRede::agendarSincronizacaoComBackend(const std::string& mensagem) {
+    if (!mensagem.empty()) {
+        definirMensagemStatus(mensagem, false);
+    }
+    (void)iniciarTarefaEmSegundoPlano([this]() {
+        sincronizarComBackend();
+    });
+}
+
+void JanelaRede::definirMensagemStatus(const std::string& mensagem, bool erro) {
+    std::lock_guard<std::mutex> lock(mtxRede);
+    mensagemStatus = mensagem;
+    mensagemErro = erro;
+}
+
+bool JanelaRede::iniciarTarefaEmSegundoPlano(std::function<void()> tarefa) {
+    if (operacaoEmAndamento.exchange(true)) {
+        definirMensagemStatus("Ha uma operacao de rede em andamento.", true);
+        return false;
+    }
+    if (workerThread.joinable()) {
+        workerThread.join();
+    }
+    workerThread = std::thread([this, tarefa = std::move(tarefa)]() mutable {
+        tarefa();
+        operacaoEmAndamento = false;
+    });
+    return true;
 }
 
 /**
@@ -105,6 +170,17 @@ void JanelaRede::inicializarRedes() {
  * disponível, aplicando as cores do tema atual.
  */
 void JanelaRede::inicializarBotoes() {
+    bool wifiAtivoLocal = true;
+    std::vector<std::string> nomesRedes;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        wifiAtivoLocal = wifiAtivo;
+        nomesRedes.reserve(redesDisponiveis.size());
+        for (const auto& rede : redesDisponiveis) {
+            nomesRedes.push_back(rede.nome);
+        }
+    }
+
     auto& tema = GerenciadorTemas::getInstance();
     SDL_Color btnNormal = tema.getCorBotaoNormal();
     SDL_Color btnHover = tema.getCorBotaoHover();
@@ -114,7 +190,7 @@ void JanelaRede::inicializarBotoes() {
     btnToggleWifi = std::make_unique<Botao>(
         ConfigLayout::X(1100), ConfigLayout::Y(280),
         ConfigLayout::X(200), ConfigLayout::Y(60),
-        wifiAtivo ? "ON" : "OFF"
+        wifiAtivoLocal ? "ON" : "OFF"
     );
     btnToggleWifi->setCor(btnNormal, btnHover, btnPress);
     btnToggleWifi->setRetanguloBordasArredondadas(15);
@@ -125,13 +201,13 @@ void JanelaRede::inicializarBotoes() {
     int posYInicial = 450;
     int espacamento = 90;
     
-    for (size_t i = 0; i < redesDisponiveis.size(); i++) {
+    for (size_t i = 0; i < nomesRedes.size(); i++) {
         int posY = posYInicial + (i * espacamento);
         
         auto btnRede = std::make_unique<Botao>(
             ConfigLayout::X(250), ConfigLayout::Y(posY),
             ConfigLayout::X(1000), ConfigLayout::Y(70),
-            redesDisponiveis[i].nome
+            nomesRedes[i]
         );
         btnRede->setCor(btnNormal, btnHover, btnPress);
         btnRede->setRetanguloBordasArredondadas(15);
@@ -189,6 +265,10 @@ void JanelaRede::liberarImagemExplicativa() {
 void JanelaRede::desenhar(SDL_Renderer* renderer) {
     if (!renderer) return;
 
+    if (precisaAtualizarInterface.exchange(false)) {
+        inicializarBotoes();
+    }
+
     // Carrega a imagem explicativa se ainda não foi carregada
     if (!texturaExplicacao) {
         carregarImagemExplicativa(renderer);
@@ -212,6 +292,17 @@ void JanelaRede::desenhar(SDL_Renderer* renderer) {
  */
 void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
+    bool wifiAtivoLocal = false;
+    std::string redeConectadaLocal;
+    std::string mensagem;
+    bool erro = false;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        wifiAtivoLocal = wifiAtivo;
+        redeConectadaLocal = redeConectada;
+        mensagem = mensagemStatus;
+        erro = mensagemErro;
+    }
     
     // Título da seção - CENTRALIZADO
     std::string titulo = "Configurações de Rede";
@@ -225,11 +316,11 @@ void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
                   ConfigLayout::F(48));
     
     // Status da conexão
-    std::string statusTexto = wifiAtivo 
-        ? "Estado: Conectado (" + redeConectada + ")"
+    std::string statusTexto = wifiAtivoLocal 
+        ? "Estado: Conectado (" + redeConectadaLocal + ")"
         : "Estado: Desconectado";
     
-    SDL_Color corStatus = wifiAtivo 
+    SDL_Color corStatus = wifiAtivoLocal 
         ? SDL_Color{100, 255, 100, 255}  // Verde se conectado
         : SDL_Color{255, 100, 100, 255}; // Vermelho se desconectado
     
@@ -237,6 +328,12 @@ void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
                   ConfigLayout::X(250), ConfigLayout::Y(220), 
                   corStatus, 
                   ConfigLayout::F(28));
+    if (!mensagem.empty()) {
+        SDL_Color cor = erro ? SDL_Color{255, 120, 120, 255} : SDL_Color{120, 255, 120, 255};
+        desenharTexto(renderer, mensagem,
+                      ConfigLayout::X(250), ConfigLayout::Y(255),
+                      cor, ConfigLayout::F(20));
+    }
 }
 
 /**
@@ -251,25 +348,6 @@ void JanelaRede::desenharToggleWifi(SDL_Renderer* renderer) {
                   ConfigLayout::X(250), ConfigLayout::Y(290), 
                   tema.getCorTextoNegrito(), 
                   ConfigLayout::F(32));
-    
-    // Recria o botão se o estado mudou (para atualizar o texto)
-    static bool ultimoEstadoWifi = wifiAtivo;
-    if (ultimoEstadoWifi != wifiAtivo) {
-        auto& tema = GerenciadorTemas::getInstance();
-        SDL_Color btnNormal = tema.getCorBotaoNormal();
-        SDL_Color btnHover = tema.getCorBotaoHover();
-        SDL_Color btnPress = tema.getCorBotaoPressionado();
-        
-        btnToggleWifi = std::make_unique<Botao>(
-            ConfigLayout::X(1100), ConfigLayout::Y(280),
-            ConfigLayout::X(200), ConfigLayout::Y(60),
-            wifiAtivo ? "ON" : "OFF"
-        );
-        btnToggleWifi->setCor(btnNormal, btnHover, btnPress);
-        btnToggleWifi->setRetanguloBordasArredondadas(15);
-        
-        ultimoEstadoWifi = wifiAtivo;
-    }
     
     // Aplica foco se for o elemento focado (índice 0)
     if (indiceFocado == 0 && SDL_NumJoysticks() > 0) {
@@ -288,6 +366,15 @@ void JanelaRede::desenharToggleWifi(SDL_Renderer* renderer) {
  */
 void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
+    bool wifiAtivoLocal = false;
+    std::string redeConectadaLocal;
+    std::vector<RedeInfo> redesSnapshot;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        wifiAtivoLocal = wifiAtivo;
+        redeConectadaLocal = redeConectada;
+        redesSnapshot = redesDisponiveis;
+    }
     
     // Título da lista
     desenharTexto(renderer, "Redes Disponíveis:", 
@@ -296,7 +383,7 @@ void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
                   ConfigLayout::F(32));
     
     // Só mostra as redes se o Wi-Fi estiver ativo
-    if (!wifiAtivo) {
+    if (!wifiAtivoLocal) {
         desenharTexto(renderer, "Wi-Fi desativado", 
                       ConfigLayout::X(250), ConfigLayout::Y(450), 
                       tema.getCorTextoNormal(), 
@@ -307,7 +394,7 @@ void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
     // Calcula quais redes são visíveis baseado no scroll
     int primeiraVisivel = scrollOffset;
     int ultimaVisivel = std::min(primeiraVisivel + maxRedesVisiveis, 
-                                  (int)redesDisponiveis.size());
+                                  (int)redesSnapshot.size());
     
     // Renderiza as redes visíveis
     for (int i = primeiraVisivel; i < ultimaVisivel; i++) {
@@ -325,7 +412,7 @@ void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
         botoesRedes[i]->desenhar(renderer);
         
         // Adiciona indicador visual se for rede conectada
-        if (redesDisponiveis[i].nome == redeConectada && wifiAtivo) {
+        if (redesSnapshot[i].nome == redeConectadaLocal && wifiAtivoLocal) {
             int posX = ConfigLayout::X(220);
             int posY = ConfigLayout::Y(450 + (indiceVisual * 90) + 20);
             desenharTexto(renderer, ">", posX, posY, 
@@ -333,7 +420,7 @@ void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
         }
         
         // Adiciona indicador "(Salva)" se aplicável
-        if (redesDisponiveis[i].salva) {
+        if (redesSnapshot[i].salva) {
             int posX = ConfigLayout::X(1270);
             int posY = ConfigLayout::Y(450 + (indiceVisual * 90) + 25);
             desenharTexto(renderer, "(Salva)", posX, posY, 
@@ -349,7 +436,7 @@ void JanelaRede::desenharListaRedes(SDL_Renderer* renderer) {
                       tema.getCorDestaque(), ConfigLayout::F(18));
     }
     
-    if (ultimaVisivel < (int)redesDisponiveis.size()) {
+    if (ultimaVisivel < (int)redesSnapshot.size()) {
         // Seta para baixo
         int posY = ConfigLayout::Y(450 + (maxRedesVisiveis * 90) + 10);
         desenharTexto(renderer, "▼ Mais redes abaixo", 
@@ -415,9 +502,14 @@ void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
                    15, corPainel.r, corPainel.g, corPainel.b, 255);
     
     // Título do painel - CENTRALIZADO
-    if (indiceRedeSelecionada >= 0 && indiceRedeSelecionada < (int)redesDisponiveis.size()) {
-        std::string titulo = "Conectar a: " + redesDisponiveis[indiceRedeSelecionada].nome;
-        
+    std::string titulo;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        if (indiceRedeSelecionada >= 0 && indiceRedeSelecionada < (int)redesDisponiveis.size()) {
+            titulo = "Conectar a: " + redesDisponiveis[indiceRedeSelecionada].nome;
+        }
+    }
+    if (!titulo.empty()) {
         // Centraliza o título no painel
         int larguraTitulo = titulo.length() * ConfigLayout::F(28) * 0.6;
         int posXTitulo = painelX + (painelLargura - larguraTitulo) / 2;
@@ -490,10 +582,24 @@ void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
  * @brief Alterna o estado do Wi-Fi entre ON e OFF.
  */
 void JanelaRede::toggleWifi() {
-    wifiAtivo = !wifiAtivo;
+    bool estadoDesejado = false;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        estadoDesejado = !wifiAtivo;
+    }
+    definirMensagemStatus(estadoDesejado ? "Ativando Wi-Fi..." : "Desativando Wi-Fi...");
     gerAudio.tocarSom("select.wav");
-    
-    std::cout << "[REDE] Wi-Fi " << (wifiAtivo ? "ativado" : "desativado") << std::endl;
+
+    iniciarTarefaEmSegundoPlano([this, estadoDesejado]() {
+        wifi_result resultado = ::definir_estado_wifi_result(estadoDesejado);
+        sincronizarComBackend();
+        definirMensagemStatus(
+            resultado.ok
+                ? (estadoDesejado ? "Wi-Fi ativado." : "Wi-Fi desativado.")
+                : (resultado.mensagem.empty() ? "Falha ao alterar o Wi-Fi." : resultado.mensagem),
+            !resultado.ok
+        );
+    });
 }
 
 /**
@@ -502,7 +608,12 @@ void JanelaRede::toggleWifi() {
  * 
  */
 void JanelaRede::abrirTecladoSenha(int indiceRede) {
-    if (indiceRede < 0 || indiceRede >= (int)redesDisponiveis.size()) return;
+    std::string nomeRede;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        if (indiceRede < 0 || indiceRede >= (int)redesDisponiveis.size()) return;
+        nomeRede = redesDisponiveis[indiceRede].nome;
+    }
     
     indiceRedeSelecionada = indiceRede;
     senhaAtual = "";
@@ -512,8 +623,6 @@ void JanelaRede::abrirTecladoSenha(int indiceRede) {
     tecladoVirtual.abrir();
     
     // Cria os botões de Conectar e Cancelar
-    auto& tema = GerenciadorTemas::getInstance();
-    
     // Posições ajustadas para os botões ficarem acima do teclado
     int painelLargura = ConfigLayout::X(800);
     int larguraTela = ConfigLayout::X(1525); // Usa largura correta
@@ -549,7 +658,7 @@ void JanelaRede::abrirTecladoSenha(int indiceRede) {
     gerAudio.tocarSom("select.wav");
     
     std::cout << "[REDE] Abrindo teclado para rede: " 
-              << redesDisponiveis[indiceRede].nome << std::endl;
+              << nomeRede << std::endl;
 }
 
 /**
@@ -573,22 +682,30 @@ void JanelaRede::fecharTecladoSenha() {
  * 
  */
 void JanelaRede::confirmarSenha() {
-    if (indiceRedeSelecionada < 0 || indiceRedeSelecionada >= (int)redesDisponiveis.size()) {
-        return;
+    std::string ssid;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        if (indiceRedeSelecionada < 0 || indiceRedeSelecionada >= (int)redesDisponiveis.size()) {
+            return;
+        }
+        ssid = redesDisponiveis[indiceRedeSelecionada].nome;
     }
     
-    // Mesmo com senha vazia, conecta e salva
-    
-    // Salva a rede e conecta
-    redesDisponiveis[indiceRedeSelecionada].salva = true;
-    redeConectada = redesDisponiveis[indiceRedeSelecionada].nome;
-    
     gerAudio.tocarSom("select.wav");
-    
-    std::cout << "[REDE] Conectado à rede: " << redeConectada 
-              << " com senha: " << std::string(senhaAtual.length(), '*') << std::endl;
-    
+    const std::string senha = senhaAtual;
     fecharTecladoSenha();
+    definirMensagemStatus("Conectando a " + ssid + "...");
+
+    iniciarTarefaEmSegundoPlano([this, ssid, senha]() {
+        wifi_result resultado = ::conectar_wifi_result(ssid, senha);
+        sincronizarComBackend();
+        definirMensagemStatus(
+            resultado.ok
+                ? ("Conectado a " + ssid + ".")
+                : (resultado.mensagem.empty() ? "Falha ao conectar na rede." : resultado.mensagem),
+            !resultado.ok
+        );
+    });
 }
 
 /**
@@ -596,18 +713,33 @@ void JanelaRede::confirmarSenha() {
  * @param indice Índice da rede na lista de redes disponíveis.
  */
 void JanelaRede::selecionarRede(int indice) {
-    if (indice < 0 || indice >= (int)redesDisponiveis.size()) return;
-    if (!wifiAtivo) return;
+    RedeInfo redeSelecionada("", false, 0);
+    bool wifiAtivoLocal = false;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        if (indice < 0 || indice >= (int)redesDisponiveis.size()) return;
+        wifiAtivoLocal = wifiAtivo;
+        redeSelecionada = redesDisponiveis[indice];
+    }
+    if (!wifiAtivoLocal) return;
     
     // Se a rede não está salva, abre o teclado para senha
-    if (!redesDisponiveis[indice].salva) {
+    if (!redeSelecionada.salva) {
         abrirTecladoSenha(indice);
     } else {
-        // Rede já salva, conecta direto
-        redeConectada = redesDisponiveis[indice].nome;
         gerAudio.tocarSom("select.wav");
-        
-        std::cout << "[REDE] Conectando à rede: " << redeConectada << std::endl;
+        const std::string ssid = redeSelecionada.nome;
+        definirMensagemStatus("Conectando a " + ssid + "...");
+        iniciarTarefaEmSegundoPlano([this, ssid]() {
+            wifi_result resultado = ::conectar_wifi_result(ssid, "");
+            sincronizarComBackend();
+            definirMensagemStatus(
+                resultado.ok
+                    ? ("Conectado a " + ssid + ".")
+                    : (resultado.mensagem.empty() ? "Falha ao conectar na rede." : resultado.mensagem),
+                !resultado.ok
+            );
+        });
     }
 }
 
@@ -626,7 +758,11 @@ void JanelaRede::navegarParaCima() {
  * @brief Move o foco para o próximo elemento.
  */
 void JanelaRede::navegarParaBaixo() {
-    int maxIndice = (int)redesDisponiveis.size(); // +1 para incluir o toggle
+    int maxIndice = 0;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        maxIndice = (int)redesDisponiveis.size(); // +1 para incluir o toggle
+    }
     if (indiceFocado < maxIndice) {
         indiceFocado++;
         atualizarScroll();
@@ -958,4 +1094,5 @@ void JanelaRede::resetar() {
     
     // Recarrega a imagem explicativa (pode ter mudado o tema)
     liberarImagemExplicativa();
+    agendarSincronizacaoComBackend("Atualizando redes Wi-Fi...");
 }

@@ -16,6 +16,10 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <atomic>
+#include <thread>
+#include <mutex>
+#include <functional>
 #include "Botao.hpp"
 #include "TecladoVirtual.hpp"
 #include "ConfigLayout.hpp"
@@ -97,7 +101,13 @@ public:
 private:
     // Estado do Wi-Fi
     bool wifiAtivo = true;                /**< Estado atual do Wi-Fi (ON/OFF). */
-    std::string redeConectada = "Casa_Wifi"; /**< Nome da rede atualmente conectada. */
+    std::string redeConectada = ""; /**< Nome da rede atualmente conectada. */
+    std::atomic<bool> operacaoEmAndamento{false};
+    std::atomic<bool> precisaAtualizarInterface{false};
+    std::string mensagemStatus;
+    bool mensagemErro = false;
+    std::thread workerThread;
+    std::mutex mtxRede;
     
     // Lista de redes disponíveis
     std::vector<RedeInfo> redesDisponiveis; /**< Vetor com todas as redes detectadas. */
@@ -228,6 +238,10 @@ private:
      * @brief Confirma a senha digitada e conecta à rede.
      */
     void confirmarSenha();
+    void sincronizarComBackend();
+    void agendarSincronizacaoComBackend(const std::string& mensagem = "");
+    void definirMensagemStatus(const std::string& mensagem, bool erro = false);
+    bool iniciarTarefaEmSegundoPlano(std::function<void()> tarefa);
 };
 
 } // namespace MeuProjeto
