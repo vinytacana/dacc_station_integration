@@ -10,183 +10,20 @@
 #include <limits>
 #include <thread>
 #include <chrono>
-#include <pty.h>
-#include <sys/select.h>
-#include <unordered_map>
-#include <array>
-#include <memory>
 #include <algorithm>
 #include <stdexcept>
 #include <cstdio>
 #include <iomanip>
 #include <mutex>
-#include <cerrno>
-#include <cstring>
 
 using namespace std;
 
 // Mutex para proteger concorrência
 static std::mutex g_audio_mutex;
-static std::mutex g_bluetooth_mutex;
-
-std::string remover_ansi(std::string str);
-
-namespace {
-
-bluetooth_result executar_bluetoothctl(const std::string &comando) {
-    std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
-    bluetooth_result resultado;
-    int master_fd;
-    pid_t pid = forkpty(&master_fd, nullptr, nullptr, nullptr);
-    if (pid < 0) {
-        resultado.ok = false;
-        resultado.mensagem = "forkpty() falhou: " + std::string(std::strerror(errno));
-        return resultado;
-    }
-
-    if (pid == 0) {
-        execlp("bluetoothctl", "bluetoothctl", nullptr);
-        _exit(1);
-    }
-
-    const std::string entrada = comando + "\nquit\n";
-    ssize_t escritos = write(master_fd, entrada.c_str(), entrada.size());
-    if (escritos < 0) {
-        resultado.ok = false;
-        resultado.mensagem = "Falha ao escrever no bluetoothctl.";
-        close(master_fd);
-        waitpid(pid, nullptr, 0);
-        return resultado;
-    }
-
-    char buffer[1024];
-    std::string saida;
-
-    while (true) {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(master_fd, &fds);
-        struct timeval tv{1, 0};
-
-        int ret = select(master_fd + 1, &fds, nullptr, nullptr, &tv);
-        if (ret > 0 && FD_ISSET(master_fd, &fds)) {
-            ssize_t lidos = read(master_fd, buffer, sizeof(buffer) - 1);
-            if (lidos > 0) {
-                buffer[lidos] = '\0';
-                saida += buffer;
-                continue;
-            }
-            if (lidos == 0) {
-                break;
-            }
-            if (errno == EIO) {
-                break;
-            }
-        } else if (ret == 0) {
-            int status = 0;
-            pid_t waited = waitpid(pid, &status, WNOHANG);
-            if (waited == pid) {
-                break;
-            }
-        } else if (ret < 0) {
-            resultado.ok = false;
-            resultado.mensagem = "Falha ao ler resposta do bluetoothctl.";
-            close(master_fd);
-            waitpid(pid, nullptr, 0);
-            return resultado;
-        }
-    }
-
-    close(master_fd);
-    int status = 0;
-    waitpid(pid, &status, 0);
-    resultado.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    resultado.mensagem = remover_ansi(saida);
-    return resultado;
-}
-
-bool bluetoothctl_saida_indica_sucesso(const std::string &saida) {
-    return saida.find("Failed") == std::string::npos &&
-           saida.find("not available") == std::string::npos &&
-           saida.find("No default controller available") == std::string::npos;
-}
-
-std::string resumir_bluetooth_status(const bluetooth_adapter_status &status) {
-    std::ostringstream oss;
-    oss << "powered=" << (status.powered ? "yes" : "no")
-        << ", soft_blocked=" << (status.soft_blocked ? "yes" : "no")
-        << ", hard_blocked=" << (status.hard_blocked ? "yes" : "no")
-        << ", controller_disponivel=" << (status.controller_disponivel ? "yes" : "no");
-    return oss.str();
-}
-
-device_bt consultar_dispositivo_bluetooth(const std::string &mac) {
-    device_bt dispositivo;
-    dispositivo.mac = mac;
-
-    std::unordered_map<std::string, device_bt> mapa;
-    mapa[mac] = dispositivo;
-
-    bluetooth_result resultado = executar_bluetoothctl("info " + mac);
-    if (!resultado.ok || resultado.mensagem.empty()) {
-        return dispositivo;
-    }
-
-    std::stringstream ss_info(resultado.mensagem);
-    std::string ctx_info = mac;
-    parsing_bluetooth_stream(ss_info, mapa, ctx_info);
-    return mapa[mac];
-}
-
-void mesclar_dispositivo_bluetooth(device_bt &destino, const device_bt &origem) {
-    if (!origem.mac.empty()) destino.mac = origem.mac;
-    if (!origem.nome.empty()) destino.nome = origem.nome;
-    if (!origem.icon.empty()) destino.icon = origem.icon;
-    destino.conectado = origem.conectado;
-    destino.pareado = origem.pareado;
-    destino.confiavel = origem.confiavel;
-}
-
-} // namespace
 
 // ==========================================
 // --- UTILITÁRIOS ---
 // ==========================================
-
-std::string remover_ansi(std::string str) {
-    std::string resultado;
-    bool dentro = false;
-    for (size_t i = 0; i < str.size(); ++i) {
-        if (str[i] == '\033') {
-            dentro = true;
-            continue;
-        }
-        if (dentro) {
-            if (isalpha(str[i])) dentro = false;
-            continue;
-        }
-        resultado += str[i];
-    }
-    return resultado;
-}
-
-bool comando_existe(const std::string &cmd) {
-    std::string check = "which " + cmd + " > /dev/null 2>&1";
-    return (system(check.c_str()) == 0);
-}
-
-std::string exec_command(const char *cmd) {
-    std::array<char, 128> buffer;
-    std::string result;
-    std::unique_ptr<FILE, int (*)(FILE *)> pipe(popen(cmd, "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("popen() falhou!");
-    }
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        result += buffer.data();
-    }
-    return result;
-}
 
 long long obter_tempo_ms() {
     auto agora = std::chrono::system_clock::now();
@@ -212,6 +49,72 @@ int obter_bateria() {
 // ==========================================
 // --- ÁUDIO ---
 // ==========================================
+
+namespace {
+
+audio_result make_audio_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
+    audio_result result;
+    result.ok = false;
+    result.codigo = codigo;
+    result.mensagem = mensagem;
+    result.detalhes = detalhes;
+    return result;
+}
+
+audio_result make_audio_success(const std::string& mensagem, const std::string& detalhes = "") {
+    audio_result result;
+    result.ok = true;
+    result.codigo = "ok";
+    result.mensagem = mensagem;
+    result.detalhes = detalhes;
+    return result;
+}
+
+display_result make_display_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
+    display_result result;
+    result.ok = false;
+    result.codigo = codigo;
+    result.mensagem = mensagem;
+    result.detalhes = detalhes;
+    return result;
+}
+
+display_result make_display_success(const std::string& mensagem, const std::string& detalhes = "") {
+    display_result result;
+    result.ok = true;
+    result.codigo = "ok";
+    result.mensagem = mensagem;
+    result.detalhes = detalhes;
+    return result;
+}
+
+audio_result traduzir_audio_result(const command_result& command, const std::string& codigo, const std::string& mensagem) {
+    if (command.ok) {
+        return make_audio_success(mensagem, command.mensagem);
+    }
+    if (command.mensagem.find("No such entity") != std::string::npos ||
+        command.mensagem.find("not found") != std::string::npos) {
+        return make_audio_error("audio_device_not_found", "Dispositivo de audio nao encontrado.", command.mensagem);
+    }
+    return make_audio_error(codigo, mensagem, command.mensagem);
+}
+
+display_result traduzir_display_result(const command_result& command, const std::string& codigo, const std::string& mensagem) {
+    if (command.ok) {
+        return make_display_success(mensagem, command.mensagem);
+    }
+    if (command.mensagem.find("unknown output") != std::string::npos ||
+        command.mensagem.find("cannot find output") != std::string::npos) {
+        return make_display_error("display_output_not_found", "Saida de video nao encontrada.", command.mensagem);
+    }
+    if (command.mensagem.find("cannot find mode") != std::string::npos ||
+        command.mensagem.find("bad mode") != std::string::npos) {
+        return make_display_error("display_mode_unsupported", "Resolucao nao suportada para a saida.", command.mensagem);
+    }
+    return make_display_error(codigo, mensagem, command.mensagem);
+}
+
+} // namespace
 
 std::string limpar_nome_audio(std::string raw) {
     size_t colchete = raw.find('[');
@@ -321,9 +224,12 @@ std::vector<device_audio> listar_dispositivos_audio() {
 }
 
 void selecionar_dispositivo_audio(int id) {
-    std::string comando = "wpctl set-default " + std::to_string(id);
-    system((comando + " > /dev/null 2>&1").c_str());
-    std::cout << "[Áudio] Dispositivo " << id << " definido como padrão.\n";
+    (void)selecionar_dispositivo_audio_result(id);
+}
+
+audio_result selecionar_dispositivo_audio_result(int id) {
+    command_result result = exec_command_args_result({"wpctl", "set-default", std::to_string(id)});
+    return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
 }
 
 void imprimir_dispositivos_audio() {
@@ -425,8 +331,12 @@ void listar_resolucao() {
 }
 
 bool alterarEscala(const string &saida, float escala) {
+    return alterarEscala_result(saida, escala).ok;
+}
+
+display_result alterarEscala_result(const string &saida, float escala) {
     std::string sessao = obter_tipo_sessao();
-    std::string comando;
+    std::vector<std::string> args;
 
     if (escala < 0.5f) escala = 0.5f;
     if (escala > 3.0f) escala = 3.0f;
@@ -436,31 +346,43 @@ bool alterarEscala(const string &saida, float escala) {
     std::string scaleStr = ss.str();
 
     if (sessao == "x11") {
-        comando = "xrandr --output " + saida + " --scale " + scaleStr + "x" + scaleStr;
+        args = {"xrandr", "--output", saida, "--scale", scaleStr + "x" + scaleStr};
     } else if (sessao == "wayland") {
         const char *desktop = getenv("XDG_SESSION_DESKTOP");
         std::string de = desktop ? std::string(desktop) : "";
         if (de.find("gnome") != std::string::npos) {
             int scaleInt = static_cast<int>(escala + 0.5f);
-            comando = "gsettings set org.gnome.desktop.interface scaling-factor " + std::to_string(scaleInt);
+            args = {"gsettings", "set", "org.gnome.desktop.interface", "scaling-factor", std::to_string(scaleInt)};
         } else {
-            comando = "wlr-randr --output " + saida + " --scale " + scaleStr;
+            args = {"wlr-randr", "--output", saida, "--scale", scaleStr};
         }
-    } else return false;
+    } else {
+        return make_display_error("display_session_unknown", "Sessao grafica nao suportada.");
+    }
 
-    std::cout << "[Video] Escala: " << comando << std::endl;
-    return (system(comando.c_str()) == 0);
+    command_result result = exec_command_args_result(args);
+    return traduzir_display_result(result, "display_scale_failed", "Falha ao alterar escala.");
 }
 
 bool alterarResolucao(const string &saida, int width, int height, float rate) {
+    return alterarResolucao_result(saida, width, height, rate).ok;
+}
+
+display_result alterarResolucao_result(const string &saida, int width, int height, float rate) {
+    (void)rate;
     std::string sessao = obter_tipo_sessao();
     std::string modeStr = std::to_string(width) + "x" + std::to_string(height);
-    std::string comando = (sessao == "wayland") ? 
-                          "wlr-randr --output " + saida + " --mode " + modeStr : 
-                          "xrandr --output " + saida + " --mode " + modeStr;
+    std::vector<std::string> args;
+    if (sessao == "wayland") {
+        args = {"wlr-randr", "--output", saida, "--mode", modeStr};
+    } else if (sessao == "x11") {
+        args = {"xrandr", "--output", saida, "--mode", modeStr};
+    } else {
+        return make_display_error("display_session_unknown", "Sessao grafica nao suportada.");
+    }
 
-    std::cout << "[Video] Executando: " << comando << std::endl;
-    return (system(comando.c_str()) == 0);
+    command_result result = exec_command_args_result(args);
+    return traduzir_display_result(result, "display_resolution_failed", "Falha ao alterar resolucao.");
 }
 
 void aumentar_brilho() {
@@ -477,6 +399,84 @@ void diminuir_brilho() {
 // --- WI-FI ---
 // ==========================================
 
+namespace {
+
+wifi_result make_wifi_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
+    wifi_result result;
+    result.ok = false;
+    result.codigo = codigo;
+    result.mensagem = mensagem;
+    result.detalhes = detalhes;
+    return result;
+}
+
+wifi_result make_wifi_success(const std::string& mensagem, const std::string& detalhes = "") {
+    wifi_result result;
+    result.ok = true;
+    result.codigo = "ok";
+    result.mensagem = mensagem;
+    result.detalhes = detalhes;
+    return result;
+}
+
+std::vector<std::string> split_nmcli_escaped_fields(const std::string& linha) {
+    std::vector<std::string> campos;
+    std::string atual;
+    bool escape = false;
+
+    for (char c : linha) {
+        if (escape) {
+            atual.push_back(c);
+            escape = false;
+            continue;
+        }
+        if (c == '\\') {
+            escape = true;
+            continue;
+        }
+        if (c == ':') {
+            campos.push_back(atual);
+            atual.clear();
+            continue;
+        }
+        atual.push_back(c);
+    }
+    campos.push_back(atual);
+    return campos;
+}
+
+wifi_result traduzir_wifi_result(
+    const command_result& command,
+    const std::string& codigo_falha,
+    const std::string& mensagem_falha
+) {
+    const std::string& output = command.mensagem;
+    if (command.ok) {
+        return make_wifi_success("Operacao Wi-Fi executada com sucesso.", output);
+    }
+    if (output.find("Secrets were required") != std::string::npos ||
+        output.find("No password") != std::string::npos) {
+        return make_wifi_error("wifi_password_required", "A rede exige senha.", output);
+    }
+    if (output.find("wrong password") != std::string::npos ||
+        output.find("invalid secrets") != std::string::npos) {
+        return make_wifi_error("wifi_auth_failed", "Senha incorreta ou autenticacao recusada.", output);
+    }
+    if (output.find("No network with SSID") != std::string::npos) {
+        return make_wifi_error("wifi_not_found", "Rede Wi-Fi nao encontrada.", output);
+    }
+    if (output.find("Wi-Fi is disabled") != std::string::npos ||
+        output.find("radio is disabled") != std::string::npos) {
+        return make_wifi_error("wifi_disabled", "Wi-Fi desativado.", output);
+    }
+    if (output.find("not running") != std::string::npos) {
+        return make_wifi_error("network_manager_unavailable", "NetworkManager indisponivel.", output);
+    }
+    return make_wifi_error(codigo_falha, mensagem_falha, output);
+}
+
+} // namespace
+
 void listar_wifi() {
     system("nmcli device wifi list");
 }
@@ -492,14 +492,7 @@ std::vector<wifi_network> listar_wifi_parsed() {
     std::string linha;
 
     while (std::getline(ss, linha)) {
-        std::vector<std::string> campos;
-        size_t pos = 0;
-        std::string s = linha;
-        while ((pos = s.find(':')) != std::string::npos) {
-            campos.push_back(s.substr(0, pos));
-            s.erase(0, pos + 1);
-        }
-        campos.push_back(s);
+        std::vector<std::string> campos = split_nmcli_escaped_fields(linha);
 
         if (campos.size() >= 4) {
             wifi_network net;
@@ -513,379 +506,65 @@ std::vector<wifi_network> listar_wifi_parsed() {
     return redes;
 }
 
-void conectar_wifi(const string &ssid, const string &senha) {
-    std::cerr << "Tentando conectar em: " << ssid << "...\n";
-    string comando = "nmcli device wifi connect \"" + ssid + "\" password \"" + senha + "\" > /dev/null 2>&1";
-    // Executa em thread para não travar a UI
-    std::thread([comando]() { system(comando.c_str()); }).detach();
-}
-
-void desconectar_wifi(const string &id) {
-    string comando = "nmcli connection down id \"" + id + "\" > /dev/null 2>&1";
-    system(comando.c_str());
-    std::cerr << "Rede \"" << id << "\" desconectada.\n";
-}
-
-// ==========================================
-// --- BLUETOOTH ---
-// ==========================================
-
-void parsing_bluetooth_stream(std::istream &input, std::unordered_map<std::string, device_bt> &mapa, std::string &ultimo_mac_context) {
-    std::string linha_raw;
-    while (std::getline(input, linha_raw)) {
-        std::string linha = remover_ansi(linha_raw);
-        if (linha.empty()) continue;
-        
-        // 1. Linha com identificador de dispositivo
-        size_t pos_device = linha.find("Device ");
-        if (pos_device != std::string::npos) {
-            std::string sub = linha.substr(pos_device + 7);
-            std::stringstream ss(sub);
-            std::string mac;
-            ss >> mac;
-
-            if (mac.length() >= 17 && mac.find(':') != std::string::npos) {
-                ultimo_mac_context = mac;
-                auto &dev = mapa[mac];
-                dev.mac = mac;
-
-                if (linha.find("[DEL]") != std::string::npos) {
-                    mapa.erase(mac);
-                    ultimo_mac_context = "";
-                    continue;
-                }
-
-                // Tenta extrair o restante da linha para ver se é um nome ou propriedade
-                std::string resto;
-                std::getline(ss, resto);
-                size_t first = resto.find_first_not_of(" \t");
-                if (first != std::string::npos) {
-                    std::string payload = resto.substr(first);
-                    size_t pos_colon = payload.find(": ");
-                    
-                    // Se não tem ": ", é o nome do dispositivo (formato [NEW] Device MAC Name)
-                    if (pos_colon == std::string::npos) {
-                        while(!payload.empty() && isspace(payload.back())) payload.pop_back();
-                        if (!payload.empty()) dev.nome = payload;
-                    } else {
-                        // É uma propriedade na mesma linha (formato [CHG] Device MAC Prop: Val)
-                        std::string prop = payload.substr(0, pos_colon);
-                        std::string val = payload.substr(pos_colon + 2);
-                        while(!val.empty() && isspace(val.back())) val.pop_back();
-
-                        if (prop == "Name" || prop == "Alias") dev.nome = val;
-                        else if (prop == "Icon") dev.icon = val;
-                        else if (prop == "Connected") dev.conectado = (val == "yes");
-                        else if (prop == "Paired") dev.pareado = (val == "yes");
-                        else if (prop == "Trusted") dev.confiavel = (val == "yes");
-                    }
-                }
-                continue;
-            }
-        }
-
-        // 2. Linha de propriedade isolada (comum no output do 'info' ou atualizações de scan)
-        if (!ultimo_mac_context.empty()) {
-            auto &dev = mapa[ultimo_mac_context];
-            size_t pos_colon = linha.find(": ");
-            if (pos_colon != std::string::npos) {
-                std::string prop_part = linha.substr(0, pos_colon);
-                size_t start = prop_part.find_first_not_of(" \t");
-                if (start != std::string::npos) {
-                    std::string prop = prop_part.substr(start);
-                    std::string val = linha.substr(pos_colon + 2);
-                    while(!val.empty() && isspace(val.back())) val.pop_back();
-
-                    if (prop == "Name" || prop == "Alias") {
-                        if (!val.empty()) dev.nome = val;
-                    }
-                    else if (prop == "Icon") dev.icon = val;
-                    else if (prop == "Connected") dev.conectado = (val == "yes");
-                    else if (prop == "Paired") dev.pareado = (val == "yes");
-                    else if (prop == "Trusted") dev.confiavel = (val == "yes");
-                }
-            }
-        }
-    }
-}
-
-bluetooth_adapter_status obter_status_bluetooth() {
-    bluetooth_adapter_status status;
-
-    bluetooth_result show_result = executar_bluetoothctl("show");
-    status.show_output = show_result.mensagem;
-    if (!show_result.ok ||
-        status.show_output.find("No default controller available") != std::string::npos) {
-        status.controller_disponivel = false;
+wifi_adapter_status obter_status_wifi() {
+    wifi_adapter_status status;
+    command_result result = exec_command_args_result({"nmcli", "radio", "wifi"});
+    status.output = result.mensagem;
+    if (!result.ok) {
+        status.disponivel = false;
+        return status;
     }
 
-    if (status.show_output.find("Powered: yes") != std::string::npos) {
-        status.powered = true;
-    }
-
-    try {
-        status.rfkill_output = exec_command("rfkill list bluetooth 2>/dev/null");
-        status.soft_blocked = status.rfkill_output.find("Soft blocked: yes") != std::string::npos;
-        status.hard_blocked = status.rfkill_output.find("Hard blocked: yes") != std::string::npos;
-    } catch (...) {
-    }
-
+    std::string output = result.stdout_output;
+    output.erase(std::remove(output.begin(), output.end(), '\n'), output.end());
+    output.erase(std::remove(output.begin(), output.end(), '\r'), output.end());
+    status.enabled = (output == "enabled");
     return status;
 }
 
-bool obter_estado_bluetooth() {
-    return obter_status_bluetooth().powered;
+wifi_result definir_estado_wifi_result(bool ligar) {
+    command_result result = exec_command_args_result(
+        {"nmcli", "radio", "wifi", ligar ? "on" : "off"}
+    );
+    wifi_result traduzido = traduzir_wifi_result(
+        result,
+        "wifi_toggle_failed",
+        ligar ? "Falha ao ativar o Wi-Fi." : "Falha ao desativar o Wi-Fi."
+    );
+    if (!traduzido.ok) {
+        return traduzido;
+    }
+
+    wifi_adapter_status status = obter_status_wifi();
+    if (status.disponivel && status.enabled == ligar) {
+        return make_wifi_success(ligar ? "Wi-Fi ativado." : "Wi-Fi desativado.", result.mensagem);
+    }
+    return make_wifi_error(
+        "wifi_state_mismatch",
+        "O estado do Wi-Fi nao refletiu a solicitacao.",
+        status.output
+    );
 }
 
-bool definir_estado_bt(bool ligar) {
-    std::string acao = ligar ? "on" : "off";
-
-    if (ligar) {
-        system("rfkill unblock bluetooth > /dev/null 2>&1");
-    }
-
-    bluetooth_result resultado = executar_bluetoothctl("power " + acao);
-    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
-        std::cerr << "Falha ao definir Bluetooth para: " << acao
-                  << " | bluetoothctl: " << resultado.mensagem << "\n";
-        return false;
-    }
-
-    bluetooth_adapter_status status_final;
-    bool refletiu_estado = false;
-    for (int tentativa = 0; tentativa < 10; ++tentativa) {
-        status_final = obter_status_bluetooth();
-        if (status_final.powered == ligar) {
-            refletiu_estado = true;
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (!refletiu_estado) {
-        std::cerr << "Bluetooth nao refletiu o estado solicitado: " << acao
-                  << " | status: " << resumir_bluetooth_status(status_final)
-                  << " | bluetoothctl: " << resultado.mensagem << "\n";
-        return false;
-    }
-
-    std::cout << "Bluetooth definido para: " << acao << "\n";
-    return true;
+void conectar_wifi(const string &ssid, const string &senha) {
+    (void)conectar_wifi_result(ssid, senha);
 }
 
-std::vector<device_bt> listar_dispositivos_bluetooth_conhecidos() {
-    std::unordered_map<std::string, device_bt> mapa;
-    bluetooth_result resultado = executar_bluetoothctl("devices");
-    if (!resultado.ok) {
-        return {};
+wifi_result conectar_wifi_result(const string &ssid, const string &senha) {
+    std::vector<std::string> args = {"nmcli", "device", "wifi", "connect", ssid};
+    if (!senha.empty()) {
+        args.push_back("password");
+        args.push_back(senha);
     }
-
-    std::string saida = resultado.mensagem;
-    std::stringstream ss(saida);
-    std::string ctx_dummy = "";
-    parsing_bluetooth_stream(ss, mapa, ctx_dummy);
-
-    for (auto &pair : mapa) {
-        device_bt enriquecido = consultar_dispositivo_bluetooth(pair.first);
-        mesclar_dispositivo_bluetooth(pair.second, enriquecido);
-        if (pair.second.nome.empty()) pair.second.nome = "Dispositivo " + pair.first;
-    }
-
-    std::vector<device_bt> lista;
-    for (auto &[_, d] : mapa) {
-        lista.push_back(d);
-    }
-    return lista;
+    command_result result = exec_command_args_result(args);
+    return traduzir_wifi_result(result, "wifi_connect_failed", "Falha ao conectar na rede Wi-Fi.");
 }
 
-std::vector<device_bt> listar_dispositivos_bluetooth_pareados() {
-    std::vector<device_bt> conhecidos = listar_dispositivos_bluetooth_conhecidos();
-    std::vector<device_bt> pareados;
-    for (const auto &dispositivo : conhecidos) {
-        if (dispositivo.pareado) {
-            pareados.push_back(dispositivo);
-        }
-    }
-    return pareados;
+void desconectar_wifi(const string &id) {
+    (void)desconectar_wifi_result(id);
 }
 
-std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
-    std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
-    std::unordered_map<std::string, device_bt> mapa;
-    int master_fd;
-    pid_t pid = forkpty(&master_fd, nullptr, nullptr, nullptr);
-    if (pid < 0) {
-        return {};
-    }
-
-    if (pid == 0) {
-        setbuf(stdout, NULL);
-        execlp("bluetoothctl", "bluetoothctl", nullptr);
-        _exit(1);
-    }
-
-    system("rfkill unblock bluetooth > /dev/null 2>&1");
-    write(master_fd, "power on\n", 9);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    write(master_fd, "agent on\ndefault-agent\n", 24);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    write(master_fd, "scan on\n", 8);
-
-    auto inicio = std::chrono::steady_clock::now();
-    char buffer[1024];
-    std::string buffer_acumulado;
-    std::string ultimo_mac_ctx = "";
-
-    while (true) {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(master_fd, &fds);
-        struct timeval tv{1, 0};
-        
-        int ret = select(master_fd + 1, &fds, nullptr, nullptr, &tv);
-        if (ret > 0 && FD_ISSET(master_fd, &fds)) {
-            int n = read(master_fd, buffer, sizeof(buffer) - 1);
-            if (n > 0) {
-                buffer[n] = '\0';
-                buffer_acumulado += buffer;
-
-                size_t pos;
-                while ((pos = buffer_acumulado.find('\n')) != std::string::npos) {
-                    std::string linha_completa = buffer_acumulado.substr(0, pos);
-                    std::stringstream ss(linha_completa);
-                    parsing_bluetooth_stream(ss, mapa, ultimo_mac_ctx);
-                    buffer_acumulado.erase(0, pos + 1);
-                }
-            }
-        }
-
-        auto agora = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(agora - inicio).count() >= segundos) break;
-    }
-
-    write(master_fd, "scan off\nquit\n", 14);
-    close(master_fd);
-    waitpid(pid, nullptr, 0);
-
-    std::vector<device_bt> lista;
-    for (auto &[_, d] : mapa) lista.push_back(d);
-    return lista;
-}
-
-bool conectar_bluetooth(const string &mac) {
-    bluetooth_result resultado = executar_bluetoothctl("connect " + mac);
-    if (resultado.ok && bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
-        device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
-        if (dispositivo.conectado) {
-            cout << "Conectado com sucesso: " << mac << endl;
-            return true;
-        }
-    }
-    cerr << "Falha ao conectar: " << mac << endl;
-    return false;
-}
-
-bool desconectar_bluetooth(const string &mac) {
-    bluetooth_result resultado = executar_bluetoothctl("disconnect " + mac);
-    if (resultado.ok && bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
-        device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
-        if (!dispositivo.conectado) {
-            cout << "Desconectado com sucesso: " << mac << endl;
-            return true;
-        }
-    }
-    cerr << "Falha ao desconectar: " << mac << endl;
-    return false;
-}
-
-bluetooth_result parear_bluetooth(const std::string &mac) {
-    system("rfkill unblock bluetooth > /dev/null 2>&1");
-    bluetooth_result resultado = executar_bluetoothctl("pair " + mac);
-    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
-        resultado.ok = false;
-        if (resultado.mensagem.empty()) resultado.mensagem = "Falha ao parear dispositivo.";
-        return resultado;
-    }
-
-    device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
-    if (!dispositivo.pareado) {
-        return {false, "Comando executado, mas o dispositivo nao apareceu como pareado."};
-    }
-    return {true, "Dispositivo pareado com sucesso."};
-}
-
-bluetooth_result confiar_bluetooth(const std::string &mac) {
-    bluetooth_result resultado = executar_bluetoothctl("trust " + mac);
-    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
-        resultado.ok = false;
-        if (resultado.mensagem.empty()) resultado.mensagem = "Falha ao confiar no dispositivo.";
-        return resultado;
-    }
-
-    device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
-    if (!dispositivo.confiavel) {
-        return {false, "Comando executado, mas o dispositivo nao apareceu como confiavel."};
-    }
-    return {true, "Dispositivo marcado como confiavel."};
-}
-
-bluetooth_result remover_bluetooth(const std::string &mac) {
-    bluetooth_result resultado = executar_bluetoothctl("remove " + mac);
-    if (!resultado.ok || !bluetoothctl_saida_indica_sucesso(resultado.mensagem)) {
-        resultado.ok = false;
-        if (resultado.mensagem.empty()) resultado.mensagem = "Falha ao remover dispositivo.";
-        return resultado;
-    }
-
-    device_bt dispositivo = consultar_dispositivo_bluetooth(mac);
-    if (dispositivo.pareado || dispositivo.confiavel || !dispositivo.nome.empty()) {
-        return {false, "Comando executado, mas o dispositivo ainda aparece como conhecido."};
-    }
-    return {true, "Dispositivo removido com sucesso."};
-}
-
-void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos) {
-    if (dispositivos.empty()) {
-        std::cout << "Nenhum dispositivo encontrado.\n";
-        return;
-    }
-    int i = 1;
-    for (const auto &d : dispositivos) {
-        std::cout << i++ << ") " << d.nome << " - " << d.mac << '\n';
-    }
-}
-
-void gerenciar_bluetooth() {
-    std::cout << "Carregando lista de dispositivos...\n";
-    std::vector<device_bt> dispositivos = listar_dispositivos_bluetooth_pareados();
-
-    if (dispositivos.empty()) {
-        std::cout << "Nenhum dispositivo pareado encontrado.\n";
-        return;
-    }
-
-    std::cout << "\n=== Dispositivos Pareados ===\n";
-    for (size_t i = 0; i < dispositivos.size(); ++i) {
-        std::cout << "[" << i + 1 << "] " << dispositivos[i].nome << " \t(" << dispositivos[i].mac << ")\n";
-    }
-    std::cout << "=============================\n";
-    std::cout << "Escolha um dispositivo (0 para sair): ";
-    
-    int escolha;
-    std::cin >> escolha;
-
-    if (std::cin.fail() || escolha <= 0 || escolha > static_cast<int>(dispositivos.size())) {
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-
-    const auto &device = dispositivos[escolha - 1];
-    std::cout << "\nDispositivo selecionado: " << device.nome << "\n";
-    std::cout << "[1] Conectar\n[2] Desconectar\nOpção: ";
-
-    int acao;
-    std::cin >> acao;
-    if (acao == 1) conectar_bluetooth(device.mac);
-    else if (acao == 2) desconectar_bluetooth(device.mac);
+wifi_result desconectar_wifi_result(const string &id) {
+    command_result result = exec_command_args_result({"nmcli", "connection", "down", "id", id});
+    return traduzir_wifi_result(result, "wifi_disconnect_failed", "Falha ao desconectar a rede Wi-Fi.");
 }
