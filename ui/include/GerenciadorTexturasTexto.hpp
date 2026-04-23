@@ -36,6 +36,7 @@ private:
      * @brief Identificador único para uma textura de texto no cache.
      */
     struct ChaveTexto {
+        const SDL_Renderer* renderer; /**< Renderer dono da textura em cache. */
         std::string texto;       /**< O conteúdo da string. */
         std::string caminhoFonte; /**< O arquivo de fonte utilizado. */
         int tamanho;             /**< O tamanho da fonte em pontos. */
@@ -45,8 +46,8 @@ private:
          * @brief Operador de comparação para permitir o uso em std::map.
          */
         bool operator<(const ChaveTexto& outra) const {
-            return std::tie(texto, caminhoFonte, tamanho, cor.r, cor.g, cor.b, cor.a) <
-                   std::tie(outra.texto, outra.caminhoFonte, outra.tamanho, outra.cor.r, outra.cor.g, outra.cor.b, outra.cor.a);
+            return std::tie(renderer, texto, caminhoFonte, tamanho, cor.r, cor.g, cor.b, cor.a) <
+                   std::tie(outra.renderer, outra.texto, outra.caminhoFonte, outra.tamanho, outra.cor.r, outra.cor.g, outra.cor.b, outra.cor.a);
         }
     };
 

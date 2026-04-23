@@ -50,7 +50,7 @@ SDL_Texture* GerenciadorTexturasTexto::obterTextura(SDL_Renderer* renderer, TTF_
                                                   const std::string& caminhoFonte, int tamanho, SDL_Color cor) {
     // 1. Criar a chave de busca
     // Consolida os metadados do texto em uma estrutura para busca única no container de cache.
-    ChaveTexto chave = {texto, caminhoFonte, tamanho, cor};
+    ChaveTexto chave = {renderer, texto, caminhoFonte, tamanho, cor};
 
     // 2. Verificar se já existe no cache
     // Realiza a busca no mapa interno para evitar operações de renderização desnecessárias.
