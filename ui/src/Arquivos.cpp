@@ -8,6 +8,7 @@
  */
 
 #include "Arquivos.hpp"
+#include "Utils.hpp"
 #include <fstream>   
 #include <sstream>   
 
@@ -26,7 +27,7 @@ using namespace std;
  */
 bool Arquivos::arquivoExiste(const string& caminho)
 {
-    ifstream arquivo(caminho);
+    ifstream arquivo(caminho_absoluto_projeto(caminho));
     return arquivo.good();
 }
 
@@ -66,7 +67,7 @@ bool Arquivos::arquivoExiste(const string& caminho)
  */
 bool Arquivos::salvarJogos(const string& caminho, const vector<Jogo>& jogos)
 {
-    ofstream arquivo(caminho);
+    ofstream arquivo(caminho_absoluto_projeto(caminho));
     if (!arquivo.is_open()) return false;
 
     for (const auto& jogo : jogos)
@@ -125,7 +126,7 @@ bool Arquivos::salvarJogos(const string& caminho, const vector<Jogo>& jogos)
  */
 bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciador)
 {
-    ifstream arquivo(caminho);
+    ifstream arquivo(caminho_absoluto_projeto(caminho));
     if (!arquivo.is_open()) return false;
 
     string linha;
@@ -174,9 +175,13 @@ bool Arquivos::carregarJogos(const string& caminho, GerenciadorJogos& gerenciado
                     string captura_path;
                     while (getline(ss, captura_path, ';'))
                     {
-                        capturas.push_back(captura_path);
+                        capturas.push_back(caminho_absoluto_projeto(captura_path));
                     }
                 }
+
+                capaPrincipal = caminho_absoluto_projeto(capaPrincipal);
+                fundoDestaque = caminho_absoluto_projeto(fundoDestaque);
+                capaJanela = caminho_absoluto_projeto(capaJanela);
                 
                 // Constrói e adiciona o jogo completo ao gerenciador
                 gerenciador.adicionarJogo(Jogo(nome, 
