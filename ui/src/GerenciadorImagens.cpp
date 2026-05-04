@@ -8,6 +8,7 @@
  */
 
 #include "GerenciadorImagens.hpp"
+#include "Utils.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h> 
 
@@ -51,16 +52,18 @@ SDL_Texture* GerenciadorImagens::carregar(SDL_Renderer* renderer, const string& 
         return nullptr;
     }
 
+    const std::string caminhoResolvido = caminho_absoluto_projeto(caminho);
+
     // Passo 1: Verificar se a imagem já foi carregada anteriormente
-    auto it = cache.find(caminho);
+    auto it = cache.find(caminhoResolvido);
     if (it != cache.end()) {
         return it->second; // Retorna a textura existente no cache
     }
 
     // Passo 2: Se não estiver no cache, carregar do disco
-    SDL_Texture* textura = carregarDoDisco(renderer, caminho);
+    SDL_Texture* textura = carregarDoDisco(renderer, caminhoResolvido);
     if (textura) {
-        cache[caminho] = textura; // Registra no cache para otimizar chamadas futuras
+        cache[caminhoResolvido] = textura; // Registra no cache para otimizar chamadas futuras
     }
 
     return textura;
