@@ -15,6 +15,7 @@
  */
 
 #include "GerenciadorAudio.hpp"
+#include "Utils.hpp"
 
 /**
  * @brief Instância Global do Gerenciador de Áudio (Singleton).
@@ -70,10 +71,15 @@ GerenciadorAudio::GerenciadorAudio() : musicaAtual(nullptr) {
  * quando a instância global gerAudio é destruída.
  */
 GerenciadorAudio::~GerenciadorAudio() {
+    liberarTudo();
+}
+
+void GerenciadorAudio::liberarTudo() {
     // Libera todos os chunks de efeitos sonoros do cache
     for (auto& par : cacheSfx) {
         if (par.second) {
             Mix_FreeChunk(par.second);
+            par.second = nullptr;
         }
     }
     cacheSfx.clear();
@@ -109,7 +115,7 @@ GerenciadorAudio::~GerenciadorAudio() {
  */
 void GerenciadorAudio::tocarSom(const std::string& nomeArquivo) {
     // Constrói o caminho completo do arquivo de som
-    std::string caminho = "assets/sounds/" + nomeArquivo;
+    std::string caminho = caminho_absoluto_projeto("assets/sounds/" + nomeArquivo);
     
     // Tenta encontrar o som no cache usando o nome como chave
     if (cacheSfx.find(nomeArquivo) == cacheSfx.end()) {
@@ -187,7 +193,7 @@ Mix_Chunk* GerenciadorAudio::carregarSfx(const std::string& path) {
  */
 void GerenciadorAudio::tocarMusica(const std::string& nomeArquivo, bool loop) {
     // Constrói o caminho completo do arquivo de música
-    std::string caminho = "assets/music/" + nomeArquivo;
+    std::string caminho = caminho_absoluto_projeto("assets/music/" + nomeArquivo);
 
     // Se já existe música carregada, limpa antes de carregar nova
     if (musicaAtual) {
