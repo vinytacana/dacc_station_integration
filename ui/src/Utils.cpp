@@ -12,6 +12,7 @@
 #include "GerenciadorTemas.hpp"
 #include "GerenciadorTexturasTexto.hpp"
 #include <SDL2/SDL_ttf.h>
+#include <filesystem>
 #include <iostream>
 
 namespace MeuProjeto {
@@ -30,6 +31,47 @@ std::string ConfigFontes::FONTE_NEGRITO = "assets/fonts/Garet-Heavy.ttf";
 
 /// Referência para caminho da fonte padrão (compatibilidade legada)
 const std::string& CAMINHO_FONTE = ConfigFontes::FONTE_NORMAL;
+
+std::string obter_raiz_projeto() {
+    namespace fs = std::filesystem;
+
+    static const std::string raiz = []() {
+        fs::path executavel = fs::canonical(fs::read_symlink("/proc/self/exe"));
+        fs::path diretorioExecutavel = executavel.parent_path();
+        fs::path raizProjeto = diretorioExecutavel.filename() == "bin"
+            ? diretorioExecutavel.parent_path()
+            : diretorioExecutavel.parent_path();
+        return (raizProjeto.lexically_normal().string() + "/");
+    }();
+
+    return raiz;
+}
+
+std::string caminho_absoluto_projeto(const std::string& caminho) {
+    namespace fs = std::filesystem;
+
+    if (caminho.empty()) {
+        return caminho;
+    }
+
+    fs::path path(caminho);
+    if (path.is_absolute()) {
+        return fs::weakly_canonical(path).string();
+    }
+
+    fs::path raiz(obter_raiz_projeto());
+    fs::path direto = raiz / path;
+    if (fs::exists(direto)) {
+        return fs::weakly_canonical(direto).string();
+    }
+
+    fs::path assetUi = raiz / "ui" / path;
+    if (fs::exists(assetUi)) {
+        return fs::weakly_canonical(assetUi).string();
+    }
+
+    return direto.lexically_normal().string();
+}
 
 /**
  * @brief Retorna o caminho da fonte apropriada baseado no tipo solicitado.
