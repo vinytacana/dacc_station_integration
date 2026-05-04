@@ -522,6 +522,25 @@ wifi_adapter_status obter_status_wifi() {
     return status;
 }
 
+bool wifi_conectado() {
+    command_result result = exec_command_args_result(
+        {"nmcli", "-t", "-f", "TYPE,STATE", "device", "status"}
+    );
+    if (!result.ok) {
+        return false;
+    }
+
+    std::stringstream ss(result.stdout_output);
+    std::string linha;
+    while (std::getline(ss, linha)) {
+        auto campos = split_nmcli_escaped_fields(linha);
+        if (campos.size() >= 2 && campos[0] == "wifi" && campos[1] == "connected") {
+            return true;
+        }
+    }
+    return false;
+}
+
 wifi_result definir_estado_wifi_result(bool ligar) {
     command_result result = exec_command_args_result(
         {"nmcli", "radio", "wifi", ligar ? "on" : "off"}
