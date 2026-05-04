@@ -43,20 +43,8 @@ fi
 sleep 2
 
 echo "[3/3] Iniciando Interface Gráfica (UI)..."
-# A UI espera ser executada do diretório 'ui' para achar assets relativos,
-# ou ajustamos o código da UI. O padrão atual do projeto parece ser rodar da raiz 
-# ou rodar dentro de ui. O script original fazia 'cd ui'. Vamos manter o comportamento.
-
 if [ -f "./bin/dacc-ui" ]; then
-    # A UI atualmente procura assets em "assets/...", se rodarmos do bin ou da raiz,
-    # precisamos garantir que ela ache. 
-    # O código antigo fazia 'cd ui' e chamava '../bin/dacc-ui'.
-    
-    cd ui
-    ../bin/dacc-ui
-    
-    # Ao sair da UI...
-    cd ..
+    ./bin/dacc-ui
 else
     echo "    ERRO: Executável da UI não encontrado!"
     kill $PID_PM
