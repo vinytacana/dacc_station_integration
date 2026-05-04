@@ -36,17 +36,19 @@ namespace MeuProjeto {
  */
 struct RedeInfo {
     std::string nome;      /**< Nome (SSID) da rede Wi-Fi. */
-    bool salva;            /**< Indica se a rede está salva no sistema. */
+    bool conectada;        /**< Indica se a rede está conectada no momento. */
+    bool requerSenha;      /**< Indica se a rede anuncia algum tipo de segurança. */
     int intensidade;       /**< Intensidade do sinal (0-100). */
     
     /**
      * @brief Construtor da estrutura RedeInfo.
      * @param n Nome da rede.
-     * @param s Se a rede está salva.
+     * @param c Se a rede está conectada.
+     * @param r Se a rede requer senha.
      * @param i Intensidade do sinal (padrão: 100).
      */
-    RedeInfo(const std::string& n, bool s, int i = 100) 
-        : nome(n), salva(s), intensidade(i) {}
+    RedeInfo(const std::string& n, bool c, bool r, int i = 100)
+        : nome(n), conectada(c), requerSenha(r), intensidade(i) {}
 };
 
 /**
