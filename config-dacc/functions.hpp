@@ -57,6 +57,17 @@ struct bluetooth_state_snapshot {
     std::vector<device_bt> pareados;
 };
 
+struct bluetooth_ui_snapshot {
+    bluetooth_adapter_status adapter;
+    std::vector<device_bt> desconhecidos_conectados;
+    std::vector<device_bt> pareados;
+    std::vector<device_bt> escaneados_filtrados;
+    bool vindo_do_cache = false;
+    std::string erro_codigo;
+    std::string erro_mensagem;
+    std::string erro_detalhes;
+};
+
 struct command_result {
     bool ok = false;
     int exit_code = -1;
@@ -134,6 +145,7 @@ void diminuir_brilho();
 void listar_wifi();
 std::vector<wifi_network> listar_wifi_parsed();
 wifi_adapter_status obter_status_wifi();
+bool wifi_conectado();
 wifi_result definir_estado_wifi_result(bool ligar);
 void conectar_wifi(const std::string &ssid, const std::string &senha);
 wifi_result conectar_wifi_result(const std::string &ssid, const std::string &senha);
@@ -144,6 +156,8 @@ wifi_result desconectar_wifi_result(const std::string &id);
 bool obter_estado_bluetooth();
 bluetooth_adapter_status obter_status_bluetooth();
 bluetooth_state_snapshot obter_estado_bluetooth_completo();
+bluetooth_ui_snapshot obter_estado_bluetooth_ui();
+bluetooth_ui_snapshot obter_estado_bluetooth_ui_com_scan(int segundos = 10);
 bool definir_estado_bt(bool ligar);
 bluetooth_result definir_estado_bt_result(bool ligar);
 std::vector<device_bt> listar_dispositivos_bluetooth_conhecidos();
@@ -151,6 +165,7 @@ std::vector<device_bt> listar_dispositivos_bluetooth_pareados();
 std::vector<device_bt> scan_dispositivos_bluetooth(int segundos = 10);
 bluetooth_result parear_bluetooth(const std::string &mac);
 bluetooth_result confiar_bluetooth(const std::string &mac);
+bluetooth_result parear_confiar_conectar_bluetooth(const std::string &mac);
 bluetooth_result conectar_bluetooth_result(const std::string &mac);
 bool conectar_bluetooth(const std::string &mac);
 bluetooth_result desconectar_bluetooth_result(const std::string &mac);
