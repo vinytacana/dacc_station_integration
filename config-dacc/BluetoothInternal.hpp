@@ -26,6 +26,13 @@ bluetooth_result executar_bluetoothctl(
     const std::string& comando,
     int timeout_ms = kBluetoothctlTimeoutMs
 );
+bluetooth_result executar_bluetoothctl_ate(
+    const std::vector<std::string>& comandos,
+    const std::vector<std::string>& marcadores_sucesso,
+    const std::vector<std::string>& marcadores_falha,
+    const std::vector<std::string>& comandos_finalizacao = {},
+    int timeout_ms = kBluetoothctlTimeoutMs
+);
 bool bluetoothctl_saida_indica_sucesso(const std::string& saida);
 std::string resumir_bluetooth_status(const bluetooth_adapter_status& status);
 device_bt consultar_dispositivo_bluetooth(const std::string& mac);
