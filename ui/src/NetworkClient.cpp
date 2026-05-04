@@ -7,6 +7,7 @@
  */
 
 #include "NetworkClient.hpp"
+#include "Utils.hpp"
 #include <cstring>
 #include <cerrno>
 #include "LogManager.hpp"
@@ -105,7 +106,7 @@ void NetworkClient::sendStartGame(const std::string& id, const std::string& path
     json j;
     j["action"] = "start";
     j["id"] = id;
-    j["path"] = path;
+    j["path"] = MeuProjeto::caminho_absoluto_projeto(path);
 
     /// Serializa para string e envia via socket
     std::string msg = j.dump();
