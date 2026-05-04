@@ -32,6 +32,7 @@ public:
     void pausarMusica();
     void retomarMusica();
     void pararMusica();
+    void liberarTudo();
 
     // Controle de volume (0 a 128)
     void setVolumeSFX(int volume);
