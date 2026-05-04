@@ -114,6 +114,16 @@ void desenharTexto(SDL_Renderer* renderer, const std::string& texto, int x, int 
 void limparCacheTexto(); 
 
 /**
+ * @brief Retorna o caminho absoluto da raiz do projeto em tempo de execução.
+ */
+std::string obter_raiz_projeto();
+
+/**
+ * @brief Resolve um caminho relativo ao projeto para caminho absoluto.
+ */
+std::string caminho_absoluto_projeto(const std::string& caminho);
+
+/**
  * @brief Referência externa para um caminho de fonte padrão.
  * 
  * Pode ser usada como fallback caso as configurações de ConfigFontes não sejam preenchidas.
