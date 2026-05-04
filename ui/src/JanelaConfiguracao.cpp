@@ -178,6 +178,12 @@ void JanelaConfiguracao::fechar() {
     if (renderer) {
         limparCacheTexto();
     }
+
+    janelaRede.reset();
+    janelaAudioVideo.reset();
+    janelaBluetooth.reset();
+    janelaInfosSistema.reset();
+    liberarIconeBateria();
     
     if (renderer) { SDL_DestroyRenderer(renderer); renderer = nullptr; }
     if (janela) { SDL_DestroyWindow(janela); janela = nullptr; }
