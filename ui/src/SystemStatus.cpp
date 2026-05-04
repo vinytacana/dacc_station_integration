@@ -8,6 +8,7 @@
  */
 
 #include "SystemStatus.hpp"
+#include "functions.hpp"
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -21,14 +22,9 @@ using namespace MeuProjeto;
  * Inicializa o sistema de monitoramento com valores padrão e realiza
  * a primeira atualização dos dados do sistema.
  * 
- * O cache é preenchido com valores iniciais:
- * - Horário: "--:--" (placeholder até primeira atualização)
- * - WiFi: true (conectado)
- * - Bateria: 100% (carga completa)
  */
 SystemStatus::SystemStatus() : lastUpdate(0) {
-    // Valor inicial
-    cache = {"--:--", true, 100};
+    cache = {"--:--", false, -1};
     update();
 }
 
@@ -38,13 +34,6 @@ SystemStatus::SystemStatus() : lastUpdate(0) {
  * Implementa um sistema de throttling que atualiza os dados apenas a cada
  * 1 segundo (1000ms) para evitar processamento desnecessário e melhorar performance.
  * 
- * Informações atualizadas:
- * - **Relógio**: Horário local no formato HH:MM (24 horas)
- * - **WiFi**: Status de conexão (mock, sempre true)
- * - **Bateria**: Nível de carga percentual (mock, fixo em 85%)
- * 
- * @note Atualmente WiFi e bateria usam valores simulados (mock).
- * @todo Implementar leitura real de /sys/class/power_supply/ e /sys/class/net/
  */
 void SystemStatus::update() {
     /// Obtém o tempo atual em milissegundos desde inicialização da SDL
@@ -74,14 +63,13 @@ void SystemStatus::update() {
     ss << std::put_time(nowTm, "%H:%M");
     cache.currentTime = ss.str();
 
-    /**
-     * Mock de dados de hardware que serão implementados futuramente.
-     * Em produção, estes valores devem ser lidos de:
-     * - WiFi: /sys/class/net/<interface>/operstate
-     * - Bateria: /sys/class/power_supply/BAT0/capacity
-     */
-    cache.wifiConnected = true; 
-    cache.batteryLevel = 85; 
+    cache.wifiConnected = ::wifi_conectado();
+
+    int battery = ::obter_bateria();
+    if (battery < 0) {
+        SDL_GetPowerInfo(nullptr, &battery);
+    }
+    cache.batteryLevel = battery;
 }
 
 /**
