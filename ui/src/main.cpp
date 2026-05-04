@@ -26,6 +26,8 @@
 #include <string>
 #include <ctime>
 #include <fstream>
+#include <algorithm>
+#include <filesystem>
 
 #include "GerenciarSDL.hpp"
 #include "GerenciarInputs.hpp"
@@ -34,12 +36,14 @@
 #include "JanelaConfiguracao.hpp" 
 #include "GerenciadorJogos.hpp"
 #include "GerenciadorImagens.hpp"
+#include "GerenciadorAudio.hpp"
 #include "Arquivos.hpp"
 #include "GerenciadorTemas.hpp"
 #include "ConfigLayout.hpp"
 #include "NetworkClient.hpp"
 #include "LogManager.hpp"
 #include "SystemStatus.hpp"
+#include "Utils.hpp"
 #include "json.hpp"
 
 using namespace std;
@@ -102,14 +106,16 @@ const int ALTURA_JANELA = ConfigLayout::ALTURA_NATIVA;
 void carregarJogosDoDisco() {
     cout << "Carregando biblioteca de jogos..." << endl;
     
-    /**
-     * Lista de caminhos relativos para os arquivos de dados dos jogos.
-     * Cada arquivo representa um jogo individual no catálogo.
-     */
-    vector<string> arquivos = {
-        "assets/data/jogo1.txt", "assets/data/jogo2.txt", "assets/data/jogo3.txt",
-        "assets/data/jogo4.txt", "assets/data/jogo5.txt"
-    };
+    vector<string> arquivos;
+    std::filesystem::path diretorioDados = caminho_absoluto_projeto("assets/data");
+    if (std::filesystem::exists(diretorioDados)) {
+        for (const auto& entrada : std::filesystem::directory_iterator(diretorioDados)) {
+            if (entrada.is_regular_file() && entrada.path().extension() == ".txt") {
+                arquivos.push_back(entrada.path().string());
+            }
+        }
+    }
+    std::sort(arquivos.begin(), arquivos.end());
     
     /// Itera sobre cada arquivo e tenta carregar os dados
     for (const auto& arquivo : arquivos) {
@@ -168,13 +174,18 @@ int main(int argc, char* argv[]) {
      */
     srand(static_cast<unsigned int>(time(NULL)));
 
+    ConfigFontes::configurarFontes(
+        caminho_absoluto_projeto("assets/fonts/Garet-Book.ttf"),
+        caminho_absoluto_projeto("assets/fonts/Garet-Heavy.ttf")
+    );
+
     /**
      * Inicialização do sistema de logging integrado.
      * Tenta carregar configuração do Process Manager do arquivo JSON,
      * caso contrário usa path padrão do socket Unix.
      */
     try {
-        std::ifstream config_file("../process-manager/config.json");
+        std::ifstream config_file(caminho_absoluto_projeto("process-manager/config.json"));
         std::string socket_path = "/tmp/dacc-station.sock"; ///< Path padrão
         
         if (config_file.is_open()) {
@@ -207,7 +218,7 @@ int main(int argc, char* argv[]) {
      * Reproduz vídeo de introdução usando MPV externo.
      * Bloqueia execução até término ou fechamento manual pelo usuário.
      */
-    GerenciarSDL::tocarVideoIntro("ui/assets/images/TelaInicalDACCC.mp4");
+    GerenciarSDL::tocarVideoIntro(caminho_absoluto_projeto("ui/assets/images/TelaInicalDACCC.mp4"));
 
     /**
      * Verifica presença física de controles/gamepads conectados.
@@ -466,6 +477,7 @@ int main(int argc, char* argv[]) {
      */
     gerImg.liberarTudo();
     MeuProjeto::limparCacheTexto();
+    gerAudio.liberarTudo();
     
     /**
      * Destrói janela, renderizador e finaliza todos os subsistemas SDL.
