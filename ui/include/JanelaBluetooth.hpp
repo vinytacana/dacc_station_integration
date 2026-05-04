@@ -67,6 +67,18 @@ struct DispositivoBluetooth {
         : nome(n), tipo(t), pareado(p), conectado(c), endereco(e) {}
 };
 
+enum class SecaoBluetooth {
+    DESCONHECIDO_CONECTADO,
+    PAREADO,
+    ESCANEADO
+};
+
+struct ItemBluetoothFocavel {
+    SecaoBluetooth secao;
+    int indice = -1;
+    SDL_Rect area{0, 0, 0, 0};
+};
+
 /**
  * @class JanelaBluetooth
  * @brief Gerencia a interface de configurações Bluetooth.
@@ -136,8 +148,9 @@ private:
     
     // LISTAS DE DISPOSITIVOS
     
+    std::vector<DispositivoBluetooth> dispositivosDesconhecidosConectados; /**< Conectados sem pareamento definitivo. */
     std::vector<DispositivoBluetooth> dispositivosPareados;   /**< Dispositivos pareados. */
-    std::vector<DispositivoBluetooth> dispositivosDisponiveis; /**< Dispositivos disponíveis. */
+    std::vector<DispositivoBluetooth> dispositivosEscaneados; /**< Dispositivos novos detectados no scan. */
     
     // BOTÕES INTERATIVOS
     
@@ -157,9 +170,9 @@ private:
     // CONTROLE DE NAVEGAÇÃO
     
     int indiceFocado = -1;                  /**< Índice do elemento focado (-1 = toggle). */
-    int scrollOffsetPareados = 0;           /**< Offset de scroll para dispositivos pareados. */
-    int scrollOffsetDisponiveis = 0;        /**< Offset de scroll para dispositivos disponíveis. */
-    int maxDispositivosVisiveis = 3;        /**< Máximo de dispositivos visíveis por lista. */
+    int scrollY = 0;                        /**< Scroll vertical único da lista de dispositivos. */
+    int alturaConteudoLista = 0;            /**< Altura total do conteúdo rolável. */
+    std::vector<ItemBluetoothFocavel> itensFocaveis; /**< Mapa dos cards focáveis desenhados. */
     
     // Controle de Input
     Uint32 ultimoInputAnalogico = 0;        /**< Timestamp do último input analógico. */
@@ -206,13 +219,10 @@ private:
      * @brief Renderiza a lista de dispositivos pareados.
      * @param renderer Renderizador SDL.
      */
-    void desenharDispositivosPareados(SDL_Renderer* renderer);
-
-    /**
-     * @brief Renderiza a lista de dispositivos disponíveis.
-     * @param renderer Renderizador SDL.
-     */
-    void desenharDispositivosDisponiveis(SDL_Renderer* renderer);
+    void desenharListaDispositivos(SDL_Renderer* renderer);
+    int desenharSecao(SDL_Renderer* renderer, const std::string& titulo, SecaoBluetooth secao,
+                      const std::vector<DispositivoBluetooth>& dispositivos, int yAtual,
+                      const std::string& mensagemVazia);
 
     /**
      * @brief Renderiza um único dispositivo da lista.
@@ -224,7 +234,7 @@ private:
      */
     void desenharDispositivo(SDL_Renderer* renderer, 
                              const DispositivoBluetooth& dispositivo,
-                             int x, int y, bool focado);
+                             int x, int y, bool focado, SecaoBluetooth secao);
 
     /**
      * @brief Desenha a mensagem de escaneamento com animação.
@@ -238,9 +248,15 @@ private:
      */
     void desenharImagemExplicativa(SDL_Renderer* renderer);
     void desenharStatusOperacional(SDL_Renderer* renderer);
-    bool localizarDispositivoPorPonto(int x, int y, bool& pareado, int& indiceLocal);
+    void ajustarFocoAposMudancaListas();
+    void ajustarScrollAoFoco();
+    void filtrarEscaneadosBloqueado();
+    void desenharPainelVazio(SDL_Renderer* renderer, int x, int y, int w, const std::string& mensagem);
+    bool localizarDispositivoPorPonto(int x, int y, SecaoBluetooth& secao, int& indiceLocal);
     void definirMensagemStatus(const std::string& mensagem, bool erro = false);
     bool iniciarTarefaEmSegundoPlano(std::function<void()> tarefa);
+    bool obterItemFocado(SecaoBluetooth& secao, int& indiceLocal);
+    void acionarItem(SecaoBluetooth secao, int indiceLocal, bool acaoSecundaria = false);
 
     /**
      * @brief Alterna o estado do Bluetooth (ON/OFF).
@@ -259,18 +275,15 @@ private:
      */
     void toggleConexaoDispositivo(int indice);
 
+    void parearDispositivoDesconhecido(int indice);
+
+    void desconectarDispositivoDesconhecido(int indice);
+
     /**
      * @brief Pareia um dispositivo disponível.
      * @param indice Índice do dispositivo na lista de disponíveis.
      */
     void parearDispositivo(int indice);
-
-    /**
-     * @brief Esquece um dispositivo pareado e move para disponíveis.
-     * NOTA: Função acionada por botão X do controle.
-     * @param indice Índice do dispositivo na lista de pareados.
-     */
-    void esquecerDispositivo(int indice);
 
     /**
      * @brief Move o foco para o elemento anterior.
