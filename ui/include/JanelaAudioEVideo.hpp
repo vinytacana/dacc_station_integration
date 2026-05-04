@@ -161,7 +161,6 @@ private:
     // IMAGEM EXPLICATIVA
     
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
-    GerenciadorImagens gerenciadorImagens;    /**< Gerenciador de cache de texturas. */
     std::string mensagemStatus;
     bool mensagemErro = false;
     
