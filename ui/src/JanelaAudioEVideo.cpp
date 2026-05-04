@@ -24,6 +24,7 @@
 using namespace MeuProjeto;
 
 extern GerenciadorAudio gerAudio;
+extern GerenciadorImagens gerImg;
 
 /**
  * @brief Retorna a resolução formatada como string.
@@ -501,7 +502,7 @@ void JanelaAudioEVideo::desenharImagemExplicativa(SDL_Renderer* renderer) {
     }
 
     if (texturaExplicacao == nullptr || ultimoTema != tema.getTemaAtual()) {
-        texturaExplicacao = gerenciadorImagens.carregar(renderer, caminhoImagem);
+        texturaExplicacao = gerImg.carregar(renderer, caminhoImagem);
         ultimoTema = tema.getTemaAtual();
     }
     
