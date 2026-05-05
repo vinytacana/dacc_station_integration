@@ -42,7 +42,7 @@ Os componentes foram desenvolvidos de forma modular, permitindo a reutilização
 ### 2.3. Utilitários Gráficos
 
 * **GraphicsUtils**: Provê renderização de primitivas avançadas, como retângulos com cantos arredondados, preenchimento de texturas mantendo a proporção (cover) e overlays de escurecimento para modais.
-* **SystemStatus**: Uma barra superior que renderiza o relógio, status de conexão WiFi e nível de bateria em tempo real.
+* **SystemStatus**: Uma barra superior que renderiza o relógio, status de conexão Wi-Fi, rede cabeada e nível de bateria em tempo real.
 
 ---
 
@@ -82,3 +82,4 @@ A lógica da UI está distribuída entre as pastas `include` (definições) e `s
 * **GerenciarInterface**: Centraliza a lógica de desenho de todos os componentes.
 * **GerenciarInputs**: Captura eventos do sistema e os distribui para os componentes da UI, gerenciando o foco de navegação.
 * **Gerenciadores de Cache**: Classes como `GerenciadorImagens`, `GerenciadorFontes` e `GerenciadorTexturasTexto` garantem que os ativos da interface sejam carregados e mantidos na memória de forma otimizada para evitar "stuttering" durante a navegação.
+* **Janelas de Configuração**: `JanelaRede`, `JanelaBluetooth` e `JanelaAudioEVideo` consomem o backend `config-dacc` através de structs tipadas e `system_result`, mantendo parsing e comandos de sistema fora da camada visual. A janela de rede possui modo leve para conexão cabeada, evitando scans Wi-Fi quando Ethernet já está ativa.
