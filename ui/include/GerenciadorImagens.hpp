@@ -14,8 +14,9 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
-#include <string>
 #include <map>
+#include <string>
+#include <tuple>
 
 /**
  * @namespace MeuProjeto
@@ -68,6 +69,8 @@ public:
      */
     void liberarTudo();
 
+    void liberarRenderer(SDL_Renderer* renderer);
+
 private:
     /**
      * @brief Função auxiliar interna para realizar o carregamento físico do disco.
@@ -81,12 +84,16 @@ private:
      */
     SDL_Texture* carregarDoDisco(SDL_Renderer* renderer, const std::string& caminho);
 
-    /**
-     * @brief Dicionário (Cache) que mapeia o caminho do arquivo para o seu ponteiro de textura.
-     * 
-     * A chave (string) é o caminho do arquivo e o valor (SDL_Texture*) é a textura em memória.
-     */
-    std::map<std::string, SDL_Texture*> cache;
+    struct ChaveImagem {
+        const SDL_Renderer* renderer;
+        std::string caminho;
+
+        bool operator<(const ChaveImagem& outra) const {
+            return std::tie(renderer, caminho) < std::tie(outra.renderer, outra.caminho);
+        }
+    };
+
+    std::map<ChaveImagem, SDL_Texture*> cache;
 };
 
 } // namespace MeuProjeto
