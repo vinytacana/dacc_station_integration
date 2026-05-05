@@ -10,8 +10,6 @@
 #include "SystemStatus.hpp"
 #include "functions.hpp"
 #include <ctime>
-#include <iomanip>
-#include <sstream>
 #include <SDL2/SDL.h>
 
 using namespace MeuProjeto;
@@ -55,17 +53,21 @@ void SystemStatus::update() {
     std::time_t t = std::time(nullptr);
     std::tm* nowTm = std::localtime(&t);
     
-    /**
-     * Formata o horário no padrão HH:MM usando std::put_time.
-     * Exemplo de saída: "14:35", "09:07"
-     */
-    std::stringstream ss;
-    ss << std::put_time(nowTm, "%H:%M");
-    cache.currentTime = ss.str();
+    if (nowTm) {
+        char hora[6] = "--:--";
+        if (std::strftime(hora, sizeof(hora), "%H:%M", nowTm) > 0) {
+            cache.currentTime = hora;
+        }
+    }
 
-    network_connection_status rede = ::obter_status_conexao_rede();
-    cache.wifiConnected = rede.wifi_conectado;
-    cache.wiredConnected = rede.cabeado_conectado;
+    try {
+        network_connection_status rede = ::obter_status_conexao_rede();
+        cache.wifiConnected = rede.wifi_conectado;
+        cache.wiredConnected = rede.cabeado_conectado;
+    } catch (...) {
+        cache.wifiConnected = false;
+        cache.wiredConnected = false;
+    }
 
     int battery = ::obter_bateria();
     if (battery < 0) {
