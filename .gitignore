@@ -14,6 +14,7 @@ build/
 # --- Logs e Dados Temporários ---
 *.log
 *.tmp
+data/
 
 # --- Editor e Sistema Operacional ---
 .vscode/
@@ -21,4 +22,5 @@ build/
 Thumbs.db
 .codex
 .codex/
+.lwjgl
 .lwjgl/
