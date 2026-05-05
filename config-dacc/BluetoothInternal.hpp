@@ -16,17 +16,17 @@ inline constexpr int kBluetoothStatePollAttempts = 10;
 inline constexpr int kBluetoothStatePollIntervalMs = 150;
 
 std::string remover_ansi(std::string str);
-bluetooth_result make_bt_error(
+system_result make_bt_error(
     const std::string& codigo,
     const std::string& mensagem,
     const std::string& detalhes = ""
 );
-bluetooth_result make_bt_success(const std::string& mensagem, const std::string& detalhes = "");
-bluetooth_result executar_bluetoothctl(
+system_result make_bt_success(const std::string& mensagem, const std::string& detalhes = "");
+system_result executar_bluetoothctl(
     const std::string& comando,
     int timeout_ms = kBluetoothctlTimeoutMs
 );
-bluetooth_result executar_bluetoothctl_ate(
+system_result executar_bluetoothctl_ate(
     const std::vector<std::string>& comandos,
     const std::vector<std::string>& marcadores_sucesso,
     const std::vector<std::string>& marcadores_falha,
@@ -44,10 +44,10 @@ void marcar_campo_bool_em_lote(
     bool device_bt::*campo
 );
 std::vector<device_bt> ordenar_dispositivos(const std::unordered_map<std::string, device_bt>& mapa);
-bluetooth_result garantir_bluetooth_desbloqueado();
-bluetooth_result validar_adaptador_pronto();
-bluetooth_result verificar_saida_operacao(
-    const bluetooth_result& comando_result,
+system_result garantir_bluetooth_desbloqueado();
+system_result validar_adaptador_pronto();
+system_result verificar_saida_operacao(
+    const system_result& comando_result,
     const std::string& codigo_falha,
     const std::string& mensagem_falha
 );

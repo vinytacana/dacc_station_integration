@@ -288,25 +288,23 @@ void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TT
         
         /**
          * Desenha ícone WiFi estilizado usando arcos concêntricos.
-         * Apenas renderizado se wifiConnected == true.
+         * Renderizado se houver Wi-Fi ou conexão cabeada.
          */
-        if (data.wifiConnected) {
+        if (data.wifiConnected || data.wiredConnected) {
             int wifiX = batX - 40; ///< Posição X do centro do ícone
             int wifiY = batY + 18; ///< Base dos arcos (parte inferior)
-            
-            /**
-             * Desenha três arcos de WiFi com espessura aumentada.
-             * Loop com incremento de 6: raios 4, 10, 16 pixels.
-             * Ângulos 225-315 graus criam semicírculo superior.
-             * Dupla renderização (r e r-1) simula linha mais espessa.
-             */
-            for(int r = 4; r <= 16; r += 6) {
-                 arcRGBA(renderer, wifiX, wifiY, r, 225, 315, 255, 255, 255, 255);
-                 if(r > 4) arcRGBA(renderer, wifiX, wifiY, r-1, 225, 315, 255, 255, 255, 255);
+
+            if (data.wiredConnected) {
+                roundedRectangleRGBA(renderer, wifiX - 11, wifiY - 14, wifiX + 11, wifiY + 3, 3, 255, 255, 255, 255);
+                boxRGBA(renderer, wifiX - 4, wifiY + 3, wifiX + 4, wifiY + 9, 255, 255, 255, 255);
+                lineRGBA(renderer, wifiX - 14, wifiY + 9, wifiX + 14, wifiY + 9, 255, 255, 255, 255);
+            } else {
+                for(int r = 4; r <= 16; r += 6) {
+                     arcRGBA(renderer, wifiX, wifiY, r, 225, 315, 255, 255, 255, 255);
+                     if(r > 4) arcRGBA(renderer, wifiX, wifiY, r-1, 225, 315, 255, 255, 255, 255);
+                }
+                filledCircleRGBA(renderer, wifiX, wifiY, 2, 255, 255, 255, 255);
             }
-            
-            /// Círculo sólido na base representa o ponto de conexão
-            filledCircleRGBA(renderer, wifiX, wifiY, 2, 255, 255, 255, 255);
         }
     }
 }

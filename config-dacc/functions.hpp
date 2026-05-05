@@ -13,7 +13,7 @@ struct wifi_network{
     bool em_uso;
 };
 
-struct wifi_result {
+struct system_result {
     bool ok = false;
     std::string mensagem;
     std::string codigo;
@@ -23,7 +23,26 @@ struct wifi_result {
 struct wifi_adapter_status {
     bool enabled = false;
     bool disponivel = true;
+    bool conectado_wifi = false;
+    bool conectado_cabeado = false;
+    std::string dispositivo_cabeado;
+    std::string conexao_cabeada;
+    std::string dispositivo_wifi;
+    std::string conexao_wifi;
     std::string output;
+};
+
+struct network_connection_status {
+    bool conectado = false;
+    bool wifi_conectado = false;
+    bool cabeado_conectado = false;
+    std::string tipo;
+    std::string dispositivo;
+    std::string conexao;
+    std::string dispositivo_wifi;
+    std::string conexao_wifi;
+    std::string dispositivo_cabeado;
+    std::string conexao_cabeada;
 };
 
 struct device_bt {
@@ -33,13 +52,6 @@ struct device_bt {
     bool conectado = false;
     bool pareado = false;
     bool confiavel = false;
-};
-
-struct bluetooth_result {
-    bool ok = false;
-    std::string mensagem;
-    std::string codigo;
-    std::string detalhes;
 };
 
 struct bluetooth_adapter_status {
@@ -82,13 +94,6 @@ struct device_audio{
     bool padrao;
 };
 
-struct audio_result {
-    bool ok = false;
-    std::string mensagem;
-    std::string codigo;
-    std::string detalhes;
-};
-
 struct DisplayMode {
     int width;
     int height;
@@ -102,13 +107,6 @@ struct DisplayOutput {
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
-};
-
-struct display_result {
-    bool ok = false;
-    std::string mensagem;
-    std::string codigo;
-    std::string detalhes;
 };
 
 // --- Sistema ---
@@ -126,7 +124,7 @@ int obter_volume_atual();
 void definir_volume(int valor_int);
 std::vector<device_audio> listar_dispositivos_audio();
 void selecionar_dispositivo_audio(int id);
-audio_result selecionar_dispositivo_audio_result(int id);
+system_result selecionar_dispositivo_audio_result(int id);
 void imprimir_dispositivos_audio();
 
 // --- Vídeo ---
@@ -135,9 +133,9 @@ void verificarSessao();
 std::vector<DisplayOutput> obter_info_displays();
 void listar_resolucao();
 bool alterarResolucao(const std::string &saida, int width, int height, float rate);
-display_result alterarResolucao_result(const std::string &saida, int width, int height, float rate);
+system_result alterarResolucao_result(const std::string &saida, int width, int height, float rate);
 bool alterarEscala(const std::string &saida, float escala);
-display_result alterarEscala_result(const std::string &saida, float escala);
+system_result alterarEscala_result(const std::string &saida, float escala);
 void aumentar_brilho();
 void diminuir_brilho();
 
@@ -145,12 +143,13 @@ void diminuir_brilho();
 void listar_wifi();
 std::vector<wifi_network> listar_wifi_parsed();
 wifi_adapter_status obter_status_wifi();
+network_connection_status obter_status_conexao_rede();
 bool wifi_conectado();
-wifi_result definir_estado_wifi_result(bool ligar);
+system_result definir_estado_wifi_result(bool ligar);
 void conectar_wifi(const std::string &ssid, const std::string &senha);
-wifi_result conectar_wifi_result(const std::string &ssid, const std::string &senha);
+system_result conectar_wifi_result(const std::string &ssid, const std::string &senha);
 void desconectar_wifi(const std::string &id);
-wifi_result desconectar_wifi_result(const std::string &id);
+system_result desconectar_wifi_result(const std::string &id);
 
 // --- Bluetooth ---
 bool obter_estado_bluetooth();
@@ -159,18 +158,18 @@ bluetooth_state_snapshot obter_estado_bluetooth_completo();
 bluetooth_ui_snapshot obter_estado_bluetooth_ui();
 bluetooth_ui_snapshot obter_estado_bluetooth_ui_com_scan(int segundos = 10);
 bool definir_estado_bt(bool ligar);
-bluetooth_result definir_estado_bt_result(bool ligar);
+system_result definir_estado_bt_result(bool ligar);
 std::vector<device_bt> listar_dispositivos_bluetooth_conhecidos();
 std::vector<device_bt> listar_dispositivos_bluetooth_pareados();
 std::vector<device_bt> scan_dispositivos_bluetooth(int segundos = 10);
-bluetooth_result parear_bluetooth(const std::string &mac);
-bluetooth_result confiar_bluetooth(const std::string &mac);
-bluetooth_result parear_confiar_conectar_bluetooth(const std::string &mac);
-bluetooth_result conectar_bluetooth_result(const std::string &mac);
+system_result parear_bluetooth(const std::string &mac);
+system_result confiar_bluetooth(const std::string &mac);
+system_result parear_confiar_conectar_bluetooth(const std::string &mac);
+system_result conectar_bluetooth_result(const std::string &mac);
 bool conectar_bluetooth(const std::string &mac);
-bluetooth_result desconectar_bluetooth_result(const std::string &mac);
+system_result desconectar_bluetooth_result(const std::string &mac);
 bool desconectar_bluetooth(const std::string &mac);
-bluetooth_result remover_bluetooth(const std::string &mac);
+system_result remover_bluetooth(const std::string &mac);
 void listar_dispositivos_bluetooth(const std::vector<device_bt> &dispositivos);
 void gerenciar_bluetooth();
 void parsing_bluetooth_stream(

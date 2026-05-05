@@ -88,7 +88,7 @@ command_result exec_command_result(const std::string& cmd) {
     } else {
         result.exit_code = status;
     }
-    result.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    result.ok = status != -1 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
     result.stdout_output = output;
     result.stderr_output = output;
     result.mensagem = output;

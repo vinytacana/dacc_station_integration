@@ -30,6 +30,7 @@ struct SystemData {
      * true = conectado, false = desconectado.
      */
     bool wifiConnected;
+    bool wiredConnected;
     
     /**
      * @brief Nível de carga da bateria em porcentagem

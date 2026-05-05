@@ -185,7 +185,11 @@ void JanelaConfiguracao::fechar() {
     janelaInfosSistema.reset();
     liberarIconeBateria();
     
-    if (renderer) { SDL_DestroyRenderer(renderer); renderer = nullptr; }
+    if (renderer) {
+        gerImg.liberarRenderer(renderer);
+        SDL_DestroyRenderer(renderer);
+        renderer = nullptr;
+    }
     if (janela) { SDL_DestroyWindow(janela); janela = nullptr; }
 
     botoesMenu.clear(); 
@@ -485,7 +489,6 @@ std::string JanelaConfiguracao::obterHoraAtual() {
  * @return Percentual da bateria (0-100), ou 100 se não for possível determinar.
  */
 int JanelaConfiguracao::obterNivelBateria() {
-    SDL_PowerState estado = SDL_GetPowerInfo(nullptr, nullptr);
     int percentual = -1;
     SDL_GetPowerInfo(nullptr, &percentual);
     

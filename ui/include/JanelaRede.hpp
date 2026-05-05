@@ -103,7 +103,10 @@ public:
 private:
     // Estado do Wi-Fi
     bool wifiAtivo = true;                /**< Estado atual do Wi-Fi (ON/OFF). */
+    bool redeCabeadaAtiva = false;
     std::string redeConectada = ""; /**< Nome da rede atualmente conectada. */
+    std::string conexaoCabeada = "";
+    std::string dispositivoCabeado = "";
     std::atomic<bool> operacaoEmAndamento{false};
     std::atomic<bool> precisaAtualizarInterface{false};
     std::string mensagemStatus;
@@ -164,6 +167,8 @@ private:
      * @param renderer Renderizador SDL.
      */
     void desenharToggleWifi(SDL_Renderer* renderer);
+
+    void desenharPainelRedeCabeada(SDL_Renderer* renderer);
 
     /**
      * @brief Renderiza a lista de redes disponíveis.

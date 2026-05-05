@@ -3,8 +3,7 @@
  * @brief Implementação do sistema de cache de texturas para a interface.
  * 
  * Este arquivo contém a lógica para evitar carregamentos redundantes de arquivos
- * de imagem, gerenciando a memória de vídeo (VRAM) de forma eficiente através
- * de um mapeamento de caminhos para objetos de textura.
+ * de imagem, gerenciando a memória de vídeo (VRAM) de forma eficiente.
  */
 
 #include "GerenciadorImagens.hpp"
@@ -37,7 +36,7 @@ GerenciadorImagens::~GerenciadorImagens() {
  * @brief Gerencia a obtenção de texturas de forma otimizada.
  * 
  * O método opera em duas fases:
- * 1. **Busca no Cache**: Verifica se a string do caminho já é uma chave no mapa. 
+ * 1. **Busca no Cache**: Verifica se o par renderer+caminho já existe no mapa.
  *    Se for, retorna o ponteiro existente imediatamente, evitando IO de disco.
  * 2. **Carregamento e Registro**: Se não estiver no cache, carrega a imagem do disco,
  *    armazena o novo ponteiro no mapa para uso futuro e o retorna.
@@ -54,8 +53,10 @@ SDL_Texture* GerenciadorImagens::carregar(SDL_Renderer* renderer, const string& 
 
     const std::string caminhoResolvido = caminho_absoluto_projeto(caminho);
 
-    // Passo 1: Verificar se a imagem já foi carregada anteriormente
-    auto it = cache.find(caminhoResolvido);
+    ChaveImagem chave{renderer, caminhoResolvido};
+
+    // Passo 1: Verificar se a imagem já foi carregada anteriormente neste renderer
+    auto it = cache.find(chave);
     if (it != cache.end()) {
         return it->second; // Retorna a textura existente no cache
     }
@@ -63,7 +64,7 @@ SDL_Texture* GerenciadorImagens::carregar(SDL_Renderer* renderer, const string& 
     // Passo 2: Se não estiver no cache, carregar do disco
     SDL_Texture* textura = carregarDoDisco(renderer, caminhoResolvido);
     if (textura) {
-        cache[caminhoResolvido] = textura; // Registra no cache para otimizar chamadas futuras
+        cache[chave] = textura; // Registra no cache para otimizar chamadas futuras
     }
 
     return textura;
@@ -103,4 +104,21 @@ void GerenciadorImagens::liberarTudo() {
         }
     }
     cache.clear();
+}
+
+void GerenciadorImagens::liberarRenderer(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return;
+    }
+
+    for (auto it = cache.begin(); it != cache.end(); ) {
+        if (it->first.renderer == renderer) {
+            if (it->second) {
+                SDL_DestroyTexture(it->second);
+            }
+            it = cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }

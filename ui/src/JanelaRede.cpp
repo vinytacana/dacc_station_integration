@@ -15,6 +15,7 @@
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
 #include "TecladoVirtual.hpp"
+#include <exception>
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
@@ -109,20 +110,28 @@ void JanelaRede::sincronizarComBackend() {
     std::vector<RedeInfo> novasRedes;
     std::string novaRedeConectada;
 
-    auto redes = ::listar_wifi_parsed();
-    for (const auto& rede : redes) {
-        bool requerSenha = !rede.seguranca.empty() && rede.seguranca != "--";
-        novasRedes.emplace_back(rede.ssid, rede.em_uso, requerSenha, rede.sinal);
-        if (rede.em_uso) {
-            novaRedeConectada = rede.ssid;
+    if (!status.conectado_cabeado) {
+        auto redes = ::listar_wifi_parsed();
+        for (const auto& rede : redes) {
+            bool requerSenha = !rede.seguranca.empty() && rede.seguranca != "--";
+            novasRedes.emplace_back(rede.ssid, rede.em_uso, requerSenha, rede.sinal);
+            if (rede.em_uso) {
+                novaRedeConectada = rede.ssid;
+            }
         }
     }
 
     std::lock_guard<std::mutex> lock(mtxRede);
     wifiAtivo = status.enabled;
+    redeCabeadaAtiva = status.conectado_cabeado;
+    conexaoCabeada = status.conexao_cabeada;
+    dispositivoCabeado = status.dispositivo_cabeado;
     redeConectada = std::move(novaRedeConectada);
     redesDisponiveis = std::move(novasRedes);
-    if (redesDisponiveis.empty() && wifiAtivo) {
+    if (redeCabeadaAtiva) {
+        mensagemStatus = "Conexao cabeada ativa. Scan Wi-Fi pausado.";
+        mensagemErro = false;
+    } else if (redesDisponiveis.empty() && wifiAtivo) {
         mensagemStatus = "Nenhuma rede Wi-Fi detectada.";
         mensagemErro = false;
     } else if (!wifiAtivo) {
@@ -159,7 +168,13 @@ bool JanelaRede::iniciarTarefaEmSegundoPlano(std::function<void()> tarefa) {
         workerThread.join();
     }
     workerThread = std::thread([this, tarefa = std::move(tarefa)]() mutable {
-        tarefa();
+        try {
+            tarefa();
+        } catch (const std::exception& e) {
+            definirMensagemStatus(std::string("Operacao de rede falhou: ") + e.what(), true);
+        } catch (...) {
+            definirMensagemStatus("Operacao de rede falhou inesperadamente.", true);
+        }
         operacaoEmAndamento = false;
     });
     return true;
@@ -173,10 +188,12 @@ bool JanelaRede::iniciarTarefaEmSegundoPlano(std::function<void()> tarefa) {
  */
 void JanelaRede::inicializarBotoes() {
     bool wifiAtivoLocal = true;
+    bool redeCabeadaLocal = false;
     std::vector<std::string> nomesRedes;
     {
         std::lock_guard<std::mutex> lock(mtxRede);
         wifiAtivoLocal = wifiAtivo;
+        redeCabeadaLocal = redeCabeadaAtiva;
         nomesRedes.reserve(redesDisponiveis.size());
         for (const auto& rede : redesDisponiveis) {
             nomesRedes.push_back(rede.nome);
@@ -199,6 +216,11 @@ void JanelaRede::inicializarBotoes() {
 
     // Limpa e recria botões das redes
     botoesRedes.clear();
+    if (redeCabeadaLocal) {
+        indiceFocado = -1;
+        scrollOffset = 0;
+        return;
+    }
     
     int posYInicial = 450;
     int espacamento = 90;
@@ -273,10 +295,19 @@ void JanelaRede::desenhar(SDL_Renderer* renderer) {
         carregarImagemExplicativa(renderer);
     }
 
-    // SEMPRE desenha a interface normal primeiro
+    bool redeCabeadaLocal = false;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        redeCabeadaLocal = redeCabeadaAtiva;
+    }
+
     desenharCabecalho(renderer);
-    desenharToggleWifi(renderer);
-    desenharListaRedes(renderer);
+    if (redeCabeadaLocal) {
+        desenharPainelRedeCabeada(renderer);
+    } else {
+        desenharToggleWifi(renderer);
+        desenharListaRedes(renderer);
+    }
     desenharImagemExplicativa(renderer);
     
     // Se o teclado virtual estiver visível, desenha a tela de senha POR CIMA
@@ -292,13 +323,19 @@ void JanelaRede::desenhar(SDL_Renderer* renderer) {
 void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     bool wifiAtivoLocal = false;
+    bool redeCabeadaLocal = false;
     std::string redeConectadaLocal;
+    std::string conexaoCabeadaLocal;
+    std::string dispositivoCabeadoLocal;
     std::string mensagem;
     bool erro = false;
     {
         std::lock_guard<std::mutex> lock(mtxRede);
         wifiAtivoLocal = wifiAtivo;
+        redeCabeadaLocal = redeCabeadaAtiva;
         redeConectadaLocal = redeConectada;
+        conexaoCabeadaLocal = conexaoCabeada;
+        dispositivoCabeadoLocal = dispositivoCabeado;
         mensagem = mensagemStatus;
         erro = mensagemErro;
     }
@@ -316,7 +353,10 @@ void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
     
     // Status da conexão
     std::string statusTexto;
-    if (!wifiAtivoLocal) {
+    if (redeCabeadaLocal) {
+        std::string nome = conexaoCabeadaLocal.empty() ? dispositivoCabeadoLocal : conexaoCabeadaLocal;
+        statusTexto = nome.empty() ? "Estado: Conectado via cabo" : "Estado: Cabeada (" + nome + ")";
+    } else if (!wifiAtivoLocal) {
         statusTexto = "Estado: Wi-Fi desativado";
     } else if (!redeConectadaLocal.empty()) {
         statusTexto = "Estado: Conectado (" + redeConectadaLocal + ")";
@@ -324,7 +364,7 @@ void JanelaRede::desenharCabecalho(SDL_Renderer* renderer) {
         statusTexto = "Estado: Wi-Fi ativo, sem conexão";
     }
     
-    SDL_Color corStatus = (wifiAtivoLocal && !redeConectadaLocal.empty())
+    SDL_Color corStatus = (redeCabeadaLocal || (wifiAtivoLocal && !redeConectadaLocal.empty()))
         ? SDL_Color{100, 255, 100, 255}
         : SDL_Color{255, 180, 100, 255};
     
@@ -362,6 +402,50 @@ void JanelaRede::desenharToggleWifi(SDL_Renderer* renderer) {
     
     // Desenha o botão
     btnToggleWifi->desenhar(renderer);
+}
+
+void JanelaRede::desenharPainelRedeCabeada(SDL_Renderer* renderer) {
+    auto& tema = GerenciadorTemas::getInstance();
+    std::string conexao;
+    std::string dispositivo;
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        conexao = conexaoCabeada;
+        dispositivo = dispositivoCabeado;
+    }
+
+    SDL_Rect painel = {
+        ConfigLayout::X(250),
+        ConfigLayout::Y(330),
+        ConfigLayout::X(1025),
+        ConfigLayout::Y(250)
+    };
+
+    SDL_Color fundo = tema.getCorRetangulos();
+    SDL_Color borda = tema.getCorDestaque();
+    roundedBoxRGBA(renderer, painel.x, painel.y, painel.x + painel.w, painel.y + painel.h,
+                   ConfigLayout::F(18), fundo.r, fundo.g, fundo.b, 210);
+    roundedRectangleRGBA(renderer, painel.x, painel.y, painel.x + painel.w, painel.y + painel.h,
+                         ConfigLayout::F(18), borda.r, borda.g, borda.b, 220);
+
+    desenharTexto(renderer, "Rede cabeada detectada",
+                  painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(35),
+                  tema.getCorTextoNegrito(), ConfigLayout::F(36));
+
+    std::string detalhe = conexao.empty() ? "Conectado por Ethernet" : "Conexao: " + conexao;
+    desenharTexto(renderer, detalhe,
+                  painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(100),
+                  tema.getCorTextoNormal(), ConfigLayout::F(26));
+
+    if (!dispositivo.empty()) {
+        desenharTexto(renderer, "Dispositivo: " + dispositivo,
+                      painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(145),
+                      tema.getCorTextoNormal(), ConfigLayout::F(22));
+    }
+
+    desenharTexto(renderer, "Lista e scan de Wi-Fi pausados enquanto o cabo estiver ativo.",
+                  painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(190),
+                  tema.getCorTextoNormal(), ConfigLayout::F(22));
 }
 
 /**
@@ -590,13 +674,18 @@ void JanelaRede::toggleWifi() {
     bool estadoDesejado = false;
     {
         std::lock_guard<std::mutex> lock(mtxRede);
+        if (redeCabeadaAtiva) {
+            mensagemStatus = "Conexao cabeada ativa. Wi-Fi nao precisa ser alterado.";
+            mensagemErro = false;
+            return;
+        }
         estadoDesejado = !wifiAtivo;
     }
     definirMensagemStatus(estadoDesejado ? "Ativando Wi-Fi..." : "Desativando Wi-Fi...");
     gerAudio.tocarSom("select.wav");
 
     iniciarTarefaEmSegundoPlano([this, estadoDesejado]() {
-        wifi_result resultado = ::definir_estado_wifi_result(estadoDesejado);
+        system_result resultado = ::definir_estado_wifi_result(estadoDesejado);
         sincronizarComBackend();
         definirMensagemStatus(
             resultado.ok
@@ -702,7 +791,7 @@ void JanelaRede::confirmarSenha() {
     definirMensagemStatus("Conectando a " + ssid + "...");
 
     iniciarTarefaEmSegundoPlano([this, ssid, senha]() {
-        wifi_result resultado = ::conectar_wifi_result(ssid, senha);
+        system_result resultado = ::conectar_wifi_result(ssid, senha);
         sincronizarComBackend();
         definirMensagemStatus(
             resultado.ok
@@ -738,7 +827,7 @@ void JanelaRede::selecionarRede(int indice) {
         const std::string ssid = redeSelecionada.nome;
         definirMensagemStatus("Conectando a " + ssid + "...");
         iniciarTarefaEmSegundoPlano([this, ssid]() {
-            wifi_result resultado = ::conectar_wifi_result(ssid, "");
+            system_result resultado = ::conectar_wifi_result(ssid, "");
             sincronizarComBackend();
             definirMensagemStatus(
                 resultado.ok
@@ -768,6 +857,7 @@ void JanelaRede::navegarParaBaixo() {
     int maxIndice = 0;
     {
         std::lock_guard<std::mutex> lock(mtxRede);
+        if (redeCabeadaAtiva) return;
         maxIndice = (int)redesDisponiveis.size(); // +1 para incluir o toggle
     }
     if (indiceFocado < maxIndice) {
@@ -804,6 +894,11 @@ void JanelaRede::atualizarScroll() {
  * @brief Confirma a seleção do elemento focado.
  */
 void JanelaRede::confirmarSelecao() {
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        if (redeCabeadaAtiva) return;
+    }
+
     if (indiceFocado == 0) {
         // Toggle do Wi-Fi focado
         toggleWifi();
@@ -979,6 +1074,13 @@ bool JanelaRede::processarEvento(SDL_Event& evento) {
         
         // Consome TODOS os eventos quando o teclado está visível
         return true;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtxRede);
+        if (redeCabeadaAtiva) {
+            return false;
+        }
     }
         
     // Processa cliques do mouse

@@ -89,9 +89,9 @@ void salvar_cache_ui_bt(const bluetooth_ui_snapshot& snapshot) {
     g_bluetooth_ui_cache_valido = true;
 }
 
-bluetooth_result conectar_bluetooth_direto_result(const std::string& mac);
-bluetooth_result conectar_bluetooth_result_com_retry(const std::string& mac, bool permitir_retry);
-bluetooth_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, const bluetooth_result& falha_original);
+system_result conectar_bluetooth_direto_result(const std::string& mac);
+system_result conectar_bluetooth_result_com_retry(const std::string& mac, bool permitir_retry);
+system_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, const system_result& falha_original);
 
 std::string minusculo_bt(std::string texto) {
     std::transform(texto.begin(), texto.end(), texto.begin(), [](unsigned char c) {
@@ -104,7 +104,7 @@ bool contem_texto_bt(const std::string& texto, const std::string& trecho) {
     return minusculo_bt(texto).find(minusculo_bt(trecho)) != std::string::npos;
 }
 
-bool erro_indica_pareamento_obsoleto(const bluetooth_result& resultado) {
+bool erro_indica_pareamento_obsoleto(const system_result& resultado) {
     const std::string saida = resultado.detalhes.empty() ? resultado.mensagem : resultado.detalhes;
     if (resultado.codigo == "authentication_failed") return true;
     if (contem_texto_bt(saida, "AuthenticationFailed")) return true;
@@ -123,8 +123,8 @@ bool erro_indica_pareamento_obsoleto(const bluetooth_result& resultado) {
            contem_texto_bt(saida, "Attempting to connect");
 }
 
-bluetooth_result preparar_agent_pareamento_bluetooth() {
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
+system_result preparar_agent_pareamento_bluetooth() {
+    system_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
         {
             "agent off",
             "agent KeyboardDisplay",
@@ -161,7 +161,7 @@ bool obter_estado_bluetooth() {
 bluetooth_adapter_status obter_status_bluetooth() {
     bluetooth_adapter_status status;
 
-    bluetooth_result show_result = bluetooth_internal::executar_bluetoothctl("show");
+    system_result show_result = bluetooth_internal::executar_bluetoothctl("show");
     status.show_output = show_result.mensagem;
     if (!show_result.ok ||
         status.show_output.find("No default controller available") != std::string::npos) {
@@ -246,22 +246,22 @@ bluetooth_ui_snapshot obter_estado_bluetooth_ui_com_scan(int segundos) {
     return snapshot;
 }
 
-bluetooth_result definir_estado_bt_result(bool ligar) {
+system_result definir_estado_bt_result(bool ligar) {
     if (ligar) {
-        bluetooth_result desbloqueio = bluetooth_internal::garantir_bluetooth_desbloqueado();
+        system_result desbloqueio = bluetooth_internal::garantir_bluetooth_desbloqueado();
         if (!desbloqueio.ok) {
             return desbloqueio;
         }
     }
 
-    bluetooth_result validacao = bluetooth_internal::validar_adaptador_pronto();
+    system_result validacao = bluetooth_internal::validar_adaptador_pronto();
     if (!validacao.ok && ligar) {
         return validacao;
     }
 
     const std::string acao = ligar ? "on" : "off";
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl("power " + acao);
-    bluetooth_result verificado = bluetooth_internal::verificar_saida_operacao(
+    system_result resultado = bluetooth_internal::executar_bluetoothctl("power " + acao);
+    system_result verificado = bluetooth_internal::verificar_saida_operacao(
         resultado,
         "power_failed",
         ligar ? "Falha ao ativar o Bluetooth." : "Falha ao desativar o Bluetooth."
@@ -425,13 +425,13 @@ std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
 
 namespace {
 
-bluetooth_result conectar_bluetooth_direto_result(const std::string& mac) {
-    bluetooth_result validacao = bluetooth_internal::validar_adaptador_pronto();
+system_result conectar_bluetooth_direto_result(const std::string& mac) {
+    system_result validacao = bluetooth_internal::validar_adaptador_pronto();
     if (!validacao.ok) {
         return validacao;
     }
 
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
+    system_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
         {
             "connect " + mac
         },
@@ -455,7 +455,7 @@ bluetooth_result conectar_bluetooth_direto_result(const std::string& mac) {
         {},
         20000
     );
-    bluetooth_result verificado = bluetooth_internal::verificar_saida_operacao(
+    system_result verificado = bluetooth_internal::verificar_saida_operacao(
         resultado,
         "connect_failed",
         "Falha ao conectar o dispositivo."
@@ -484,8 +484,8 @@ bluetooth_result conectar_bluetooth_direto_result(const std::string& mac) {
 
 namespace {
 
-bluetooth_result conectar_bluetooth_result_com_retry(const std::string& mac, bool permitir_retry) {
-    bluetooth_result resultado = conectar_bluetooth_direto_result(mac);
+system_result conectar_bluetooth_result_com_retry(const std::string& mac, bool permitir_retry) {
+    system_result resultado = conectar_bluetooth_direto_result(mac);
     if (!resultado.ok && permitir_retry && erro_indica_pareamento_obsoleto(resultado)) {
         return renovar_pareamento_obsoleto_bluetooth(mac, resultado);
     }
@@ -494,7 +494,7 @@ bluetooth_result conectar_bluetooth_result_com_retry(const std::string& mac, boo
 
 } // namespace
 
-bluetooth_result conectar_bluetooth_result(const std::string& mac) {
+system_result conectar_bluetooth_result(const std::string& mac) {
     return conectar_bluetooth_result_com_retry(mac, true);
 }
 
@@ -502,13 +502,13 @@ bool conectar_bluetooth(const std::string& mac) {
     return conectar_bluetooth_result(mac).ok;
 }
 
-bluetooth_result desconectar_bluetooth_result(const std::string& mac) {
-    bluetooth_result validacao = bluetooth_internal::validar_adaptador_pronto();
+system_result desconectar_bluetooth_result(const std::string& mac) {
+    system_result validacao = bluetooth_internal::validar_adaptador_pronto();
     if (!validacao.ok) {
         return validacao;
     }
 
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
+    system_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
         {
             "disconnect " + mac
         },
@@ -526,7 +526,7 @@ bluetooth_result desconectar_bluetooth_result(const std::string& mac) {
         {},
         15000
     );
-    bluetooth_result verificado = bluetooth_internal::verificar_saida_operacao(
+    system_result verificado = bluetooth_internal::verificar_saida_operacao(
         resultado,
         "disconnect_failed",
         "Falha ao desconectar o dispositivo."
@@ -564,23 +564,23 @@ bool desconectar_bluetooth(const std::string& mac) {
     return desconectar_bluetooth_result(mac).ok;
 }
 
-bluetooth_result parear_bluetooth(const std::string& mac) {
-    bluetooth_result desbloqueio = bluetooth_internal::garantir_bluetooth_desbloqueado();
+system_result parear_bluetooth(const std::string& mac) {
+    system_result desbloqueio = bluetooth_internal::garantir_bluetooth_desbloqueado();
     if (!desbloqueio.ok) {
         return desbloqueio;
     }
 
-    bluetooth_result validacao = bluetooth_internal::validar_adaptador_pronto();
+    system_result validacao = bluetooth_internal::validar_adaptador_pronto();
     if (!validacao.ok) {
         return validacao;
     }
 
-    bluetooth_result agent = preparar_agent_pareamento_bluetooth();
+    system_result agent = preparar_agent_pareamento_bluetooth();
     if (!agent.ok) {
         return agent;
     }
 
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
+    system_result resultado = bluetooth_internal::executar_bluetoothctl_ate(
         {
             "scan on",
             "pair " + mac
@@ -602,7 +602,7 @@ bluetooth_result parear_bluetooth(const std::string& mac) {
         },
         90000
     );
-    bluetooth_result verificado = bluetooth_internal::verificar_saida_operacao(
+    system_result verificado = bluetooth_internal::verificar_saida_operacao(
         resultado,
         "pair_failed",
         "Falha ao parear dispositivo."
@@ -627,9 +627,9 @@ bluetooth_result parear_bluetooth(const std::string& mac) {
     return bluetooth_internal::make_bt_success("Dispositivo pareado com sucesso.", resultado.mensagem);
 }
 
-bluetooth_result confiar_bluetooth(const std::string& mac) {
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl("trust " + mac);
-    bluetooth_result verificado = bluetooth_internal::verificar_saida_operacao(
+system_result confiar_bluetooth(const std::string& mac) {
+    system_result resultado = bluetooth_internal::executar_bluetoothctl("trust " + mac);
+    system_result verificado = bluetooth_internal::verificar_saida_operacao(
         resultado,
         "trust_failed",
         "Falha ao confiar no dispositivo."
@@ -656,8 +656,8 @@ bluetooth_result confiar_bluetooth(const std::string& mac) {
 
 namespace {
 
-bluetooth_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, const bluetooth_result& falha_original) {
-    bluetooth_result remocao = ::remover_bluetooth(mac);
+system_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, const system_result& falha_original) {
+    system_result remocao = ::remover_bluetooth(mac);
     if (!remocao.ok) {
         return bluetooth_internal::make_bt_error(
             "stale_pairing_remove_failed",
@@ -666,7 +666,7 @@ bluetooth_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, c
         );
     }
 
-    bluetooth_result pareamento = parear_bluetooth(mac);
+    system_result pareamento = parear_bluetooth(mac);
     if (!pareamento.ok) {
         return bluetooth_internal::make_bt_error(
             pareamento.codigo,
@@ -675,7 +675,7 @@ bluetooth_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, c
         );
     }
 
-    bluetooth_result confianca = confiar_bluetooth(mac);
+    system_result confianca = confiar_bluetooth(mac);
     if (!confianca.ok) {
         return bluetooth_internal::make_bt_error(
             confianca.codigo,
@@ -684,7 +684,7 @@ bluetooth_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, c
         );
     }
 
-    bluetooth_result conexao = conectar_bluetooth_result_com_retry(mac, false);
+    system_result conexao = conectar_bluetooth_result_com_retry(mac, false);
     if (!conexao.ok) {
         return bluetooth_internal::make_bt_error(
             conexao.codigo,
@@ -701,18 +701,18 @@ bluetooth_result renovar_pareamento_obsoleto_bluetooth(const std::string& mac, c
 
 } // namespace
 
-bluetooth_result parear_confiar_conectar_bluetooth(const std::string& mac) {
-    bluetooth_result pareamento = parear_bluetooth(mac);
+system_result parear_confiar_conectar_bluetooth(const std::string& mac) {
+    system_result pareamento = parear_bluetooth(mac);
     if (!pareamento.ok) {
         return pareamento;
     }
 
-    bluetooth_result confianca = confiar_bluetooth(mac);
+    system_result confianca = confiar_bluetooth(mac);
     if (!confianca.ok) {
         return confianca;
     }
 
-    bluetooth_result conexao = conectar_bluetooth_result(mac);
+    system_result conexao = conectar_bluetooth_result(mac);
     if (!conexao.ok) {
         return conexao;
     }
@@ -723,18 +723,18 @@ bluetooth_result parear_confiar_conectar_bluetooth(const std::string& mac) {
     );
 }
 
-bluetooth_result remover_bluetooth(const std::string& mac) {
+system_result remover_bluetooth(const std::string& mac) {
     device_bt estado_inicial = bluetooth_internal::consultar_dispositivo_bluetooth(mac);
     if (estado_inicial.conectado) {
-        bluetooth_result desconexao = desconectar_bluetooth_result(mac);
+        system_result desconexao = desconectar_bluetooth_result(mac);
         if (!desconexao.ok && desconexao.codigo != "device_not_connected" &&
             desconexao.codigo != "device_unavailable") {
             return desconexao;
         }
     }
 
-    bluetooth_result resultado = bluetooth_internal::executar_bluetoothctl("remove " + mac);
-    bluetooth_result verificado = bluetooth_internal::verificar_saida_operacao(
+    system_result resultado = bluetooth_internal::executar_bluetoothctl("remove " + mac);
+    system_result verificado = bluetooth_internal::verificar_saida_operacao(
         resultado,
         "remove_failed",
         "Falha ao remover dispositivo."
