@@ -24,7 +24,7 @@ using namespace MeuProjeto;
  * 
  */
 SystemStatus::SystemStatus() : lastUpdate(0) {
-    cache = {"--:--", false, -1};
+    cache = {"--:--", false, false, -1};
     update();
 }
 
@@ -63,7 +63,9 @@ void SystemStatus::update() {
     ss << std::put_time(nowTm, "%H:%M");
     cache.currentTime = ss.str();
 
-    cache.wifiConnected = ::wifi_conectado();
+    network_connection_status rede = ::obter_status_conexao_rede();
+    cache.wifiConnected = rede.wifi_conectado;
+    cache.wiredConnected = rede.cabeado_conectado;
 
     int battery = ::obter_bateria();
     if (battery < 0) {

@@ -23,7 +23,26 @@ struct wifi_result {
 struct wifi_adapter_status {
     bool enabled = false;
     bool disponivel = true;
+    bool conectado_wifi = false;
+    bool conectado_cabeado = false;
+    std::string dispositivo_cabeado;
+    std::string conexao_cabeada;
+    std::string dispositivo_wifi;
+    std::string conexao_wifi;
     std::string output;
+};
+
+struct network_connection_status {
+    bool conectado = false;
+    bool wifi_conectado = false;
+    bool cabeado_conectado = false;
+    std::string tipo;
+    std::string dispositivo;
+    std::string conexao;
+    std::string dispositivo_wifi;
+    std::string conexao_wifi;
+    std::string dispositivo_cabeado;
+    std::string conexao_cabeada;
 };
 
 struct device_bt {
@@ -145,6 +164,7 @@ void diminuir_brilho();
 void listar_wifi();
 std::vector<wifi_network> listar_wifi_parsed();
 wifi_adapter_status obter_status_wifi();
+network_connection_status obter_status_conexao_rede();
 bool wifi_conectado();
 wifi_result definir_estado_wifi_result(bool ligar);
 void conectar_wifi(const std::string &ssid, const std::string &senha);
