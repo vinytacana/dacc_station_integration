@@ -15,6 +15,7 @@
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
 #include "TecladoVirtual.hpp"
+#include <exception>
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
@@ -159,7 +160,13 @@ bool JanelaRede::iniciarTarefaEmSegundoPlano(std::function<void()> tarefa) {
         workerThread.join();
     }
     workerThread = std::thread([this, tarefa = std::move(tarefa)]() mutable {
-        tarefa();
+        try {
+            tarefa();
+        } catch (const std::exception& e) {
+            definirMensagemStatus(std::string("Operacao de rede falhou: ") + e.what(), true);
+        } catch (...) {
+            definirMensagemStatus("Operacao de rede falhou inesperadamente.", true);
+        }
         operacaoEmAndamento = false;
     });
     return true;

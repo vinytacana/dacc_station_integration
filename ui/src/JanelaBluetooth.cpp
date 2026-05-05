@@ -14,6 +14,7 @@
 #include <SDL2/SDL2_gfxPrimitives.h>
 #include <algorithm>
 #include <cctype>
+#include <exception>
 #include <iostream>
 #include <thread>
 #include <unordered_set>
@@ -623,7 +624,14 @@ bool JanelaBluetooth::iniciarTarefaEmSegundoPlano(std::function<void()> tarefa) 
     }
 
     workerThread = std::thread([this, tarefa = std::move(tarefa)]() mutable {
-        tarefa();
+        try {
+            tarefa();
+        } catch (const std::exception& e) {
+            definirMensagemStatus(std::string("Operacao Bluetooth falhou: ") + e.what(), true);
+        } catch (...) {
+            definirMensagemStatus("Operacao Bluetooth falhou inesperadamente.", true);
+        }
+        alternandoBluetooth = false;
         operacaoEmAndamento = false;
     });
     return true;
@@ -735,7 +743,20 @@ void JanelaBluetooth::iniciarEscaneamento() {
     tempoInicioEscanear = SDL_GetTicks();
 
     scanThread = std::thread([this]() {
-        bluetooth_ui_snapshot snapshot = ::obter_estado_bluetooth_ui_com_scan(5);
+        bluetooth_ui_snapshot snapshot;
+        try {
+            snapshot = ::obter_estado_bluetooth_ui_com_scan(5);
+        } catch (const std::exception& e) {
+            definirMensagemStatus(std::string("Scan Bluetooth falhou: ") + e.what(), true);
+            escaneando = false;
+            operacaoEmAndamento = false;
+            return;
+        } catch (...) {
+            definirMensagemStatus("Scan Bluetooth falhou inesperadamente.", true);
+            escaneando = false;
+            operacaoEmAndamento = false;
+            return;
+        }
 
         if (encerrando) {
             escaneando = false;
