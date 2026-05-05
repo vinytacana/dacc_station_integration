@@ -1028,7 +1028,7 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
     if (!dispositivos.empty() && indiceDispositivoAtual >= 0) {
         int idReal = dispositivos[indiceDispositivoAtual].id;
         if (idReal >= 0) {
-            audio_result audio = ::selecionar_dispositivo_audio_result(idReal);
+            system_result audio = ::selecionar_dispositivo_audio_result(idReal);
             if (!audio.ok) {
                 definirMensagemStatus(audio.mensagem.empty() ? "Falha ao definir audio." : audio.mensagem, true);
                 return;
@@ -1057,7 +1057,7 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         
         // A nova função pede (nome, largura, altura, refresh_rate)
         // Usamos 60.0f como padrão seguro, já que a UI ainda não escolhe Hz
-        display_result resolucao = ::alterarResolucao_result(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
+        system_result resolucao = ::alterarResolucao_result(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
         if (!resolucao.ok) {
             definirMensagemStatus(
                 resolucao.mensagem.empty() ? "Falha ao definir resolucao." : resolucao.mensagem,
@@ -1071,7 +1071,7 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
     // 4. APLICAR ESCALA
     // ---------------------------------------------------------
     // A nova função pede apenas (nome, float escala)
-    display_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
+    system_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
     if (!escala.ok) {
         definirMensagemStatus(
             escala.mensagem.empty() ? "Falha ao definir escala." : escala.mensagem,

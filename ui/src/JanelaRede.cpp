@@ -685,7 +685,7 @@ void JanelaRede::toggleWifi() {
     gerAudio.tocarSom("select.wav");
 
     iniciarTarefaEmSegundoPlano([this, estadoDesejado]() {
-        wifi_result resultado = ::definir_estado_wifi_result(estadoDesejado);
+        system_result resultado = ::definir_estado_wifi_result(estadoDesejado);
         sincronizarComBackend();
         definirMensagemStatus(
             resultado.ok
@@ -791,7 +791,7 @@ void JanelaRede::confirmarSenha() {
     definirMensagemStatus("Conectando a " + ssid + "...");
 
     iniciarTarefaEmSegundoPlano([this, ssid, senha]() {
-        wifi_result resultado = ::conectar_wifi_result(ssid, senha);
+        system_result resultado = ::conectar_wifi_result(ssid, senha);
         sincronizarComBackend();
         definirMensagemStatus(
             resultado.ok
@@ -827,7 +827,7 @@ void JanelaRede::selecionarRede(int indice) {
         const std::string ssid = redeSelecionada.nome;
         definirMensagemStatus("Conectando a " + ssid + "...");
         iniciarTarefaEmSegundoPlano([this, ssid]() {
-            wifi_result resultado = ::conectar_wifi_result(ssid, "");
+            system_result resultado = ::conectar_wifi_result(ssid, "");
             sincronizarComBackend();
             definirMensagemStatus(
                 resultado.ok

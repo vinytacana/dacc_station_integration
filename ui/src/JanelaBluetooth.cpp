@@ -98,7 +98,7 @@ std::string labelTipo(TipoDispositivoBT tipo) {
     }
 }
 
-std::string mensagemAmigavelBluetooth(const bluetooth_result& resultado, const std::string& fallback) {
+std::string mensagemAmigavelBluetooth(const system_result& resultado, const std::string& fallback) {
     if (resultado.ok) return resultado.mensagem;
     if (resultado.codigo == "authentication_failed") return "Falha de autenticacao no dispositivo.";
     if (resultado.codigo == "operation_timeout" || resultado.codigo == "bluetoothctl_timeout") return "O dispositivo demorou para responder.";
@@ -111,7 +111,7 @@ std::string mensagemAmigavelBluetooth(const bluetooth_result& resultado, const s
     return resultado.mensagem.empty() ? fallback : resultado.mensagem;
 }
 
-void logErroBluetooth(const std::string& operacao, const bluetooth_result& resultado) {
+void logErroBluetooth(const std::string& operacao, const system_result& resultado) {
     if (resultado.ok) return;
     std::cerr << "[BLUETOOTH][" << operacao << "] codigo=" << resultado.codigo
               << " mensagem=" << resultado.mensagem
@@ -664,7 +664,7 @@ void JanelaBluetooth::acionarItem(SecaoBluetooth secao, int indiceLocal, bool ac
             }
             definirMensagemStatus("Desconectando dispositivo...");
             iniciarTarefaEmSegundoPlano([this, endereco]() {
-                bluetooth_result resultado = ::desconectar_bluetooth_result(endereco);
+                system_result resultado = ::desconectar_bluetooth_result(endereco);
                 logErroBluetooth("desconectar_pareado_secundario", resultado);
                 sincronizarComHardware();
                 definirMensagemStatus(
@@ -700,7 +700,7 @@ void JanelaBluetooth::toggleBluetooth() {
     definirMensagemStatus(estadoDesejado ? "Ativando Bluetooth..." : "Desativando Bluetooth...");
 
     if (!iniciarTarefaEmSegundoPlano([this, estadoDesejado]() {
-        bluetooth_result resultado = ::definir_estado_bt_result(estadoDesejado);
+        system_result resultado = ::definir_estado_bt_result(estadoDesejado);
         sincronizarComHardware();
 
         if (!bluetoothAtivo) {
@@ -803,7 +803,7 @@ void JanelaBluetooth::toggleConexaoDispositivo(int indice) {
 
     definirMensagemStatus(conectado ? "Desconectando dispositivo..." : "Conectando dispositivo...");
     iniciarTarefaEmSegundoPlano([this, endereco, conectado]() {
-        bluetooth_result resultado = conectado ? ::desconectar_bluetooth_result(endereco)
+        system_result resultado = conectado ? ::desconectar_bluetooth_result(endereco)
                                                : ::conectar_bluetooth_result(endereco);
         logErroBluetooth(conectado ? "desconectar_pareado" : "conectar_pareado", resultado);
         sincronizarComHardware();
@@ -827,7 +827,7 @@ void JanelaBluetooth::parearDispositivoDesconhecido(int indice) {
 
     definirMensagemStatus("Pareando dispositivo conectado...");
     iniciarTarefaEmSegundoPlano([this, dispositivo]() {
-        bluetooth_result resultado = ::parear_confiar_conectar_bluetooth(dispositivo.endereco);
+        system_result resultado = ::parear_confiar_conectar_bluetooth(dispositivo.endereco);
         logErroBluetooth("parear_confiar_conectar_desconhecido", resultado);
         sincronizarComHardware();
         definirMensagemStatus(
@@ -849,7 +849,7 @@ void JanelaBluetooth::desconectarDispositivoDesconhecido(int indice) {
 
     definirMensagemStatus("Desconectando dispositivo...");
     iniciarTarefaEmSegundoPlano([this, endereco]() {
-        bluetooth_result resultado = ::desconectar_bluetooth_result(endereco);
+        system_result resultado = ::desconectar_bluetooth_result(endereco);
         logErroBluetooth("desconectar_desconhecido_conectado", resultado);
         sincronizarComHardware();
         definirMensagemStatus(
@@ -871,7 +871,7 @@ void JanelaBluetooth::parearDispositivo(int indice) {
 
     definirMensagemStatus("Pareando e conectando dispositivo...");
     iniciarTarefaEmSegundoPlano([this, dispositivo]() {
-        bluetooth_result resultado = ::parear_confiar_conectar_bluetooth(dispositivo.endereco);
+        system_result resultado = ::parear_confiar_conectar_bluetooth(dispositivo.endereco);
         logErroBluetooth("parear_confiar_conectar_escaneado", resultado);
         sincronizarComHardware();
         definirMensagemStatus(
