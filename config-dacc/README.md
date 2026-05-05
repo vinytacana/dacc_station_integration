@@ -71,7 +71,7 @@ Interface direta com o `NetworkManager`.
 - **Complexidade:** Usa o comando `nmcli -t` (modo tabular). O desafio aqui é que nomes de redes Wi-Fi podem conter dois pontos (`:`), o que quebraria um parser simples.
 - **Solução:** Criamos a função `split_nmcli_escaped_fields` que entende caracteres de escape (`\:`), garantindo que nomes de redes complexos sejam lidos corretamente.
 
-#### `wifi_result conectar_wifi_result(const string &ssid, const string &senha)`
+#### `system_result conectar_wifi_result(const string &ssid, const string &senha)`
 - **O que faz:** Tenta realizar a autenticação em uma rede.
 - **Tratamento de Erros:** A função não apenas diz "falhou", ela analisa a mensagem do sistema para dizer se o erro foi "Senha Incorreta", "Rede Fora de Alcance" ou "Wi-Fi Desativado".
 
@@ -107,7 +107,7 @@ Como o Bluetooth é lento (hardware físico), criamos a função `aguardar_estad
 
 ## 🖥 Módulo: Vídeo (`HardwareControl.cpp`)
 
-#### `display_result alterarEscala_result(const string &saida, float escala)`
+#### `system_result alterarEscala_result(const string &saida, float escala)`
 - **O que faz:** Altera o tamanho da interface (Zoom).
 - **Lógica:** No Linux, isso muda dependendo do ambiente. No GNOME, usamos `gsettings`. Em outros (como o DACC Station puro), usamos `xrandr` ou `wlr-randr`. A função detecta automaticamente qual tecnologia usar através da variável `XDG_SESSION_TYPE`.
 
@@ -117,7 +117,7 @@ Como o Bluetooth é lento (hardware físico), criamos a função `aguardar_estad
 
 1.  **Novas Estruturas:** Sempre adicione novas structs em `functions.hpp`.
 2.  **Novos Comandos:** Se precisar de uma nova ferramenta, use `exec_command_args_result` para segurança.
-3.  **Logs:** O backend está preparado para retornar mensagens detalhadas em `audio_result`, `wifi_result`, etc. Sempre preencha o campo `detalhes` com a saída bruta do erro para facilitar o debug na UI.
+3.  **Logs:** O backend está preparado para retornar mensagens detalhadas em `system_result`. Sempre preencha o campo `detalhes` com a saída bruta do erro para facilitar o debug na UI.
 
 ---
 *Documento gerado para a equipe de desenvolvimento do DACC Station.*

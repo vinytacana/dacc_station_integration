@@ -62,10 +62,10 @@ bool contem_algum_marcador(const std::string& texto, const std::vector<std::stri
     return false;
 }
 
-bluetooth_result mapear_erro_bluetoothctl(
+system_result mapear_erro_bluetoothctl(
     const std::string& codigo_falha,
     const std::string& mensagem_falha,
-    const bluetooth_result& comando_result
+    const system_result& comando_result
 ) {
     const std::string& saida = comando_result.mensagem.empty() ? comando_result.detalhes : comando_result.mensagem;
 
@@ -101,8 +101,8 @@ bluetooth_result mapear_erro_bluetoothctl(
     return make_bt_error(codigo_falha, mensagem_falha, saida);
 }
 
-bluetooth_result executar_bluetoothctl_locked(const std::string& comando, int timeout_ms) {
-    bluetooth_result resultado;
+system_result executar_bluetoothctl_locked(const std::string& comando, int timeout_ms) {
+    system_result resultado;
     BluetoothctlSession session;
     session.pid = forkpty(&session.master_fd, nullptr, nullptr, nullptr);
     if (session.pid < 0) {
@@ -215,8 +215,8 @@ std::string remover_ansi(std::string str) {
     return resultado;
 }
 
-bluetooth_result make_bt_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes) {
-    bluetooth_result result;
+system_result make_bt_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes) {
+    system_result result;
     result.ok = false;
     result.codigo = codigo;
     result.mensagem = mensagem;
@@ -224,8 +224,8 @@ bluetooth_result make_bt_error(const std::string& codigo, const std::string& men
     return result;
 }
 
-bluetooth_result make_bt_success(const std::string& mensagem, const std::string& detalhes) {
-    bluetooth_result result;
+system_result make_bt_success(const std::string& mensagem, const std::string& detalhes) {
+    system_result result;
     result.ok = true;
     result.codigo = "ok";
     result.mensagem = mensagem;
@@ -233,12 +233,12 @@ bluetooth_result make_bt_success(const std::string& mensagem, const std::string&
     return result;
 }
 
-bluetooth_result executar_bluetoothctl(const std::string& comando, int timeout_ms) {
+system_result executar_bluetoothctl(const std::string& comando, int timeout_ms) {
     std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
     return executar_bluetoothctl_locked(comando, timeout_ms);
 }
 
-bluetooth_result executar_bluetoothctl_ate(
+system_result executar_bluetoothctl_ate(
     const std::vector<std::string>& comandos,
     const std::vector<std::string>& marcadores_sucesso,
     const std::vector<std::string>& marcadores_falha,
@@ -432,7 +432,7 @@ bluetooth_result executar_bluetoothctl_ate(
         session.pid = -1;
     }
 
-    bluetooth_result resultado;
+    system_result resultado;
     resultado.ok = sucesso || (WIFEXITED(status) && WEXITSTATUS(status) == 0 && marcadores_sucesso.empty());
     resultado.codigo = resultado.ok ? "ok" : "bluetoothctl_failed";
     resultado.mensagem = remover_ansi(saida);
@@ -548,7 +548,7 @@ device_bt consultar_dispositivo_bluetooth(const std::string& mac) {
     std::unordered_map<std::string, device_bt> mapa;
     mapa[mac] = dispositivo;
 
-    bluetooth_result resultado = executar_bluetoothctl("info " + mac);
+    system_result resultado = executar_bluetoothctl("info " + mac);
     if (!resultado.ok || resultado.mensagem.empty()) {
         return dispositivo;
     }
@@ -561,7 +561,7 @@ device_bt consultar_dispositivo_bluetooth(const std::string& mac) {
 
 std::unordered_map<std::string, device_bt> listar_dispositivos_por_comando(const std::string& comando) {
     std::unordered_map<std::string, device_bt> mapa;
-    bluetooth_result resultado = executar_bluetoothctl(comando);
+    system_result resultado = executar_bluetoothctl(comando);
     if (!resultado.ok || resultado.mensagem.empty()) {
         return mapa;
     }
@@ -621,7 +621,7 @@ std::vector<device_bt> ordenar_dispositivos(const std::unordered_map<std::string
     return lista;
 }
 
-bluetooth_result garantir_bluetooth_desbloqueado() {
+system_result garantir_bluetooth_desbloqueado() {
     command_result rfkill = exec_command_result("rfkill unblock bluetooth");
     if (!rfkill.ok) {
         return make_bt_error("rfkill_unblock_failed", "Falha ao desbloquear o Bluetooth.", rfkill.mensagem);
@@ -629,7 +629,7 @@ bluetooth_result garantir_bluetooth_desbloqueado() {
     return make_bt_success("Bluetooth desbloqueado.");
 }
 
-bluetooth_result validar_adaptador_pronto() {
+system_result validar_adaptador_pronto() {
     bluetooth_adapter_status status = obter_status_bluetooth();
     if (!status.controller_disponivel) {
         return make_bt_error("adapter_unavailable", "Nenhum adaptador Bluetooth disponivel.", status.show_output);
@@ -643,8 +643,8 @@ bluetooth_result validar_adaptador_pronto() {
     return make_bt_success("Adaptador Bluetooth pronto.");
 }
 
-bluetooth_result verificar_saida_operacao(
-    const bluetooth_result& comando_result,
+system_result verificar_saida_operacao(
+    const system_result& comando_result,
     const std::string& codigo_falha,
     const std::string& mensagem_falha
 ) {

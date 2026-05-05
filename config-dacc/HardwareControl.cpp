@@ -52,8 +52,8 @@ int obter_bateria() {
 
 namespace {
 
-audio_result make_audio_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
-    audio_result result;
+system_result make_audio_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
+    system_result result;
     result.ok = false;
     result.codigo = codigo;
     result.mensagem = mensagem;
@@ -61,8 +61,8 @@ audio_result make_audio_error(const std::string& codigo, const std::string& mens
     return result;
 }
 
-audio_result make_audio_success(const std::string& mensagem, const std::string& detalhes = "") {
-    audio_result result;
+system_result make_audio_success(const std::string& mensagem, const std::string& detalhes = "") {
+    system_result result;
     result.ok = true;
     result.codigo = "ok";
     result.mensagem = mensagem;
@@ -70,8 +70,8 @@ audio_result make_audio_success(const std::string& mensagem, const std::string& 
     return result;
 }
 
-display_result make_display_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
-    display_result result;
+system_result make_display_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
+    system_result result;
     result.ok = false;
     result.codigo = codigo;
     result.mensagem = mensagem;
@@ -79,8 +79,8 @@ display_result make_display_error(const std::string& codigo, const std::string& 
     return result;
 }
 
-display_result make_display_success(const std::string& mensagem, const std::string& detalhes = "") {
-    display_result result;
+system_result make_display_success(const std::string& mensagem, const std::string& detalhes = "") {
+    system_result result;
     result.ok = true;
     result.codigo = "ok";
     result.mensagem = mensagem;
@@ -88,7 +88,7 @@ display_result make_display_success(const std::string& mensagem, const std::stri
     return result;
 }
 
-audio_result traduzir_audio_result(const command_result& command, const std::string& codigo, const std::string& mensagem) {
+system_result traduzir_audio_result(const command_result& command, const std::string& codigo, const std::string& mensagem) {
     if (command.ok) {
         return make_audio_success(mensagem, command.mensagem);
     }
@@ -99,7 +99,7 @@ audio_result traduzir_audio_result(const command_result& command, const std::str
     return make_audio_error(codigo, mensagem, command.mensagem);
 }
 
-display_result traduzir_display_result(const command_result& command, const std::string& codigo, const std::string& mensagem) {
+system_result traduzir_display_result(const command_result& command, const std::string& codigo, const std::string& mensagem) {
     if (command.ok) {
         return make_display_success(mensagem, command.mensagem);
     }
@@ -227,7 +227,7 @@ void selecionar_dispositivo_audio(int id) {
     (void)selecionar_dispositivo_audio_result(id);
 }
 
-audio_result selecionar_dispositivo_audio_result(int id) {
+system_result selecionar_dispositivo_audio_result(int id) {
     command_result result = exec_command_args_result({"wpctl", "set-default", std::to_string(id)});
     return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
 }
@@ -334,7 +334,7 @@ bool alterarEscala(const string &saida, float escala) {
     return alterarEscala_result(saida, escala).ok;
 }
 
-display_result alterarEscala_result(const string &saida, float escala) {
+system_result alterarEscala_result(const string &saida, float escala) {
     std::string sessao = obter_tipo_sessao();
     std::vector<std::string> args;
 
@@ -368,7 +368,7 @@ bool alterarResolucao(const string &saida, int width, int height, float rate) {
     return alterarResolucao_result(saida, width, height, rate).ok;
 }
 
-display_result alterarResolucao_result(const string &saida, int width, int height, float rate) {
+system_result alterarResolucao_result(const string &saida, int width, int height, float rate) {
     (void)rate;
     std::string sessao = obter_tipo_sessao();
     std::string modeStr = std::to_string(width) + "x" + std::to_string(height);
@@ -401,8 +401,8 @@ void diminuir_brilho() {
 
 namespace {
 
-wifi_result make_wifi_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
-    wifi_result result;
+system_result make_wifi_error(const std::string& codigo, const std::string& mensagem, const std::string& detalhes = "") {
+    system_result result;
     result.ok = false;
     result.codigo = codigo;
     result.mensagem = mensagem;
@@ -410,8 +410,8 @@ wifi_result make_wifi_error(const std::string& codigo, const std::string& mensag
     return result;
 }
 
-wifi_result make_wifi_success(const std::string& mensagem, const std::string& detalhes = "") {
-    wifi_result result;
+system_result make_wifi_success(const std::string& mensagem, const std::string& detalhes = "") {
+    system_result result;
     result.ok = true;
     result.codigo = "ok";
     result.mensagem = mensagem;
@@ -445,7 +445,7 @@ std::vector<std::string> split_nmcli_escaped_fields(const std::string& linha) {
     return campos;
 }
 
-wifi_result traduzir_wifi_result(
+system_result traduzir_wifi_result(
     const command_result& command,
     const std::string& codigo_falha,
     const std::string& mensagem_falha
@@ -583,11 +583,11 @@ bool wifi_conectado() {
     return obter_status_conexao_rede().wifi_conectado;
 }
 
-wifi_result definir_estado_wifi_result(bool ligar) {
+system_result definir_estado_wifi_result(bool ligar) {
     command_result result = exec_command_args_result(
         {"nmcli", "radio", "wifi", ligar ? "on" : "off"}
     );
-    wifi_result traduzido = traduzir_wifi_result(
+    system_result traduzido = traduzir_wifi_result(
         result,
         "wifi_toggle_failed",
         ligar ? "Falha ao ativar o Wi-Fi." : "Falha ao desativar o Wi-Fi."
@@ -611,7 +611,7 @@ void conectar_wifi(const string &ssid, const string &senha) {
     (void)conectar_wifi_result(ssid, senha);
 }
 
-wifi_result conectar_wifi_result(const string &ssid, const string &senha) {
+system_result conectar_wifi_result(const string &ssid, const string &senha) {
     std::vector<std::string> args = {"nmcli", "device", "wifi", "connect", ssid};
     if (!senha.empty()) {
         args.push_back("password");
@@ -625,7 +625,7 @@ void desconectar_wifi(const string &id) {
     (void)desconectar_wifi_result(id);
 }
 
-wifi_result desconectar_wifi_result(const string &id) {
+system_result desconectar_wifi_result(const string &id) {
     command_result result = exec_command_args_result({"nmcli", "connection", "down", "id", id});
     return traduzir_wifi_result(result, "wifi_disconnect_failed", "Falha ao desconectar a rede Wi-Fi.");
 }
