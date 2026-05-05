@@ -1,5 +1,6 @@
 # --- Compilados e Binários ---
 *.a
+*.d
 *.o
 *.obj
 *.exe
@@ -18,3 +19,6 @@ build/
 .vscode/
 .DS_Store
 Thumbs.db
+.codex
+.codex/
+.lwjgl/
