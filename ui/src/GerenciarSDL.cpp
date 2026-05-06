@@ -9,6 +9,7 @@
 
 #include "GerenciarSDL.hpp"
 #include "Utils.hpp" 
+#include "config-dacc/functions.hpp"
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_mixer.h>
@@ -178,7 +179,7 @@ bool GerenciarSDL::inicializar(SDL_Window*& janela, SDL_Renderer*& renderer, int
  * 
  * @param caminhoVideo Caminho relativo ou absoluto do arquivo de vídeo (.mp4, .mkv, etc).
  * 
- * @note O MPV deve estar instalado no sistema para esta funcionalidade operar.
+ * @note Se MPV nao estiver instalado, a intro e ignorada.
  * @note A função bloqueia a execução até que o vídeo termine ou seja fechado pelo usuário.
  * 
  * Configurações do MPV utilizadas:
@@ -213,6 +214,11 @@ void GerenciarSDL::tocarVideoIntro(const std::string& caminhoVideo) {
     }
 
     if (encontrado) {
+        if (!comando_existe("mpv")) {
+            std::cerr << "[INTRO] MPV nao encontrado. Pulando video de introducao." << std::endl;
+            return;
+        }
+
         /**
          * Converte o caminho relativo para caminho absoluto usando realpath().
          * Isso evita problemas com o MPV ao interpretar caminhos relativos.
