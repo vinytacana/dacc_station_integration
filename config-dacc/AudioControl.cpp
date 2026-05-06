@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -26,48 +27,6 @@ system_result traduzir_audio_result(
         return config_result::error("audio_device_not_found", "Dispositivo de audio nao encontrado.", command.mensagem);
     }
     return config_result::error(codigo, mensagem, command.mensagem);
-}
-
-std::vector<device_audio> listar_dispositivos_wpctl() {
-    std::vector<device_audio> lista;
-    if (!comando_existe("wpctl")) {
-        return lista;
-    }
-
-    command_result result = exec_command_args_result({"wpctl", "status"});
-    if (!result.ok) {
-        return lista;
-    }
-
-    return config_dacc::audio_parsing::parse_wpctl_sinks(result.stdout_output);
-}
-
-std::vector<device_audio> listar_dispositivos_pactl() {
-    std::vector<device_audio> lista;
-    if (!comando_existe("pactl")) {
-        return lista;
-    }
-
-    command_result result = exec_command_args_result({"pactl", "list", "sinks", "short"});
-    if (!result.ok) {
-        return lista;
-    }
-
-    return config_dacc::audio_parsing::parse_pactl_sinks_short(result.stdout_output);
-}
-
-std::vector<device_audio> listar_dispositivos_aplay() {
-    std::vector<device_audio> lista;
-    if (!comando_existe("aplay")) {
-        return lista;
-    }
-
-    command_result result = exec_command_args_result({"aplay", "-l"});
-    if (!result.ok) {
-        return lista;
-    }
-
-    return config_dacc::audio_parsing::parse_aplay_devices(result.stdout_output);
 }
 
 system_result executar_comando_audio_result(
@@ -102,6 +61,14 @@ system_result executar_comando_audio_result(
         "Subsistema de audio compativel indisponivel.",
         "wpctl, pactl e amixer ausentes."
     );
+}
+
+std::string descrever_tentativas(const std::vector<std::string>& tentativas) {
+    std::string detalhes;
+    for (const auto& tentativa : tentativas) {
+        detalhes += tentativa + "\n";
+    }
+    return detalhes;
 }
 
 bool executar_comando_audio(
@@ -191,13 +158,77 @@ system_result obter_volume_atual_result(int& volume) {
 }
 
 std::vector<device_audio> listar_dispositivos_audio() {
-    auto lista = listar_dispositivos_wpctl();
-    if (!lista.empty()) return lista;
+    std::vector<device_audio> lista;
+    (void)listar_dispositivos_audio_result(lista);
+    return lista;
+}
 
-    lista = listar_dispositivos_pactl();
-    if (!lista.empty()) return lista;
+system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispositivos) {
+    dispositivos.clear();
+    std::vector<std::string> tentativas;
 
-    return listar_dispositivos_aplay();
+    const bool tem_wpctl = comando_existe("wpctl");
+    const bool tem_pactl = comando_existe("pactl");
+    const bool tem_aplay = comando_existe("aplay");
+
+    if (!tem_wpctl && !tem_pactl && !tem_aplay) {
+        return config_result::error(
+            "audio_subsystem_missing",
+            "Subsistema de audio compativel indisponivel.",
+            "wpctl, pactl e aplay ausentes."
+        );
+    }
+
+    if (tem_wpctl) {
+        command_result result = exec_command_args_result({"wpctl", "status"});
+        if (result.ok) {
+            dispositivos = config_dacc::audio_parsing::parse_wpctl_sinks(result.stdout_output);
+            if (!dispositivos.empty()) {
+                return config_result::success("Dispositivos de audio listados.", "backend=wpctl");
+            }
+            tentativas.push_back("wpctl: comando ok, nenhum sink parseado");
+        } else {
+            tentativas.push_back("wpctl: " + result.mensagem);
+        }
+    }
+
+    if (tem_pactl) {
+        command_result result = exec_command_args_result({"pactl", "list", "sinks", "short"});
+        if (result.ok) {
+            std::string default_sink;
+            command_result default_result = exec_command_args_result({"pactl", "get-default-sink"});
+            if (default_result.ok) {
+                default_sink = default_result.stdout_output;
+            }
+
+            dispositivos = config_dacc::audio_parsing::parse_pactl_sinks_short(result.stdout_output, default_sink);
+            if (!dispositivos.empty()) {
+                return config_result::success("Dispositivos de audio listados.", "backend=pactl");
+            }
+            tentativas.push_back("pactl: comando ok, nenhum sink parseado");
+        } else {
+            tentativas.push_back("pactl: " + result.mensagem);
+        }
+    }
+
+    if (tem_aplay) {
+        command_result result = exec_command_args_result({"aplay", "-l"});
+        if (result.ok) {
+            dispositivos = config_dacc::audio_parsing::parse_aplay_devices(result.stdout_output);
+            if (!dispositivos.empty()) {
+                return config_result::success("Dispositivos de audio listados.", "backend=alsa");
+            }
+            tentativas.push_back("aplay: comando ok, nenhum dispositivo parseado");
+        } else {
+            tentativas.push_back("aplay: " + result.mensagem);
+        }
+    }
+
+    return config_result::error(
+        "audio_no_devices",
+        "Nenhum dispositivo de audio encontrado.",
+        descrever_tentativas(tentativas)
+    );
 }
 
 void selecionar_dispositivo_audio(int id) {
@@ -205,20 +236,50 @@ void selecionar_dispositivo_audio(int id) {
 }
 
 system_result selecionar_dispositivo_audio_result(int id) {
-    if (comando_existe("wpctl")) {
-        command_result result = exec_command_args_result({"wpctl", "set-default", std::to_string(id)});
+    std::vector<device_audio> dispositivos;
+    system_result lista_result = listar_dispositivos_audio_result(dispositivos);
+    if (!lista_result.ok) {
+        return lista_result;
+    }
+
+    for (const auto& dispositivo : dispositivos) {
+        if (dispositivo.id == id) {
+            return selecionar_dispositivo_audio_result(dispositivo);
+        }
+    }
+
+    return config_result::error(
+        "audio_device_not_found",
+        "Dispositivo de audio nao encontrado.",
+        "id=" + std::to_string(id)
+    );
+}
+
+system_result selecionar_dispositivo_audio_result(const device_audio& dispositivo) {
+    if (dispositivo.backend == audio_backend::wpctl) {
+        if (!comando_existe("wpctl")) {
+            return config_result::error("audio_subsystem_missing", "Subsistema de audio compativel indisponivel.", "wpctl ausente.");
+        }
+        const std::string id = dispositivo.backend_id.empty() ? std::to_string(dispositivo.id) : dispositivo.backend_id;
+        command_result result = exec_command_args_result({"wpctl", "set-default", id});
         return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
     }
 
-    if (comando_existe("pactl")) {
-        command_result result = exec_command_args_result({"pactl", "set-default-sink", std::to_string(id)});
+    if (dispositivo.backend == audio_backend::pactl) {
+        if (!comando_existe("pactl")) {
+            return config_result::error("audio_subsystem_missing", "Subsistema de audio compativel indisponivel.", "pactl ausente.");
+        }
+        if (dispositivo.backend_id.empty()) {
+            return config_result::error("audio_device_not_found", "Dispositivo de audio nao encontrado.", "backend_id pactl vazio.");
+        }
+        command_result result = exec_command_args_result({"pactl", "set-default-sink", dispositivo.backend_id});
         return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
     }
 
     return config_result::error(
-        "audio_subsystem_missing",
-        "Subsistema de audio compativel indisponivel.",
-        "wpctl e pactl ausentes; selecao via ALSA/aplay nao e suportada."
+        "audio_select_unsupported",
+        "Selecao de dispositivo nao suportada neste backend de audio.",
+        "backend=alsa backend_id=" + dispositivo.backend_id
     );
 }
 

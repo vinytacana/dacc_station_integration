@@ -240,18 +240,28 @@ Implementacao: `AudioControl.cpp`.
 ### Struct `device_audio`
 
 ```cpp
+enum class audio_backend {
+    wpctl,
+    pactl,
+    alsa
+};
+
 struct device_audio {
-    int id;
+    int id = -1;
+    std::string backend_id;
     std::string descricao;
-    bool padrao;
+    bool padrao = false;
+    audio_backend backend = audio_backend::wpctl;
 };
 ```
 
 Campos:
 
-- `id`: identificador usado pelo sistema de audio.
+- `id`: identificador numerico usado por compatibilidade com chamadas antigas.
+- `backend_id`: identificador real do backend; no `pactl`, e o nome do sink.
 - `descricao`: nome legivel do dispositivo.
 - `padrao`: indica se e o dispositivo atual.
+- `backend`: ferramenta que originou o dispositivo (`wpctl`, `pactl` ou `alsa`).
 
 ### `void aumentar_volume()`
 
@@ -326,6 +336,16 @@ Uso na UI:
 - preencher a lista de dispositivos na janela Audio/Video;
 - permitir troca de saida sem expor comandos ao usuario.
 
+### `system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispositivos)`
+
+Contrato preferencial para listagem de audio.
+
+Retornos comuns:
+
+- `ok`: lista preenchida.
+- `audio_subsystem_missing`: `wpctl`, `pactl` e `aplay` ausentes.
+- `audio_no_devices`: ferramentas existem, mas nenhum dispositivo foi encontrado ou parseado.
+
 ### `void selecionar_dispositivo_audio(int id)`
 
 Seleciona dispositivo de audio e ignora detalhes do resultado.
@@ -337,17 +357,24 @@ Motivo de existir:
 
 Preferencia:
 
-- em UI nova, use `selecionar_dispositivo_audio_result`.
+- em UI nova, use `selecionar_dispositivo_audio_result(const device_audio&)`.
 
 ### `system_result selecionar_dispositivo_audio_result(int id)`
 
 Seleciona dispositivo de audio e retorna sucesso/falha detalhado.
+
+Essa variante existe por compatibilidade: ela lista os dispositivos atuais, procura pelo `id` numerico e entao delega para a selecao por `device_audio`.
+
+### `system_result selecionar_dispositivo_audio_result(const device_audio& dispositivo)`
+
+Seleciona usando `backend` e `backend_id`.
 
 Retornos comuns:
 
 - `ok`: dispositivo definido.
 - `audio_select_failed`: falha ao definir dispositivo.
 - `audio_subsystem_missing`: `wpctl` e `pactl` indisponiveis.
+- `audio_select_unsupported`: dispositivo veio de backend somente-listagem, como ALSA.
 
 Uso na UI:
 

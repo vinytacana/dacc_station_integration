@@ -26,6 +26,17 @@ inline std::string trim_audio_name(std::string raw) {
     return raw;
 }
 
+inline std::string trim_line(std::string raw) {
+    while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r' ||
+                            std::isspace(static_cast<unsigned char>(raw.back())))) {
+        raw.pop_back();
+    }
+    while (!raw.empty() && std::isspace(static_cast<unsigned char>(raw.front()))) {
+        raw.erase(raw.begin());
+    }
+    return raw;
+}
+
 inline std::vector<device_audio> parse_wpctl_sinks(const std::string& output) {
     std::vector<device_audio> lista;
     std::stringstream ss(output);
@@ -61,7 +72,9 @@ inline std::vector<device_audio> parse_wpctl_sinks(const std::string& output) {
         try {
             device_audio dev;
             dev.id = std::stoi(linha.substr(inicio_num, ponto_pos - inicio_num));
+            dev.backend_id = std::to_string(dev.id);
             dev.padrao = linha.find('*') != std::string::npos;
+            dev.backend = audio_backend::wpctl;
             dev.descricao = ponto_pos + 2 < linha.size() ? trim_audio_name(linha.substr(ponto_pos + 2)) : "";
             if (!dev.descricao.empty()) {
                 lista.push_back(dev);
@@ -73,10 +86,14 @@ inline std::vector<device_audio> parse_wpctl_sinks(const std::string& output) {
     return lista;
 }
 
-inline std::vector<device_audio> parse_pactl_sinks_short(const std::string& output) {
+inline std::vector<device_audio> parse_pactl_sinks_short(
+    const std::string& output,
+    const std::string& default_sink = ""
+) {
     std::vector<device_audio> lista;
     std::stringstream ss(output);
     std::string linha;
+    const std::string default_sink_limpo = trim_line(default_sink);
 
     while (std::getline(ss, linha)) {
         std::stringstream line_ss(linha);
@@ -88,8 +105,10 @@ inline std::vector<device_audio> parse_pactl_sinks_short(const std::string& outp
         try {
             device_audio dev;
             dev.id = std::stoi(id_str);
+            dev.backend_id = nome;
             dev.descricao = nome;
-            dev.padrao = false;
+            dev.padrao = !default_sink_limpo.empty() && nome == default_sink_limpo;
+            dev.backend = audio_backend::pactl;
             lista.push_back(dev);
         } catch (...) {
         }
@@ -112,7 +131,9 @@ inline std::vector<device_audio> parse_aplay_devices(const std::string& output) 
 
         device_audio dev;
         dev.id = id++;
+        dev.backend_id = "alsa:" + std::to_string(dev.id);
         dev.padrao = dev.id == 0;
+        dev.backend = audio_backend::alsa;
         dev.descricao = linha;
         lista.push_back(dev);
     }

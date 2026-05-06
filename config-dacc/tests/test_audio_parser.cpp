@@ -25,6 +25,8 @@ void testar_wpctl_sinks() {
 
     exigir(devices.size() == 2, "deve parsear sinks wpctl");
     exigir(devices[0].id == 53, "deve parsear id wpctl");
+    exigir(devices[0].backend_id == "53", "deve preencher backend_id wpctl");
+    exigir(devices[0].backend == audio_backend::wpctl, "deve marcar backend wpctl");
     exigir(devices[0].padrao, "deve marcar sink padrao wpctl");
     exigir(devices[0].descricao == "Ryzen HD Audio Controller Estereo analogico", "deve limpar descricao wpctl");
 }
@@ -34,10 +36,13 @@ void testar_pactl_sinks() {
         "1\talsa_output.pci-0000_00_1f.3.analog-stereo\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
         "2\tbluez_output.AA_BB_CC.a2dp-sink\tPipeWire\ts16le 2ch 48000Hz\tIDLE\n";
 
-    auto devices = config_dacc::audio_parsing::parse_pactl_sinks_short(entrada);
+    auto devices = config_dacc::audio_parsing::parse_pactl_sinks_short(entrada, "bluez_output.AA_BB_CC.a2dp-sink\n");
 
     exigir(devices.size() == 2, "deve parsear sinks pactl");
     exigir(devices[1].id == 2, "deve parsear id pactl");
+    exigir(devices[1].backend_id == "bluez_output.AA_BB_CC.a2dp-sink", "deve usar nome do sink como backend_id pactl");
+    exigir(devices[1].backend == audio_backend::pactl, "deve marcar backend pactl");
+    exigir(devices[1].padrao, "deve marcar default sink pactl");
     exigir(devices[1].descricao == "bluez_output.AA_BB_CC.a2dp-sink", "deve parsear nome pactl");
 }
 
@@ -49,6 +54,8 @@ void testar_aplay_devices() {
     auto devices = config_dacc::audio_parsing::parse_aplay_devices(entrada);
 
     exigir(devices.size() == 2, "deve parsear dispositivos aplay");
+    exigir(devices[0].backend == audio_backend::alsa, "deve marcar backend alsa");
+    exigir(devices[0].backend_id == "alsa:0", "deve gerar backend_id alsa");
     exigir(devices[0].padrao, "primeiro dispositivo ALSA deve ser padrao");
 }
 

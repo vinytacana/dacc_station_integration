@@ -88,10 +88,18 @@ struct command_result {
     std::string mensagem;
 };
 
-struct device_audio{
-    int id;
+enum class audio_backend {
+    wpctl,
+    pactl,
+    alsa
+};
+
+struct device_audio {
+    int id = -1;
+    std::string backend_id;
     std::string descricao;
-    bool padrao;
+    bool padrao = false;
+    audio_backend backend = audio_backend::wpctl;
 };
 
 struct DisplayMode {
@@ -148,8 +156,10 @@ system_result aumentar_volume_result();
 system_result diminuir_volume_result();
 system_result definir_volume_result(int valor_int);
 std::vector<device_audio> listar_dispositivos_audio();
+system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispositivos);
 void selecionar_dispositivo_audio(int id);
 system_result selecionar_dispositivo_audio_result(int id);
+system_result selecionar_dispositivo_audio_result(const device_audio& dispositivo);
 void imprimir_dispositivos_audio();
 
 // --- Vídeo ---
