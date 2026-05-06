@@ -138,6 +138,8 @@ bool alterarEscala(const std::string &saida, float escala);
 system_result alterarEscala_result(const std::string &saida, float escala);
 void aumentar_brilho();
 void diminuir_brilho();
+system_result aumentar_brilho_result();
+system_result diminuir_brilho_result();
 
 // --- Wi-Fi ---
 void listar_wifi();
