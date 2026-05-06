@@ -1,7 +1,7 @@
 #include "config-dacc/functions.hpp"
 #include "config-dacc/ConfigResult.hpp"
+#include "config-dacc/DisplayParsing.hpp"
 
-#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -147,80 +147,35 @@ void verificarSessao() {
 
 std::vector<DisplayOutput> obter_info_displays() {
     std::vector<DisplayOutput> displays;
-    if (!comando_existe("xrandr") && !comando_existe("wlr-randr")) {
-        return displays;
-    }
-    if (!comando_existe("xrandr")) {
-        return displays;
+    const bool preferir_wlr = obter_tipo_sessao() == "wayland";
+
+    if (preferir_wlr && comando_existe("wlr-randr")) {
+        command_result result = exec_command_args_result({"wlr-randr"});
+        if (result.ok) {
+            displays = config_dacc::display_parsing::parse_wlr_randr(result.stdout_output);
+            if (!displays.empty()) {
+                return displays;
+            }
+        }
     }
 
-    std::string output;
-    try {
+    if (comando_existe("xrandr")) {
         command_result result = exec_command_args_result({"xrandr", "--verbose"});
-        if (!result.ok) {
-            return displays;
-        }
-        output = result.stdout_output;
-    } catch (...) {
-        return displays;
-    }
-
-    std::stringstream ss(output);
-    std::string linha;
-    DisplayOutput* current_display = nullptr;
-
-    while (std::getline(ss, linha)) {
-        if (linha.find(" connected ") != std::string::npos) {
-            DisplayOutput disp;
-            std::stringstream line_ss(linha);
-            line_ss >> disp.name;
-            disp.connected = true;
-            disp.current_scale = 1.0f;
-            displays.push_back(disp);
-            current_display = &displays.back();
-            continue;
-        }
-
-        if (!current_display || displays.empty() || linha.size() <= 2 ||
-            linha[0] != ' ' || linha.find("x") == std::string::npos) {
-            continue;
-        }
-
-        std::stringstream mode_ss(linha);
-        std::string token;
-        int w = 0;
-        int h = 0;
-        bool found_res = false;
-
-        while (mode_ss >> token) {
-            size_t x_pos = token.find('x');
-            if (x_pos == std::string::npos || !std::isdigit(static_cast<unsigned char>(token[0]))) {
-                continue;
-            }
-            try {
-                w = std::stoi(token.substr(0, x_pos));
-                size_t i_pos = x_pos + 1;
-                std::string h_str;
-                while (i_pos < token.size() && std::isdigit(static_cast<unsigned char>(token[i_pos]))) {
-                    h_str += token[i_pos++];
-                }
-                h = std::stoi(h_str);
-                found_res = true;
-                break;
-            } catch (...) {
+        if (result.ok) {
+            displays = config_dacc::display_parsing::parse_xrandr_verbose(result.stdout_output);
+            if (!displays.empty()) {
+                return displays;
             }
         }
+    }
 
-        if (found_res) {
-            DisplayMode mode;
-            mode.width = w;
-            mode.height = h;
-            mode.refresh_rate = 60.0f;
-            mode.is_current = linha.find("*current") != std::string::npos || linha.find("*") != std::string::npos;
-            current_display->modes.push_back(mode);
-            if (mode.is_current) current_display->current_mode = mode;
+    if (!preferir_wlr && comando_existe("wlr-randr")) {
+        command_result result = exec_command_args_result({"wlr-randr"});
+        if (result.ok) {
+            return config_dacc::display_parsing::parse_wlr_randr(result.stdout_output);
         }
     }
+
     return displays;
 }
 
