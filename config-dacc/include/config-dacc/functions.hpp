@@ -109,12 +109,24 @@ struct DisplayMode {
     bool is_current;
 };
 
+enum class display_backend {
+    xrandr,
+    wlrrandr
+};
+
+enum class brightness_backend {
+    brightnessctl,
+    sysfs
+};
+
 struct DisplayOutput {
     std::string name;
+    std::string backend_id;
     bool connected;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
+    display_backend backend = display_backend::xrandr;
 };
 
 struct station_capabilities {
@@ -168,6 +180,7 @@ void imprimir_dispositivos_audio();
 std::string obter_tipo_sessao();
 void verificarSessao();
 std::vector<DisplayOutput> obter_info_displays();
+system_result listar_displays_result(std::vector<DisplayOutput>& displays);
 void listar_resolucao();
 bool alterarResolucao(const std::string &saida, int width, int height, float rate);
 system_result alterarResolucao_result(const std::string &saida, int width, int height, float rate);
@@ -175,6 +188,9 @@ bool alterarEscala(const std::string &saida, float escala);
 system_result alterarEscala_result(const std::string &saida, float escala);
 void aumentar_brilho();
 void diminuir_brilho();
+system_result obter_brilho_result(int& brilho);
+system_result definir_brilho_result(int valor);
+system_result alterar_brilho_result(int delta);
 system_result aumentar_brilho_result();
 system_result diminuir_brilho_result();
 

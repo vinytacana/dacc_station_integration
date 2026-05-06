@@ -61,8 +61,10 @@ inline std::vector<DisplayOutput> parse_xrandr_verbose(const std::string& output
             DisplayOutput disp;
             std::stringstream line_ss(linha);
             line_ss >> disp.name;
+            disp.backend_id = disp.name;
             disp.connected = true;
             disp.current_scale = 1.0f;
+            disp.backend = display_backend::xrandr;
             displays.push_back(disp);
             current_display = &displays.back();
             continue;
@@ -114,8 +116,10 @@ inline std::vector<DisplayOutput> parse_wlr_randr(const std::string& output) {
             DisplayOutput disp;
             std::stringstream line_ss(limpa);
             line_ss >> disp.name;
+            disp.backend_id = disp.name;
             disp.connected = true;
             disp.current_scale = 1.0f;
+            disp.backend = display_backend::wlrrandr;
             displays.push_back(disp);
             current_display = &displays.back();
             em_modes = false;

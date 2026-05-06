@@ -2,16 +2,32 @@
 #include "config-dacc/ConfigResult.hpp"
 #include "config-dacc/DisplayParsing.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
+
+std::mutex g_display_mutex;
+std::mutex g_brightness_mutex;
+std::vector<DisplayOutput> g_display_cache;
+system_result g_display_cache_result;
+std::chrono::steady_clock::time_point g_display_cache_atualizado;
+bool g_display_cache_valido = false;
+int g_brightness_cache_valor = 0;
+system_result g_brightness_cache_result;
+std::chrono::steady_clock::time_point g_brightness_cache_atualizado;
+bool g_brightness_cache_valido = false;
+constexpr auto DISPLAY_CACHE_TTL = std::chrono::seconds(3);
+constexpr auto BRIGHTNESS_CACHE_TTL = std::chrono::seconds(2);
 
 system_result traduzir_display_result(
     const command_result& command,
@@ -30,6 +46,62 @@ system_result traduzir_display_result(
         return config_result::error("display_mode_unsupported", "Resolucao nao suportada para a saida.", command.mensagem);
     }
     return config_result::error(codigo, mensagem, command.mensagem);
+}
+
+void salvar_cache_display(const system_result& result, const std::vector<DisplayOutput>& displays) {
+    g_display_cache_result = result;
+    g_display_cache = displays;
+    g_display_cache_atualizado = std::chrono::steady_clock::now();
+    g_display_cache_valido = true;
+}
+
+bool tentar_cache_display(std::vector<DisplayOutput>& displays, system_result& result) {
+    if (!g_display_cache_valido) {
+        return false;
+    }
+    if (std::chrono::steady_clock::now() - g_display_cache_atualizado > DISPLAY_CACHE_TTL) {
+        return false;
+    }
+    displays = g_display_cache;
+    result = g_display_cache_result;
+    return true;
+}
+
+void invalidar_cache_display() {
+    std::lock_guard<std::mutex> lock(g_display_mutex);
+    g_display_cache_valido = false;
+}
+
+void salvar_cache_brilho(const system_result& result, int brilho) {
+    g_brightness_cache_result = result;
+    g_brightness_cache_valor = brilho;
+    g_brightness_cache_atualizado = std::chrono::steady_clock::now();
+    g_brightness_cache_valido = true;
+}
+
+bool tentar_cache_brilho(int& brilho, system_result& result) {
+    if (!g_brightness_cache_valido) {
+        return false;
+    }
+    if (std::chrono::steady_clock::now() - g_brightness_cache_atualizado > BRIGHTNESS_CACHE_TTL) {
+        return false;
+    }
+    brilho = g_brightness_cache_valor;
+    result = g_brightness_cache_result;
+    return true;
+}
+
+void invalidar_cache_brilho() {
+    std::lock_guard<std::mutex> lock(g_brightness_mutex);
+    g_brightness_cache_valido = false;
+}
+
+std::string descrever_tentativas(const std::vector<std::string>& tentativas) {
+    std::string detalhes;
+    for (const auto& tentativa : tentativas) {
+        detalhes += tentativa + "\n";
+    }
+    return detalhes;
 }
 
 std::vector<std::filesystem::path> listar_backlights() {
@@ -72,17 +144,13 @@ bool escrever_int_arquivo(const std::filesystem::path& path, int valor) {
     return !out.fail();
 }
 
-system_result alterar_brilho_sysfs(int delta_percentual) {
+bool ler_brilho_sysfs(int& brilho, std::string& detalhes) {
     auto backlights = listar_backlights();
     if (backlights.empty()) {
-        return config_result::error(
-            "backlight_not_supported",
-            "Controle de brilho nao suportado neste ambiente.",
-            "/sys/class/backlight vazio ou indisponivel."
-        );
+        detalhes = "/sys/class/backlight vazio ou indisponivel.";
+        return false;
     }
 
-    std::string detalhes;
     for (const auto& backlight : backlights) {
         int atual = 0;
         int maximo = 0;
@@ -93,36 +161,72 @@ system_result alterar_brilho_sysfs(int delta_percentual) {
             continue;
         }
 
-        int passo = std::max(1, (maximo * std::abs(delta_percentual)) / 100);
-        int novo = delta_percentual >= 0 ? atual + passo : atual - passo;
-        novo = std::max(0, std::min(maximo, novo));
+        brilho = std::max(0, std::min(100, (atual * 100) / maximo));
+        detalhes = backlight.string();
+        return true;
+    }
 
+    return false;
+}
+
+bool definir_brilho_sysfs(int valor, std::string& detalhes) {
+    auto backlights = listar_backlights();
+    if (backlights.empty()) {
+        detalhes = "/sys/class/backlight vazio ou indisponivel.";
+        return false;
+    }
+
+    valor = std::max(0, std::min(100, valor));
+    for (const auto& backlight : backlights) {
+        int maximo = 0;
+        if (!ler_int_arquivo(backlight / "max_brightness", maximo) || maximo <= 0) {
+            detalhes += backlight.string() + ": leitura de max_brightness falhou; ";
+            continue;
+        }
+
+        int novo = std::max(0, std::min(maximo, (maximo * valor) / 100));
+        if (valor > 0 && novo == 0) {
+            novo = 1;
+        }
         if (escrever_int_arquivo(backlight / "brightness", novo)) {
-            return config_result::success("Brilho alterado.", backlight.string());
+            detalhes = backlight.string();
+            return true;
         }
         detalhes += backlight.string() + ": escrita falhou; ";
     }
 
-    return config_result::error(
-        "backlight_permission_denied",
-        "Sem permissao para alterar brilho via backlight.",
-        detalhes
-    );
+    return false;
 }
 
-system_result alterar_brilho(int delta_percentual) {
+bool parse_int_command_output(const std::string& output, int& valor) {
+    try {
+        valor = std::stoi(output);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool obter_brilho_brightnessctl(int& brilho, std::string& detalhes) {
     if (comando_existe("brightnessctl")) {
-        command_result result = exec_command_args_result({
-            "brightnessctl",
-            "set",
-            delta_percentual >= 0 ? "+" + std::to_string(delta_percentual) + "%" : std::to_string(std::abs(delta_percentual)) + "%-"
-        });
-        if (result.ok) {
-            return config_result::success("Brilho alterado.", result.mensagem);
+        command_result atual_result = exec_command_args_result({"brightnessctl", "get"});
+        command_result max_result = exec_command_args_result({"brightnessctl", "max"});
+        int atual = 0;
+        int maximo = 0;
+        if (atual_result.ok && max_result.ok &&
+            parse_int_command_output(atual_result.stdout_output, atual) &&
+            parse_int_command_output(max_result.stdout_output, maximo) &&
+            maximo > 0) {
+            brilho = std::max(0, std::min(100, (atual * 100) / maximo));
+            detalhes = "backend=brightnessctl";
+            return true;
         }
+        detalhes = atual_result.mensagem + max_result.mensagem;
+        return false;
     }
 
-    return alterar_brilho_sysfs(delta_percentual);
+    detalhes = "brightnessctl ausente.";
+    return false;
 }
 
 } // namespace
@@ -147,36 +251,86 @@ void verificarSessao() {
 
 std::vector<DisplayOutput> obter_info_displays() {
     std::vector<DisplayOutput> displays;
-    const bool preferir_wlr = obter_tipo_sessao() == "wayland";
+    (void)listar_displays_result(displays);
+    return displays;
+}
 
-    if (preferir_wlr && comando_existe("wlr-randr")) {
+system_result listar_displays_result(std::vector<DisplayOutput>& displays) {
+    std::lock_guard<std::mutex> lock(g_display_mutex);
+    displays.clear();
+
+    system_result cache_result;
+    if (tentar_cache_display(displays, cache_result)) {
+        return cache_result;
+    }
+
+    const bool preferir_wlr = obter_tipo_sessao() == "wayland";
+    const bool tem_xrandr = comando_existe("xrandr");
+    const bool tem_wlr = comando_existe("wlr-randr");
+    std::vector<std::string> tentativas;
+
+    if (!tem_xrandr && !tem_wlr) {
+        system_result result = config_result::error(
+            "display_subsystem_missing",
+            "Subsistema de display indisponivel.",
+            "xrandr e wlr-randr ausentes."
+        );
+        salvar_cache_display(result, displays);
+        return result;
+    }
+
+    if (preferir_wlr && tem_wlr) {
         command_result result = exec_command_args_result({"wlr-randr"});
         if (result.ok) {
             displays = config_dacc::display_parsing::parse_wlr_randr(result.stdout_output);
             if (!displays.empty()) {
-                return displays;
+                system_result sucesso = config_result::success("Displays listados.", "backend=wlr-randr");
+                salvar_cache_display(sucesso, displays);
+                return sucesso;
             }
+            tentativas.push_back("wlr-randr: comando ok, nenhum display parseado");
+        } else {
+            tentativas.push_back("wlr-randr: " + result.mensagem);
         }
     }
 
-    if (comando_existe("xrandr")) {
+    if (tem_xrandr) {
         command_result result = exec_command_args_result({"xrandr", "--verbose"});
         if (result.ok) {
             displays = config_dacc::display_parsing::parse_xrandr_verbose(result.stdout_output);
             if (!displays.empty()) {
-                return displays;
+                system_result sucesso = config_result::success("Displays listados.", "backend=xrandr");
+                salvar_cache_display(sucesso, displays);
+                return sucesso;
             }
+            tentativas.push_back("xrandr: comando ok, nenhum display parseado");
+        } else {
+            tentativas.push_back("xrandr: " + result.mensagem);
         }
     }
 
-    if (!preferir_wlr && comando_existe("wlr-randr")) {
+    if (!preferir_wlr && tem_wlr) {
         command_result result = exec_command_args_result({"wlr-randr"});
         if (result.ok) {
-            return config_dacc::display_parsing::parse_wlr_randr(result.stdout_output);
+            displays = config_dacc::display_parsing::parse_wlr_randr(result.stdout_output);
+            if (!displays.empty()) {
+                system_result sucesso = config_result::success("Displays listados.", "backend=wlr-randr");
+                salvar_cache_display(sucesso, displays);
+                return sucesso;
+            }
+            tentativas.push_back("wlr-randr: comando ok, nenhum display parseado");
+        } else {
+            tentativas.push_back("wlr-randr: " + result.mensagem);
         }
     }
 
-    return displays;
+    system_result result = config_result::error(
+        "display_no_outputs",
+        "Nenhum display encontrado.",
+        descrever_tentativas(tentativas)
+    );
+    salvar_cache_display(result, displays);
+    return result;
 }
 
 void listar_resolucao() {
@@ -234,7 +388,9 @@ system_result alterarEscala_result(const std::string& saida, float escala) {
     }
 
     command_result result = exec_command_args_result(args);
-    return traduzir_display_result(result, "display_scale_failed", "Falha ao alterar escala.");
+    system_result traduzido = traduzir_display_result(result, "display_scale_failed", "Falha ao alterar escala.");
+    if (traduzido.ok) invalidar_cache_display();
+    return traduzido;
 }
 
 bool alterarResolucao(const std::string& saida, int width, int height, float rate) {
@@ -262,7 +418,9 @@ system_result alterarResolucao_result(const std::string& saida, int width, int h
     }
 
     command_result result = exec_command_args_result(args);
-    return traduzir_display_result(result, "display_resolution_failed", "Falha ao alterar resolucao.");
+    system_result traduzido = traduzir_display_result(result, "display_resolution_failed", "Falha ao alterar resolucao.");
+    if (traduzido.ok) invalidar_cache_display();
+    return traduzido;
 }
 
 void aumentar_brilho() {
@@ -274,9 +432,115 @@ void diminuir_brilho() {
 }
 
 system_result aumentar_brilho_result() {
-    return alterar_brilho(10);
+    return alterar_brilho_result(10);
 }
 
 system_result diminuir_brilho_result() {
-    return alterar_brilho(-10);
+    return alterar_brilho_result(-10);
+}
+
+system_result obter_brilho_result(int& brilho) {
+    std::lock_guard<std::mutex> lock(g_brightness_mutex);
+    system_result cache_result;
+    if (tentar_cache_brilho(brilho, cache_result)) {
+        return cache_result;
+    }
+
+    std::vector<std::string> tentativas;
+    std::string detalhes;
+    if (obter_brilho_brightnessctl(brilho, detalhes)) {
+        system_result result = config_result::success("Brilho obtido.", detalhes);
+        salvar_cache_brilho(result, brilho);
+        return result;
+    }
+    tentativas.push_back("brightnessctl: " + detalhes);
+
+    if (ler_brilho_sysfs(brilho, detalhes)) {
+        system_result result = config_result::success("Brilho obtido.", "backend=sysfs " + detalhes);
+        salvar_cache_brilho(result, brilho);
+        return result;
+    }
+    tentativas.push_back("sysfs: " + detalhes);
+
+    system_result result = config_result::error(
+        "brightness_not_supported",
+        "Controle de brilho nao suportado neste ambiente.",
+        descrever_tentativas(tentativas)
+    );
+    salvar_cache_brilho(result, brilho);
+    return result;
+}
+
+system_result definir_brilho_result(int valor) {
+    valor = std::max(0, std::min(100, valor));
+    std::vector<std::string> tentativas;
+
+    if (comando_existe("brightnessctl")) {
+        command_result result = exec_command_args_result({"brightnessctl", "set", std::to_string(valor) + "%"});
+        if (result.ok) {
+            invalidar_cache_brilho();
+            return config_result::success("Brilho definido.", result.mensagem);
+        }
+        tentativas.push_back("brightnessctl: " + result.mensagem);
+    } else {
+        tentativas.push_back("brightnessctl: ausente");
+    }
+
+    std::string detalhes;
+    if (definir_brilho_sysfs(valor, detalhes)) {
+        invalidar_cache_brilho();
+        return config_result::success("Brilho definido.", "backend=sysfs " + detalhes);
+    }
+    tentativas.push_back("sysfs: " + detalhes);
+
+    return config_result::error(
+        "brightness_not_supported",
+        "Controle de brilho nao suportado neste ambiente.",
+        descrever_tentativas(tentativas)
+    );
+}
+
+system_result alterar_brilho_result(int delta) {
+    if (delta == 0) {
+        int atual = 0;
+        system_result result = obter_brilho_result(atual);
+        if (!result.ok) {
+            return result;
+        }
+        return config_result::success("Brilho mantido.", "delta=0");
+    }
+
+    std::vector<std::string> tentativas;
+    if (comando_existe("brightnessctl")) {
+        const std::string arg = delta >= 0
+            ? "+" + std::to_string(delta) + "%"
+            : std::to_string(std::abs(delta)) + "%-";
+        command_result result = exec_command_args_result({"brightnessctl", "set", arg});
+        if (result.ok) {
+            invalidar_cache_brilho();
+            return config_result::success("Brilho alterado.", result.mensagem);
+        }
+        tentativas.push_back("brightnessctl: " + result.mensagem);
+    } else {
+        tentativas.push_back("brightnessctl: ausente");
+    }
+
+    int atual = 0;
+    std::string detalhes;
+    if (ler_brilho_sysfs(atual, detalhes)) {
+        int novo = std::max(0, std::min(100, atual + delta));
+        if (definir_brilho_sysfs(novo, detalhes)) {
+            invalidar_cache_brilho();
+            return config_result::success("Brilho alterado.", "backend=sysfs " + detalhes);
+        }
+        tentativas.push_back("sysfs escrita: " + detalhes);
+    } else {
+        tentativas.push_back("sysfs leitura: " + detalhes);
+    }
+
+    return config_result::error(
+        "brightness_not_supported",
+        "Controle de brilho nao suportado neste ambiente.",
+        descrever_tentativas(tentativas)
+    );
 }

@@ -413,14 +413,16 @@ struct DisplayMode {
 
 struct DisplayOutput {
     std::string name;
+    std::string backend_id;
     bool connected;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
+    display_backend backend;
 };
 ```
 
-`DisplayMode` descreve uma resolucao/taxa disponivel. `DisplayOutput` descreve uma saida fisica/logica de video.
+`DisplayMode` descreve uma resolucao/taxa disponivel. `DisplayOutput` descreve uma saida fisica/logica de video e guarda o backend que produziu a informacao (`xrandr` ou `wlr-randr`).
 
 ### `std::string obter_tipo_sessao()`
 
@@ -444,12 +446,24 @@ Funcao de apoio/debug para inspecionar a sessao atual.
 ### `std::vector<DisplayOutput> obter_info_displays()`
 
 Retorna monitores conectados, modos e escala atual quando possivel.
+Existe por compatibilidade; para novas chamadas, prefira `listar_displays_result`.
 
 Uso:
 
 - preencher opcoes de resolucao na UI;
 - saber qual modo esta ativo;
 - evitar apresentar resolucoes inexistentes.
+
+### `system_result listar_displays_result(std::vector<DisplayOutput>& displays)`
+
+Contrato preferencial para listagem de displays.
+Possui cache curto de aproximadamente 3 segundos para evitar chamadas repetidas a `xrandr` ou `wlr-randr` durante atualizacoes frequentes da UI.
+
+Retornos comuns:
+
+- `ok`: lista preenchida.
+- `display_subsystem_missing`: `xrandr` e `wlr-randr` ausentes.
+- `display_no_outputs`: ferramentas existem, mas nenhum display foi encontrado ou parseado.
 
 ### `void listar_resolucao()`
 
@@ -504,7 +518,25 @@ Por que escala e delicada:
 
 Ajustam brilho por incremento.
 
-Dependem de ferramentas/ambiente disponiveis.
+Existem por compatibilidade e delegam para as variantes `_result`.
+
+### APIs `_result` de brilho
+
+Use estas funcoes quando a chamada precisar reagir a falhas:
+
+- `system_result obter_brilho_result(int& brilho)`;
+- `system_result definir_brilho_result(int valor)`;
+- `system_result alterar_brilho_result(int delta)`;
+- `system_result aumentar_brilho_result()`;
+- `system_result diminuir_brilho_result()`.
+
+Fallbacks:
+
+- leitura: `brightnessctl get/max`, depois `/sys/class/backlight/*/brightness`;
+- escrita absoluta: `brightnessctl set <valor>%`, depois escrita em sysfs;
+- incremento: `brightnessctl set +N%/N%-`, depois leitura e escrita em sysfs.
+
+`obter_brilho_result` possui cache curto de aproximadamente 2 segundos. Falhas sem backend disponivel retornam `brightness_not_supported`.
 
 ## Modulo Rede
 

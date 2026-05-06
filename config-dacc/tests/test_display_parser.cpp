@@ -27,6 +27,8 @@ void testar_wlr_randr_basico() {
 
     exigir(displays.size() == 1, "deve parsear uma saida wlr-randr");
     exigir(displays[0].name == "HDMI-A-1", "deve preservar nome da saida");
+    exigir(displays[0].backend_id == "HDMI-A-1", "deve preencher backend_id wlr-randr");
+    exigir(displays[0].backend == display_backend::wlrrandr, "deve marcar backend wlr-randr");
     exigir(displays[0].connected, "Enabled: yes deve marcar conectado");
     exigir(displays[0].modes.size() == 2, "deve parsear modos");
     exigir(displays[0].current_mode.width == 1920, "deve detectar largura atual");
@@ -45,6 +47,8 @@ void testar_xrandr_basico() {
 
     exigir(displays.size() == 1, "deve parsear uma saida xrandr");
     exigir(displays[0].name == "HDMI-1", "deve preservar nome xrandr");
+    exigir(displays[0].backend_id == "HDMI-1", "deve preencher backend_id xrandr");
+    exigir(displays[0].backend == display_backend::xrandr, "deve marcar backend xrandr");
     exigir(displays[0].modes.size() == 2, "deve parsear modos xrandr");
     exigir(displays[0].current_mode.width == 1920, "deve detectar modo atual xrandr");
 }
