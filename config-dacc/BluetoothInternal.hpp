@@ -1,7 +1,7 @@
 #ifndef BLUETOOTH_INTERNAL_H
 #define BLUETOOTH_INTERNAL_H
 
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 
 #include <chrono>
 #include <string>

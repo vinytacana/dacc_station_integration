@@ -31,12 +31,17 @@ Ele nao deve:
 
 ## Arquivos
 
-- `functions.hpp`: contrato publico consumido pela UI.
+- `include/config-dacc/functions.hpp`: contrato publico consumido pela UI.
+- `functions.hpp`: wrapper de compatibilidade para includes antigos.
 - `ConfigCommand.cpp`: execucao de comandos e utilitarios basicos do sistema.
-- `HardwareControl.cpp`: audio, video, bateria e rede.
+- `SystemControl.cpp`: tempo e leitura de bateria.
+- `AudioControl.cpp`: volume e dispositivos de audio.
+- `DisplayControl.cpp`: sessao grafica, resolucao, escala e brilho.
+- `NetworkControl.cpp`: Wi-Fi, Ethernet e status de conexao.
 - `BluetoothControl.cpp`: API publica de Bluetooth e regras de alto nivel.
 - `BluetoothInternal.cpp`: sessoes `bluetoothctl`, parser, polling e funcoes auxiliares.
 - `BluetoothInternal.hpp`: contrato interno do modulo Bluetooth.
+- `include/config-dacc/`: includes internos compartilhados entre implementacoes.
 - `Makefile`: build da biblioteca estatica e testes.
 - `tests/test_bluetooth_parser.cpp`: testes do parser de eventos Bluetooth.
 
@@ -64,7 +69,7 @@ O build gera `libdacc-config.a`, linkado pela UI.
 
 ## Contrato Publico
 
-Todo contrato publico fica em `functions.hpp`. Esse arquivo e a fronteira entre a UI e o backend.
+Todo contrato publico fica em `include/config-dacc/functions.hpp`. Esse arquivo e a fronteira entre a UI e o backend.
 
 ### `system_result`
 
@@ -119,7 +124,7 @@ Ele e usado internamente para converter saida de ferramentas Linux em `system_re
 
 ## Modulo Sistema e Execucao
 
-Implementacao: `ConfigCommand.cpp` e parte de `HardwareControl.cpp`.
+Implementacao: `ConfigCommand.cpp` e `SystemControl.cpp`.
 
 ### `bool comando_existe(const std::string& cmd)`
 
@@ -214,7 +219,7 @@ Por que retorna `-1`:
 
 ## Modulo Audio
 
-Implementacao: `HardwareControl.cpp`.
+Implementacao: `AudioControl.cpp`.
 
 ### Struct `device_audio`
 
@@ -328,7 +333,7 @@ Nao deve ser usada como fonte de dados da UI.
 
 ## Modulo Video
 
-Implementacao: `HardwareControl.cpp`.
+Implementacao: `DisplayControl.cpp`.
 
 ### Structs
 
@@ -437,7 +442,7 @@ Dependem de ferramentas/ambiente disponiveis.
 
 ## Modulo Rede
 
-Implementacao: `HardwareControl.cpp`.
+Implementacao: `NetworkControl.cpp`.
 
 ### Struct `wifi_network`
 
@@ -983,7 +988,7 @@ Ao adicionar novos codigos:
 
 Ao adicionar uma nova funcao de configuracao:
 
-1. Declare o contrato em `functions.hpp`.
+1. Declare o contrato em `include/config-dacc/functions.hpp`.
 2. Se a operacao puder falhar, retorne `system_result`.
 3. Use `exec_command_args_result` quando houver argumentos dinamicos.
 4. Coloque parsing no backend, nao na UI.
@@ -991,7 +996,7 @@ Ao adicionar uma nova funcao de configuracao:
 6. Preencha `codigo`, `mensagem` e `detalhes`.
 7. Adicione teste se houver parser ou regra nao trivial.
 8. Rode `make -C config-dacc` e `make test`.
-9. Rode build limpo da UI se `functions.hpp` mudou.
+9. Rode build limpo da UI se `include/config-dacc/functions.hpp` mudou.
 
 ## Validacao Recomendada
 

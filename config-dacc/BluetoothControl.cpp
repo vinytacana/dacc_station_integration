@@ -1,5 +1,5 @@
 #include "BluetoothInternal.hpp"
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 
 #include <algorithm>
 #include <chrono>

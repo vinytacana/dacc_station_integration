@@ -1,10 +1,8 @@
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 
-#include <array>
 #include <cerrno>
-#include <cstdio>
 #include <cstring>
-#include <memory>
+#include <array>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <vector>
@@ -61,34 +59,69 @@ bool comando_existe(const std::string& cmd) {
 
 command_result exec_command_result(const std::string& cmd) {
     command_result result;
-
-    std::array<char, 256> buffer{};
-    std::string output;
-    std::unique_ptr<FILE, int (*)(FILE*)> pipe(
-        popen((cmd + " 2>&1").c_str(), "r"),
-        pclose
-    );
-
-    if (!pipe) {
-        result.mensagem = "popen() falhou.";
+    if (cmd.empty()) {
+        result.mensagem = "Nenhum comando informado.";
         return result;
     }
 
-    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
-        output += buffer.data();
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        result.mensagem = "pipe() falhou: " + std::string(std::strerror(errno));
+        return result;
     }
 
-    int status = pclose(pipe.release());
-    if (status == -1) {
-        result.exit_code = -1;
-    } else if (WIFEXITED(status)) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        result.mensagem = "fork() falhou: " + std::string(std::strerror(errno));
+        return result;
+    }
+
+    if (pid == 0) {
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[1]);
+
+        execlp("sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+    }
+
+    close(pipefd[1]);
+    std::array<char, 256> buffer{};
+    std::string output;
+    while (true) {
+        ssize_t n = read(pipefd[0], buffer.data(), buffer.size());
+        if (n > 0) {
+            output.append(buffer.data(), static_cast<size_t>(n));
+            continue;
+        }
+        if (n == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        break;
+    }
+    close(pipefd[0]);
+
+    int status = -1;
+    if (waitpid(pid, &status, 0) < 0) {
+        result.mensagem = "waitpid() falhou: " + std::string(std::strerror(errno));
+        return result;
+    }
+
+    if (WIFEXITED(status)) {
         result.exit_code = WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
         result.exit_code = 128 + WTERMSIG(status);
     } else {
         result.exit_code = status;
     }
-    result.ok = status != -1 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+
+    result.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     result.stdout_output = output;
     result.stderr_output = output;
     result.mensagem = output;
