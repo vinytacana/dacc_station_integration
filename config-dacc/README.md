@@ -127,7 +127,7 @@ Ele e usado internamente para converter saida de ferramentas Linux em `system_re
 
 ### Feature detection
 
-O backend deve detectar capacidades em tempo de execucao, nao assumir perfis fixos de hardware. Use `comando_existe()` e `obter_capacidades_sistema()` para saber se recursos como `audio_select`, `display_info`, `brightness` e `intro_video` estao disponiveis.
+O backend deve detectar capacidades em tempo de execucao, nao assumir perfis fixos de hardware. Use `obter_capacidades_sistema()` para saber se recursos como `audio_select`, `display_info`, `brightness` e `network` estao realmente disponiveis. Esse snapshot consulta os contratos `_result` dos modulos principais em vez de apenas verificar se comandos existem.
 
 Ordem de fallback atual:
 
@@ -135,8 +135,9 @@ Ordem de fallback atual:
 - volume: `wpctl`, depois `pactl`, depois `amixer`;
 - display: `wlr-randr` em Wayland, `xrandr` em X11, com fallback quando possivel;
 - brilho: `brightnessctl`, depois `/sys/class/backlight`.
+- rede: `nmcli`, com diferenca entre NetworkManager ausente, Wi-Fi desligado e scan vazio.
 
-Quando uma capacidade faltar, retorne `system_result` com codigo estavel, como `audio_subsystem_missing`, `feature_unavailable` ou `backlight_not_supported`.
+Quando uma capacidade faltar, retorne `system_result` com codigo estavel, como `audio_subsystem_missing`, `display_subsystem_missing`, `brightness_not_supported` ou `network_manager_missing`.
 
 ## Modulo Sistema e Execucao
 

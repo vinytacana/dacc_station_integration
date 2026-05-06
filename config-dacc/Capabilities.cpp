@@ -49,6 +49,22 @@ void adicionar_missing(std::vector<std::string>& missing, bool presente, const s
     }
 }
 
+bool capacidade_presente(const system_result& result, const std::string& codigo_indisponivel) {
+    return result.ok || result.codigo != codigo_indisponivel;
+}
+
+bool displays_suportam_backend(
+    const std::vector<DisplayOutput>& displays,
+    display_backend backend
+) {
+    for (const auto& display : displays) {
+        if (display.backend == backend) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 station_capabilities obter_capacidades_sistema() {
@@ -59,28 +75,37 @@ station_capabilities obter_capacidades_sistema() {
     caps.session_type = session ? std::string(session) : "unknown";
     caps.desktop = desktop ? std::string(desktop) : "";
 
-    const bool tem_wpctl = comando_existe("wpctl");
-    const bool tem_pactl = comando_existe("pactl");
-    const bool tem_aplay = comando_existe("aplay");
-    const bool tem_amixer = comando_existe("amixer");
-    const bool tem_xrandr = comando_existe("xrandr");
-    const bool tem_wlr_randr = comando_existe("wlr-randr");
-    const bool tem_gsettings = comando_existe("gsettings");
+    std::vector<device_audio> dispositivos_audio;
+    system_result audio_result = listar_dispositivos_audio_result(dispositivos_audio);
+    caps.audio_list = capacidade_presente(audio_result, "audio_subsystem_missing");
+    caps.audio_select = capacidade_presente(audio_result, "audio_subsystem_missing");
 
-    caps.audio_list = tem_wpctl || tem_pactl || tem_aplay;
-    caps.audio_select = tem_wpctl || tem_pactl;
-    caps.volume_control = tem_wpctl || tem_pactl || tem_amixer;
-    caps.network = comando_existe("nmcli");
+    int volume = 0;
+    system_result volume_result = obter_volume_atual_result(volume);
+    caps.volume_control = capacidade_presente(volume_result, "audio_subsystem_missing");
+
+    std::vector<wifi_network> redes;
+    system_result network_result = listar_wifi_result(redes);
+    caps.network = capacidade_presente(network_result, "network_manager_missing");
+
     caps.bluetooth = comando_existe("bluetoothctl");
-    caps.display_info = tem_xrandr || tem_wlr_randr;
-    caps.display_resolution = (caps.session_type == "x11" && tem_xrandr) ||
-                              (caps.session_type == "wayland" && tem_wlr_randr);
-    caps.display_scale = (caps.session_type == "x11" && tem_xrandr) ||
+
+    std::vector<DisplayOutput> displays;
+    system_result display_result = listar_displays_result(displays);
+    caps.display_info = capacidade_presente(display_result, "display_subsystem_missing");
+    const bool tem_display_xrandr = displays_suportam_backend(displays, display_backend::xrandr);
+    const bool tem_display_wlrrandr = displays_suportam_backend(displays, display_backend::wlrrandr);
+    caps.display_resolution = (caps.session_type == "x11" && tem_display_xrandr) ||
+                              (caps.session_type == "wayland" && tem_display_wlrrandr);
+    caps.display_scale = caps.display_resolution ||
                          (caps.session_type == "wayland" &&
-                          ((caps.desktop.find("gnome") != std::string::npos && tem_gsettings) ||
-                           (caps.desktop.find("gnome") == std::string::npos && tem_wlr_randr)));
+                          caps.desktop.find("gnome") != std::string::npos &&
+                          caps.display_info);
+
     caps.backlight_sysfs = backlight_sysfs_disponivel();
-    caps.brightness = comando_existe("brightnessctl") || caps.backlight_sysfs;
+    int brilho = 0;
+    system_result brightness_result = obter_brilho_result(brilho);
+    caps.brightness = capacidade_presente(brightness_result, "brightness_not_supported");
     caps.intro_video = comando_existe("mpv");
     caps.user_video_group = grupo_usuario_existe("video");
     caps.user_audio_group = grupo_usuario_existe("audio");
