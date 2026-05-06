@@ -109,6 +109,26 @@ struct DisplayOutput {
     float current_scale;
 };
 
+struct station_capabilities {
+    bool audio_list = false;
+    bool audio_select = false;
+    bool volume_control = false;
+    bool network = false;
+    bool bluetooth = false;
+    bool display_info = false;
+    bool display_resolution = false;
+    bool display_scale = false;
+    bool brightness = false;
+    bool intro_video = false;
+    bool backlight_sysfs = false;
+    bool user_video_group = false;
+    bool user_audio_group = false;
+    bool user_netdev_group = false;
+    std::string session_type;
+    std::string desktop;
+    std::vector<std::string> missing;
+};
+
 // --- Sistema ---
 bool comando_existe(const std::string& cmd);
 std::string exec_command(const char* cmd);
@@ -116,6 +136,7 @@ command_result exec_command_result(const std::string& cmd);
 command_result exec_command_args_result(const std::vector<std::string>& args);
 long long obter_tempo_ms();
 int obter_bateria();
+station_capabilities obter_capacidades_sistema();
 
 // --- Áudio ---
 void aumentar_volume();
