@@ -34,28 +34,46 @@ system_result traduzir_audio_result(
     return config_result::error(codigo, mensagem, command.mensagem);
 }
 
+system_result executar_desmutar_audio_result(const std::vector<std::string>& cmd) {
+    command_result result = exec_command_args_result(cmd);
+    if (result.ok) {
+        return config_result::success("Audio atualizado.", result.mensagem);
+    }
+    return traduzir_audio_result(result, "audio_mute_failed", "Falha ao remover mudo.");
+}
+
 system_result executar_comando_audio_result(
     const std::vector<std::string>& cmd_wp,
     const std::vector<std::string>& cmd_pa,
     const std::vector<std::string>& cmd_alsa,
+    const bool desmutar,
     const std::string& codigo_erro,
     const std::string& mensagem_erro
 ) {
     if (comando_existe("wpctl")) {
         command_result result = exec_command_args_result(cmd_wp);
         if (result.ok) {
+            if (desmutar) {
+                return executar_desmutar_audio_result({"wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"});
+            }
             return config_result::success("Audio atualizado.", result.mensagem);
         }
     }
     if (comando_existe("pactl")) {
         command_result result = exec_command_args_result(cmd_pa);
         if (result.ok) {
+            if (desmutar) {
+                return executar_desmutar_audio_result({"pactl", "set-sink-mute", "@DEFAULT_SINK@", "0"});
+            }
             return config_result::success("Audio atualizado.", result.mensagem);
         }
     }
     if (comando_existe("amixer")) {
         command_result result = exec_command_args_result(cmd_alsa);
         if (result.ok) {
+            if (desmutar) {
+                return executar_desmutar_audio_result({"amixer", "sset", "Master", "unmute"});
+            }
             return config_result::success("Audio atualizado.", result.mensagem);
         }
         return traduzir_audio_result(result, codigo_erro, mensagem_erro);
@@ -331,6 +349,7 @@ system_result aumentar_volume_result() {
         {"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"},
         {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%"},
         {"amixer", "sset", "Master", "5%+"},
+        true,
         "audio_volume_failed",
         "Falha ao aumentar volume."
     );
@@ -341,6 +360,7 @@ system_result diminuir_volume_result() {
         {"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"},
         {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%"},
         {"amixer", "sset", "Master", "5%-"},
+        false,
         "audio_volume_failed",
         "Falha ao diminuir volume."
     );
@@ -359,6 +379,7 @@ system_result definir_volume_result(int valor_int) {
         {"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", v_str},
         {"pactl", "set-sink-volume", "@DEFAULT_SINK@", v_perc},
         {"amixer", "sset", "Master", v_perc},
+        valor_int > 0,
         "audio_volume_failed",
         "Falha ao definir volume."
     );
@@ -369,6 +390,7 @@ system_result alternar_mudo_result() {
         {"wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"},
         {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"},
         {"amixer", "sset", "Master", "toggle"},
+        false,
         "audio_mute_failed",
         "Falha ao alternar mudo."
     );
