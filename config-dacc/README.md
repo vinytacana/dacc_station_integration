@@ -35,15 +35,18 @@ Ele nao deve:
 - `functions.hpp`: wrapper de compatibilidade para includes antigos.
 - `ConfigCommand.cpp`: execucao de comandos e utilitarios basicos do sistema.
 - `SystemControl.cpp`: tempo e leitura de bateria.
+- `Capabilities.cpp`: snapshot de capacidades disponiveis no ambiente.
 - `AudioControl.cpp`: volume e dispositivos de audio.
 - `DisplayControl.cpp`: sessao grafica, resolucao, escala e brilho.
 - `NetworkControl.cpp`: Wi-Fi, Ethernet e status de conexao.
 - `BluetoothControl.cpp`: API publica de Bluetooth e regras de alto nivel.
 - `BluetoothInternal.cpp`: sessoes `bluetoothctl`, parser, polling e funcoes auxiliares.
 - `BluetoothInternal.hpp`: contrato interno do modulo Bluetooth.
-- `include/config-dacc/`: includes internos compartilhados entre implementacoes.
+- `include/config-dacc/`: contrato publico, parsers testaveis e includes compartilhados.
 - `Makefile`: build da biblioteca estatica e testes.
 - `tests/test_bluetooth_parser.cpp`: testes do parser de eventos Bluetooth.
+- `tests/test_audio_parser.cpp`: testes de parsing de `wpctl`, `pactl`, `aplay` e volume.
+- `tests/test_display_parser.cpp`: testes de parsing de `xrandr` e `wlr-randr`.
 
 ## Build e Testes
 
@@ -121,6 +124,19 @@ struct command_result {
 ```
 
 Ele e usado internamente para converter saida de ferramentas Linux em `system_result` ou em structs especializadas.
+
+### Feature detection
+
+O backend deve detectar capacidades em tempo de execucao, nao assumir perfis fixos de hardware. Use `comando_existe()` e `obter_capacidades_sistema()` para saber se recursos como `audio_select`, `display_info`, `brightness` e `intro_video` estao disponiveis.
+
+Ordem de fallback atual:
+
+- audio: `wpctl`, depois `pactl`, depois `aplay` apenas para listagem;
+- volume: `wpctl`, depois `pactl`, depois `amixer`;
+- display: `wlr-randr` em Wayland, `xrandr` em X11, com fallback quando possivel;
+- brilho: `brightnessctl`, depois `/sys/class/backlight`.
+
+Quando uma capacidade faltar, retorne `system_result` com codigo estavel, como `audio_subsystem_missing`, `feature_unavailable` ou `backlight_not_supported`.
 
 ## Modulo Sistema e Execucao
 
@@ -253,6 +269,17 @@ Diminui o volume em um incremento padrao.
 
 Mesma finalidade de `aumentar_volume`, mas no sentido inverso.
 
+### APIs `_result` de volume
+
+Use estas funcoes quando a chamada precisar reagir a falhas:
+
+- `system_result aumentar_volume_result()`;
+- `system_result diminuir_volume_result()`;
+- `system_result definir_volume_result(int valor_int)`;
+- `system_result obter_volume_atual_result(int& volume)`.
+
+Elas retornam `audio_subsystem_missing` quando nenhuma ferramenta compativel esta disponivel.
+
 ### `int obter_volume_atual()`
 
 Consulta o volume atual.
@@ -320,6 +347,7 @@ Retornos comuns:
 
 - `ok`: dispositivo definido.
 - `audio_select_failed`: falha ao definir dispositivo.
+- `audio_subsystem_missing`: `wpctl` e `pactl` indisponiveis.
 
 Uso na UI:
 
