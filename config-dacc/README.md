@@ -35,15 +35,18 @@ Ele nao deve:
 - `functions.hpp`: wrapper de compatibilidade para includes antigos.
 - `ConfigCommand.cpp`: execucao de comandos e utilitarios basicos do sistema.
 - `SystemControl.cpp`: tempo e leitura de bateria.
+- `Capabilities.cpp`: snapshot de capacidades disponiveis no ambiente.
 - `AudioControl.cpp`: volume e dispositivos de audio.
 - `DisplayControl.cpp`: sessao grafica, resolucao, escala e brilho.
 - `NetworkControl.cpp`: Wi-Fi, Ethernet e status de conexao.
 - `BluetoothControl.cpp`: API publica de Bluetooth e regras de alto nivel.
 - `BluetoothInternal.cpp`: sessoes `bluetoothctl`, parser, polling e funcoes auxiliares.
 - `BluetoothInternal.hpp`: contrato interno do modulo Bluetooth.
-- `include/config-dacc/`: includes internos compartilhados entre implementacoes.
+- `include/config-dacc/`: contrato publico, parsers testaveis e includes compartilhados.
 - `Makefile`: build da biblioteca estatica e testes.
 - `tests/test_bluetooth_parser.cpp`: testes do parser de eventos Bluetooth.
+- `tests/test_audio_parser.cpp`: testes de parsing de `wpctl`, `pactl`, `aplay` e volume.
+- `tests/test_display_parser.cpp`: testes de parsing de `xrandr` e `wlr-randr`.
 
 ## Build e Testes
 
@@ -121,6 +124,20 @@ struct command_result {
 ```
 
 Ele e usado internamente para converter saida de ferramentas Linux em `system_result` ou em structs especializadas.
+
+### Feature detection
+
+O backend deve detectar capacidades em tempo de execucao, nao assumir perfis fixos de hardware. Use `obter_capacidades_sistema()` para saber se recursos como `audio_select`, `display_info`, `brightness` e `network` estao realmente disponiveis. Esse snapshot consulta os contratos `_result` dos modulos principais em vez de apenas verificar se comandos existem.
+
+Ordem de fallback atual:
+
+- audio: `wpctl`, depois `pactl`, depois `aplay` apenas para listagem;
+- volume: `wpctl`, depois `pactl`, depois `amixer`;
+- display: `wlr-randr` em Wayland, `xrandr` em X11, com fallback quando possivel;
+- brilho: `brightnessctl`, depois `/sys/class/backlight`.
+- rede: `nmcli`, com diferenca entre NetworkManager ausente, Wi-Fi desligado e scan vazio.
+
+Quando uma capacidade faltar, retorne `system_result` com codigo estavel, como `audio_subsystem_missing`, `display_subsystem_missing`, `brightness_not_supported` ou `network_manager_missing`.
 
 ## Modulo Sistema e Execucao
 
@@ -224,18 +241,28 @@ Implementacao: `AudioControl.cpp`.
 ### Struct `device_audio`
 
 ```cpp
+enum class audio_backend {
+    wpctl,
+    pactl,
+    alsa
+};
+
 struct device_audio {
-    int id;
+    int id = -1;
+    std::string backend_id;
     std::string descricao;
-    bool padrao;
+    bool padrao = false;
+    audio_backend backend = audio_backend::wpctl;
 };
 ```
 
 Campos:
 
-- `id`: identificador usado pelo sistema de audio.
+- `id`: identificador numerico usado por compatibilidade com chamadas antigas.
+- `backend_id`: identificador real do backend; no `pactl`, e o nome do sink.
 - `descricao`: nome legivel do dispositivo.
 - `padrao`: indica se e o dispositivo atual.
+- `backend`: ferramenta que originou o dispositivo (`wpctl`, `pactl` ou `alsa`).
 
 ### `void aumentar_volume()`
 
@@ -252,6 +279,27 @@ Uso:
 Diminui o volume em um incremento padrao.
 
 Mesma finalidade de `aumentar_volume`, mas no sentido inverso.
+
+### APIs `_result` de volume
+
+Use estas funcoes quando a chamada precisar reagir a falhas:
+
+- `system_result aumentar_volume_result()`;
+- `system_result diminuir_volume_result()`;
+- `system_result definir_volume_result(int valor_int)`;
+- `system_result obter_volume_atual_result(int& volume)`.
+- `system_result alternar_mudo_result()`;
+- `system_result obter_mudo_result(bool& mudo)`.
+
+Elas retornam `audio_subsystem_missing` quando nenhuma ferramenta compativel esta disponivel.
+As funcoes antigas `aumentar_volume()`, `diminuir_volume()` e `definir_volume()` apenas delegam para as variantes `_result`.
+
+Fallbacks:
+
+- volume/mudo: `wpctl`, depois `pactl`, depois `amixer`;
+- `wpctl get-volume` detecta mudo por `[MUTED]`;
+- `pactl get-sink-mute` detecta `Mute: yes/no`;
+- `amixer get Master` detecta `[off]` ou `[on]`.
 
 ### `int obter_volume_atual()`
 
@@ -299,6 +347,17 @@ Uso na UI:
 - preencher a lista de dispositivos na janela Audio/Video;
 - permitir troca de saida sem expor comandos ao usuario.
 
+### `system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispositivos)`
+
+Contrato preferencial para listagem de audio.
+Possui cache curto de aproximadamente 2 segundos para evitar chamadas repetidas a `wpctl`, `pactl` ou `aplay` em atualizacoes frequentes da UI.
+
+Retornos comuns:
+
+- `ok`: lista preenchida.
+- `audio_subsystem_missing`: `wpctl`, `pactl` e `aplay` ausentes.
+- `audio_no_devices`: ferramentas existem, mas nenhum dispositivo foi encontrado ou parseado.
+
 ### `void selecionar_dispositivo_audio(int id)`
 
 Seleciona dispositivo de audio e ignora detalhes do resultado.
@@ -310,16 +369,24 @@ Motivo de existir:
 
 Preferencia:
 
-- em UI nova, use `selecionar_dispositivo_audio_result`.
+- em UI nova, use `selecionar_dispositivo_audio_result(const device_audio&)`.
 
 ### `system_result selecionar_dispositivo_audio_result(int id)`
 
 Seleciona dispositivo de audio e retorna sucesso/falha detalhado.
 
+Essa variante existe por compatibilidade: ela lista os dispositivos atuais, procura pelo `id` numerico e entao delega para a selecao por `device_audio`.
+
+### `system_result selecionar_dispositivo_audio_result(const device_audio& dispositivo)`
+
+Seleciona usando `backend` e `backend_id`.
+
 Retornos comuns:
 
 - `ok`: dispositivo definido.
 - `audio_select_failed`: falha ao definir dispositivo.
+- `audio_subsystem_missing`: `wpctl` e `pactl` indisponiveis.
+- `audio_select_unsupported`: dispositivo veio de backend somente-listagem, como ALSA.
 
 Uso na UI:
 
@@ -347,14 +414,16 @@ struct DisplayMode {
 
 struct DisplayOutput {
     std::string name;
+    std::string backend_id;
     bool connected;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
+    display_backend backend;
 };
 ```
 
-`DisplayMode` descreve uma resolucao/taxa disponivel. `DisplayOutput` descreve uma saida fisica/logica de video.
+`DisplayMode` descreve uma resolucao/taxa disponivel. `DisplayOutput` descreve uma saida fisica/logica de video e guarda o backend que produziu a informacao (`xrandr` ou `wlr-randr`).
 
 ### `std::string obter_tipo_sessao()`
 
@@ -378,12 +447,24 @@ Funcao de apoio/debug para inspecionar a sessao atual.
 ### `std::vector<DisplayOutput> obter_info_displays()`
 
 Retorna monitores conectados, modos e escala atual quando possivel.
+Existe por compatibilidade; para novas chamadas, prefira `listar_displays_result`.
 
 Uso:
 
 - preencher opcoes de resolucao na UI;
 - saber qual modo esta ativo;
 - evitar apresentar resolucoes inexistentes.
+
+### `system_result listar_displays_result(std::vector<DisplayOutput>& displays)`
+
+Contrato preferencial para listagem de displays.
+Possui cache curto de aproximadamente 3 segundos para evitar chamadas repetidas a `xrandr` ou `wlr-randr` durante atualizacoes frequentes da UI.
+
+Retornos comuns:
+
+- `ok`: lista preenchida.
+- `display_subsystem_missing`: `xrandr` e `wlr-randr` ausentes.
+- `display_no_outputs`: ferramentas existem, mas nenhum display foi encontrado ou parseado.
 
 ### `void listar_resolucao()`
 
@@ -438,7 +519,25 @@ Por que escala e delicada:
 
 Ajustam brilho por incremento.
 
-Dependem de ferramentas/ambiente disponiveis.
+Existem por compatibilidade e delegam para as variantes `_result`.
+
+### APIs `_result` de brilho
+
+Use estas funcoes quando a chamada precisar reagir a falhas:
+
+- `system_result obter_brilho_result(int& brilho)`;
+- `system_result definir_brilho_result(int valor)`;
+- `system_result alterar_brilho_result(int delta)`;
+- `system_result aumentar_brilho_result()`;
+- `system_result diminuir_brilho_result()`.
+
+Fallbacks:
+
+- leitura: `brightnessctl get/max`, depois `/sys/class/backlight/*/brightness`;
+- escrita absoluta: `brightnessctl set <valor>%`, depois escrita em sysfs;
+- incremento: `brightnessctl set +N%/N%-`, depois leitura e escrita em sysfs.
+
+`obter_brilho_result` possui cache curto de aproximadamente 2 segundos. Falhas sem backend disponivel retornam `brightness_not_supported`.
 
 ## Modulo Rede
 
@@ -448,6 +547,8 @@ Implementacao: `NetworkControl.cpp`.
 
 ```cpp
 struct wifi_network {
+    std::string backend_id;
+    std::string bssid;
     std::string ssid;
     int sinal;
     std::string seguranca;
@@ -457,6 +558,8 @@ struct wifi_network {
 
 Campos:
 
+- `backend_id`: identificador usado pelo backend; hoje prefere o BSSID.
+- `bssid`: MAC do ponto de acesso quando informado pelo `nmcli`.
 - `ssid`: nome da rede.
 - `sinal`: intensidade do sinal.
 - `seguranca`: tipo de seguranca informado pelo NetworkManager.
@@ -511,24 +614,38 @@ Uso:
 
 Lista redes no terminal.
 
-Funcao auxiliar/debug. Para UI, use `listar_wifi_parsed`.
+Funcao auxiliar/debug. Para UI, use `listar_wifi_result`.
 
 ### `std::vector<wifi_network> listar_wifi_parsed()`
 
 Escaneia redes Wi-Fi e retorna structs.
+Existe por compatibilidade; para novas chamadas, prefira `listar_wifi_result`.
 
 Como funciona:
 
 - chama `nmcli` em modo tabular;
 - usa parser que respeita caracteres escapados;
 - trata SSIDs com `:` corretamente;
-- preenche sinal, seguranca e indicador de rede atual.
+- preenche BSSID, `backend_id`, sinal, seguranca e indicador de rede atual.
 
 Por que o parser e necessario:
 
 - `nmcli -t` separa campos por `:`;
 - SSIDs tambem podem conter `:`;
 - parsing simples por split quebraria nomes reais de rede.
+
+### `system_result listar_wifi_result(std::vector<wifi_network>& redes)`
+
+Contrato preferencial para scan Wi-Fi.
+Possui cache curto de aproximadamente 8 segundos para evitar chamadas repetidas a `nmcli device wifi list`, que pode ser custoso no Raspberry Pi.
+
+Retornos comuns:
+
+- `ok`: lista preenchida.
+- `network_manager_missing`: `nmcli` ausente.
+- `wifi_disabled`: radio Wi-Fi desligado.
+- `wifi_scan_failed`: `nmcli` falhou durante o scan.
+- `wifi_no_networks`: scan executou, mas nao encontrou redes parseaveis.
 
 ### `wifi_adapter_status obter_status_wifi()`
 
@@ -576,8 +693,10 @@ Retornos comuns:
 
 - `ok`
 - `wifi_toggle_failed`
+- `network_manager_missing`
 
 Depois de ligar Wi-Fi, a UI pode disparar novo sync para recarregar redes.
+O cache de scan e invalidado quando o estado do radio muda com sucesso.
 
 ### `void conectar_wifi(...)`
 
@@ -596,10 +715,13 @@ Parametros:
 
 Mapeamento de falhas:
 
+- `network_manager_missing`;
 - autenticacao incorreta;
 - rede indisponivel;
 - Wi-Fi desligado;
 - falha generica do NetworkManager.
+
+Ao conectar com sucesso, o cache de scan e invalidado.
 
 ### `void desconectar_wifi(...)`
 
@@ -615,6 +737,8 @@ Uso:
 
 - tela de rede;
 - acoes administrativas futuras.
+
+Retorna `network_manager_missing` quando `nmcli` nao esta disponivel e invalida o cache ao desconectar com sucesso.
 
 ## Modulo Bluetooth
 

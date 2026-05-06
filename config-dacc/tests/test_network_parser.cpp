@@ -55,6 +55,21 @@ void testar_campo_vazio_final() {
     );
 }
 
+void testar_parse_wifi_com_bssid() {
+    const std::string entrada =
+        "*:AA\\:BB\\:CC\\:DD\\:EE\\:FF:DACC:80:WPA2\n"
+        ":11\\:22\\:33\\:44\\:55\\:66:Lab\\:Jogos:72:WPA1 WPA2\n";
+
+    auto redes = config_dacc::network_parsing::parse_nmcli_wifi_list(entrada);
+
+    exigir(redes.size() == 2, "deve parsear redes Wi-Fi com BSSID");
+    exigir(redes[0].em_uso, "deve marcar rede em uso");
+    exigir(redes[0].bssid == "AA:BB:CC:DD:EE:FF", "deve desescapar BSSID");
+    exigir(redes[0].backend_id == "AA:BB:CC:DD:EE:FF", "backend_id deve preferir BSSID");
+    exigir(redes[1].ssid == "Lab:Jogos", "deve preservar SSID com dois-pontos");
+    exigir(redes[1].sinal == 72, "deve parsear sinal");
+}
+
 } // namespace
 
 int main() {
@@ -62,6 +77,7 @@ int main() {
     testar_dois_pontos_escapado();
     testar_barra_invertida_escapada();
     testar_campo_vazio_final();
+    testar_parse_wifi_com_bssid();
     std::cout << "Network parser tests passed." << std::endl;
     return 0;
 }

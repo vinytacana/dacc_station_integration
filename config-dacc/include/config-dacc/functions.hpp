@@ -7,6 +7,8 @@
 #include <istream>
 
 struct wifi_network{
+    std::string backend_id;
+    std::string bssid;
     std::string ssid;
     int sinal;
     std::string seguranca;
@@ -88,10 +90,18 @@ struct command_result {
     std::string mensagem;
 };
 
-struct device_audio{
-    int id;
+enum class audio_backend {
+    wpctl,
+    pactl,
+    alsa
+};
+
+struct device_audio {
+    int id = -1;
+    std::string backend_id;
     std::string descricao;
-    bool padrao;
+    bool padrao = false;
+    audio_backend backend = audio_backend::wpctl;
 };
 
 struct DisplayMode {
@@ -101,12 +111,44 @@ struct DisplayMode {
     bool is_current;
 };
 
+enum class display_backend {
+    xrandr,
+    wlrrandr
+};
+
+enum class brightness_backend {
+    brightnessctl,
+    sysfs
+};
+
 struct DisplayOutput {
     std::string name;
+    std::string backend_id;
     bool connected;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
+    display_backend backend = display_backend::xrandr;
+};
+
+struct station_capabilities {
+    bool audio_list = false;
+    bool audio_select = false;
+    bool volume_control = false;
+    bool network = false;
+    bool bluetooth = false;
+    bool display_info = false;
+    bool display_resolution = false;
+    bool display_scale = false;
+    bool brightness = false;
+    bool intro_video = false;
+    bool backlight_sysfs = false;
+    bool user_video_group = false;
+    bool user_audio_group = false;
+    bool user_netdev_group = false;
+    std::string session_type;
+    std::string desktop;
+    std::vector<std::string> missing;
 };
 
 // --- Sistema ---
@@ -116,21 +158,31 @@ command_result exec_command_result(const std::string& cmd);
 command_result exec_command_args_result(const std::vector<std::string>& args);
 long long obter_tempo_ms();
 int obter_bateria();
+station_capabilities obter_capacidades_sistema();
 
 // --- Áudio ---
 void aumentar_volume();
 void diminuir_volume();
 int obter_volume_atual();
+system_result obter_volume_atual_result(int& volume);
+system_result obter_mudo_result(bool& mudo);
 void definir_volume(int valor_int);
+system_result aumentar_volume_result();
+system_result diminuir_volume_result();
+system_result definir_volume_result(int valor_int);
+system_result alternar_mudo_result();
 std::vector<device_audio> listar_dispositivos_audio();
+system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispositivos);
 void selecionar_dispositivo_audio(int id);
 system_result selecionar_dispositivo_audio_result(int id);
+system_result selecionar_dispositivo_audio_result(const device_audio& dispositivo);
 void imprimir_dispositivos_audio();
 
 // --- Vídeo ---
 std::string obter_tipo_sessao();
 void verificarSessao();
 std::vector<DisplayOutput> obter_info_displays();
+system_result listar_displays_result(std::vector<DisplayOutput>& displays);
 void listar_resolucao();
 bool alterarResolucao(const std::string &saida, int width, int height, float rate);
 system_result alterarResolucao_result(const std::string &saida, int width, int height, float rate);
@@ -138,10 +190,16 @@ bool alterarEscala(const std::string &saida, float escala);
 system_result alterarEscala_result(const std::string &saida, float escala);
 void aumentar_brilho();
 void diminuir_brilho();
+system_result obter_brilho_result(int& brilho);
+system_result definir_brilho_result(int valor);
+system_result alterar_brilho_result(int delta);
+system_result aumentar_brilho_result();
+system_result diminuir_brilho_result();
 
 // --- Wi-Fi ---
 void listar_wifi();
 std::vector<wifi_network> listar_wifi_parsed();
+system_result listar_wifi_result(std::vector<wifi_network>& redes);
 wifi_adapter_status obter_status_wifi();
 network_connection_status obter_status_conexao_rede();
 bool wifi_conectado();
