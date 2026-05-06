@@ -7,6 +7,8 @@
 #include <istream>
 
 struct wifi_network{
+    std::string backend_id;
+    std::string bssid;
     std::string ssid;
     int sinal;
     std::string seguranca;
@@ -197,6 +199,7 @@ system_result diminuir_brilho_result();
 // --- Wi-Fi ---
 void listar_wifi();
 std::vector<wifi_network> listar_wifi_parsed();
+system_result listar_wifi_result(std::vector<wifi_network>& redes);
 wifi_adapter_status obter_status_wifi();
 network_connection_status obter_status_conexao_rede();
 bool wifi_conectado();

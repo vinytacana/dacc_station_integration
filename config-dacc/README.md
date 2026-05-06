@@ -546,6 +546,8 @@ Implementacao: `NetworkControl.cpp`.
 
 ```cpp
 struct wifi_network {
+    std::string backend_id;
+    std::string bssid;
     std::string ssid;
     int sinal;
     std::string seguranca;
@@ -555,6 +557,8 @@ struct wifi_network {
 
 Campos:
 
+- `backend_id`: identificador usado pelo backend; hoje prefere o BSSID.
+- `bssid`: MAC do ponto de acesso quando informado pelo `nmcli`.
 - `ssid`: nome da rede.
 - `sinal`: intensidade do sinal.
 - `seguranca`: tipo de seguranca informado pelo NetworkManager.
@@ -609,24 +613,38 @@ Uso:
 
 Lista redes no terminal.
 
-Funcao auxiliar/debug. Para UI, use `listar_wifi_parsed`.
+Funcao auxiliar/debug. Para UI, use `listar_wifi_result`.
 
 ### `std::vector<wifi_network> listar_wifi_parsed()`
 
 Escaneia redes Wi-Fi e retorna structs.
+Existe por compatibilidade; para novas chamadas, prefira `listar_wifi_result`.
 
 Como funciona:
 
 - chama `nmcli` em modo tabular;
 - usa parser que respeita caracteres escapados;
 - trata SSIDs com `:` corretamente;
-- preenche sinal, seguranca e indicador de rede atual.
+- preenche BSSID, `backend_id`, sinal, seguranca e indicador de rede atual.
 
 Por que o parser e necessario:
 
 - `nmcli -t` separa campos por `:`;
 - SSIDs tambem podem conter `:`;
 - parsing simples por split quebraria nomes reais de rede.
+
+### `system_result listar_wifi_result(std::vector<wifi_network>& redes)`
+
+Contrato preferencial para scan Wi-Fi.
+Possui cache curto de aproximadamente 8 segundos para evitar chamadas repetidas a `nmcli device wifi list`, que pode ser custoso no Raspberry Pi.
+
+Retornos comuns:
+
+- `ok`: lista preenchida.
+- `network_manager_missing`: `nmcli` ausente.
+- `wifi_disabled`: radio Wi-Fi desligado.
+- `wifi_scan_failed`: `nmcli` falhou durante o scan.
+- `wifi_no_networks`: scan executou, mas nao encontrou redes parseaveis.
 
 ### `wifi_adapter_status obter_status_wifi()`
 
@@ -674,8 +692,10 @@ Retornos comuns:
 
 - `ok`
 - `wifi_toggle_failed`
+- `network_manager_missing`
 
 Depois de ligar Wi-Fi, a UI pode disparar novo sync para recarregar redes.
+O cache de scan e invalidado quando o estado do radio muda com sucesso.
 
 ### `void conectar_wifi(...)`
 
@@ -694,10 +714,13 @@ Parametros:
 
 Mapeamento de falhas:
 
+- `network_manager_missing`;
 - autenticacao incorreta;
 - rede indisponivel;
 - Wi-Fi desligado;
 - falha generica do NetworkManager.
+
+Ao conectar com sucesso, o cache de scan e invalidado.
 
 ### `void desconectar_wifi(...)`
 
@@ -713,6 +736,8 @@ Uso:
 
 - tela de rede;
 - acoes administrativas futuras.
+
+Retorna `network_manager_missing` quando `nmcli` nao esta disponivel e invalida o cache ao desconectar com sucesso.
 
 ## Modulo Bluetooth
 
