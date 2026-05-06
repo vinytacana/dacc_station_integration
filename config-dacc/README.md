@@ -287,8 +287,18 @@ Use estas funcoes quando a chamada precisar reagir a falhas:
 - `system_result diminuir_volume_result()`;
 - `system_result definir_volume_result(int valor_int)`;
 - `system_result obter_volume_atual_result(int& volume)`.
+- `system_result alternar_mudo_result()`;
+- `system_result obter_mudo_result(bool& mudo)`.
 
 Elas retornam `audio_subsystem_missing` quando nenhuma ferramenta compativel esta disponivel.
+As funcoes antigas `aumentar_volume()`, `diminuir_volume()` e `definir_volume()` apenas delegam para as variantes `_result`.
+
+Fallbacks:
+
+- volume/mudo: `wpctl`, depois `pactl`, depois `amixer`;
+- `wpctl get-volume` detecta mudo por `[MUTED]`;
+- `pactl get-sink-mute` detecta `Mute: yes/no`;
+- `amixer get Master` detecta `[off]` ou `[on]`.
 
 ### `int obter_volume_atual()`
 
@@ -339,6 +349,7 @@ Uso na UI:
 ### `system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispositivos)`
 
 Contrato preferencial para listagem de audio.
+Possui cache curto de aproximadamente 2 segundos para evitar chamadas repetidas a `wpctl`, `pactl` ou `aplay` em atualizacoes frequentes da UI.
 
 Retornos comuns:
 

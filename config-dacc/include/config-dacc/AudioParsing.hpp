@@ -156,6 +156,14 @@ inline bool parse_wpctl_volume(const std::string& output, int& volume) {
     }
 }
 
+inline bool parse_wpctl_muted(const std::string& output, bool& mudo) {
+    if (output.find("Volume:") == std::string::npos) {
+        return false;
+    }
+    mudo = output.find("[MUTED]") != std::string::npos;
+    return true;
+}
+
 inline bool parse_percent_token(const std::string& output, int& volume) {
     size_t percent = output.find('%');
     while (percent != std::string::npos) {
@@ -182,6 +190,26 @@ inline bool parse_pactl_volume(const std::string& output, int& volume) {
 
 inline bool parse_amixer_volume(const std::string& output, int& volume) {
     return parse_percent_token(output, volume);
+}
+
+inline bool parse_pactl_muted(const std::string& output, bool& mudo) {
+    if (output.find("Mute:") == std::string::npos) {
+        return false;
+    }
+    mudo = output.find("yes") != std::string::npos;
+    return true;
+}
+
+inline bool parse_amixer_muted(const std::string& output, bool& mudo) {
+    if (output.find("[off]") != std::string::npos) {
+        mudo = true;
+        return true;
+    }
+    if (output.find("[on]") != std::string::npos) {
+        mudo = false;
+        return true;
+    }
+    return false;
 }
 
 } // namespace audio_parsing

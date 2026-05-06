@@ -61,12 +61,19 @@ void testar_aplay_devices() {
 
 void testar_volumes() {
     int volume = 0;
+    bool mudo = false;
     exigir(config_dacc::audio_parsing::parse_wpctl_volume("Volume: 0.52\n", volume), "deve parsear volume wpctl");
     exigir(volume == 52, "volume wpctl deve virar percentual");
+    exigir(config_dacc::audio_parsing::parse_wpctl_muted("Volume: 0.52 [MUTED]\n", mudo), "deve parsear mudo wpctl");
+    exigir(mudo, "wpctl [MUTED] deve marcar mudo");
     exigir(config_dacc::audio_parsing::parse_pactl_volume("Volume: front-left: 65536 / 74% / 0.00 dB", volume), "deve parsear volume pactl");
     exigir(volume == 74, "volume pactl deve preservar percentual");
+    exigir(config_dacc::audio_parsing::parse_pactl_muted("Mute: no\n", mudo), "deve parsear mudo pactl");
+    exigir(!mudo, "pactl Mute: no deve marcar nao mudo");
     exigir(config_dacc::audio_parsing::parse_amixer_volume("Front Left: Playback 74 [74%] [-16.50dB]", volume), "deve parsear volume amixer");
     exigir(volume == 74, "volume amixer deve preservar percentual");
+    exigir(config_dacc::audio_parsing::parse_amixer_muted("Front Left: Playback 74 [74%] [-16.50dB] [off]", mudo), "deve parsear mudo amixer");
+    exigir(mudo, "amixer [off] deve marcar mudo");
 }
 
 } // namespace
