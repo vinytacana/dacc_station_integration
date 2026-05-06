@@ -235,15 +235,21 @@ void selecionar_dispositivo_audio(int id) {
 }
 
 system_result selecionar_dispositivo_audio_result(int id) {
-    if (!comando_existe("wpctl")) {
-        return config_result::error(
-            "audio_subsystem_missing",
-            "Subsistema de audio compativel indisponivel.",
-            "wpctl ausente; selecao de dispositivo ainda nao tem fallback pactl/amixer."
-        );
+    if (comando_existe("wpctl")) {
+        command_result result = exec_command_args_result({"wpctl", "set-default", std::to_string(id)});
+        return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
     }
-    command_result result = exec_command_args_result({"wpctl", "set-default", std::to_string(id)});
-    return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
+
+    if (comando_existe("pactl")) {
+        command_result result = exec_command_args_result({"pactl", "set-default-sink", std::to_string(id)});
+        return traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
+    }
+
+    return config_result::error(
+        "audio_subsystem_missing",
+        "Subsistema de audio compativel indisponivel.",
+        "wpctl e pactl ausentes; selecao via ALSA/aplay nao e suportada."
+    );
 }
 
 void imprimir_dispositivos_audio() {
