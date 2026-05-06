@@ -64,27 +64,39 @@ echo "[2/5] Capacidades de configuracao"
 check_cmd "nmcli" "NetworkManager/nmcli"
 check_cmd "bluetoothctl" "BlueZ/bluetoothctl"
 
-if has_cmd "wpctl" || has_cmd "pactl" || has_cmd "aplay" || has_cmd "amixer"; then
-    ok "audio: $(for c in wpctl pactl aplay amixer; do has_cmd "$c" && printf '%s ' "$c"; done)"
+if has_cmd "wpctl" || has_cmd "pactl" || has_cmd "aplay"; then
+    ok "audio_list: $(for c in wpctl pactl aplay; do has_cmd "$c" && printf '%s ' "$c"; done)"
 else
-    warn "audio indisponivel: wpctl/pactl/aplay/amixer ausentes"
+    warn "audio_list indisponivel: wpctl/pactl/aplay ausentes"
+fi
+
+if has_cmd "wpctl" || has_cmd "pactl"; then
+    ok "audio_select: $(for c in wpctl pactl; do has_cmd "$c" && printf '%s ' "$c"; done)"
+else
+    warn "audio_select indisponivel: wpctl/pactl ausentes"
+fi
+
+if has_cmd "wpctl" || has_cmd "pactl" || has_cmd "amixer"; then
+    ok "volume_control: $(for c in wpctl pactl amixer; do has_cmd "$c" && printf '%s ' "$c"; done)"
+else
+    warn "volume_control indisponivel: wpctl/pactl/amixer ausentes"
 fi
 
 if has_cmd "xrandr" || has_cmd "wlr-randr"; then
-    ok "display config: $(for c in xrandr wlr-randr; do has_cmd "$c" && printf '%s ' "$c"; done)"
+    ok "display_info: $(for c in xrandr wlr-randr; do has_cmd "$c" && printf '%s ' "$c"; done)"
 else
-    warn "display config indisponivel: xrandr/wlr-randr ausentes"
+    warn "display_info indisponivel: xrandr/wlr-randr ausentes"
 fi
 
 if has_cmd "brightnessctl"; then
-    ok "brightnessctl: $(command -v brightnessctl)"
+    ok "brightness: brightnessctl $(command -v brightnessctl)"
 elif compgen -G "/sys/class/backlight/*/brightness" >/dev/null; then
-    ok "backlight via sysfs disponivel"
+    ok "brightness: backlight via sysfs disponivel"
 else
-    warn "brilho indisponivel: brightnessctl e /sys/class/backlight ausentes"
+    warn "brightness indisponivel: brightnessctl e /sys/class/backlight ausentes"
 fi
 
-check_cmd "mpv" "intro/mpv"
+check_cmd "mpv" "intro_video"
 
 echo
 echo "[3/5] Permissoes de usuario"
