@@ -3,6 +3,8 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -30,6 +32,99 @@ system_result traduzir_display_result(
     return config_result::error(codigo, mensagem, command.mensagem);
 }
 
+std::vector<std::filesystem::path> listar_backlights() {
+    std::vector<std::filesystem::path> backlights;
+    const std::filesystem::path root{"/sys/class/backlight"};
+    std::error_code ec;
+    if (!std::filesystem::exists(root, ec)) {
+        return backlights;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+        if (!entry.is_directory(ec)) {
+            continue;
+        }
+        const auto brightness = entry.path() / "brightness";
+        const auto max_brightness = entry.path() / "max_brightness";
+        if (std::filesystem::exists(brightness, ec) &&
+            std::filesystem::exists(max_brightness, ec)) {
+            backlights.push_back(entry.path());
+        }
+    }
+    return backlights;
+}
+
+bool ler_int_arquivo(const std::filesystem::path& path, int& valor) {
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return false;
+    }
+    in >> valor;
+    return !in.fail();
+}
+
+bool escrever_int_arquivo(const std::filesystem::path& path, int valor) {
+    std::ofstream out(path);
+    if (!out.is_open()) {
+        return false;
+    }
+    out << valor;
+    return !out.fail();
+}
+
+system_result alterar_brilho_sysfs(int delta_percentual) {
+    auto backlights = listar_backlights();
+    if (backlights.empty()) {
+        return config_result::error(
+            "backlight_not_supported",
+            "Controle de brilho nao suportado neste ambiente.",
+            "/sys/class/backlight vazio ou indisponivel."
+        );
+    }
+
+    std::string detalhes;
+    for (const auto& backlight : backlights) {
+        int atual = 0;
+        int maximo = 0;
+        if (!ler_int_arquivo(backlight / "brightness", atual) ||
+            !ler_int_arquivo(backlight / "max_brightness", maximo) ||
+            maximo <= 0) {
+            detalhes += backlight.string() + ": leitura falhou; ";
+            continue;
+        }
+
+        int passo = std::max(1, (maximo * std::abs(delta_percentual)) / 100);
+        int novo = delta_percentual >= 0 ? atual + passo : atual - passo;
+        novo = std::max(0, std::min(maximo, novo));
+
+        if (escrever_int_arquivo(backlight / "brightness", novo)) {
+            return config_result::success("Brilho alterado.", backlight.string());
+        }
+        detalhes += backlight.string() + ": escrita falhou; ";
+    }
+
+    return config_result::error(
+        "backlight_permission_denied",
+        "Sem permissao para alterar brilho via backlight.",
+        detalhes
+    );
+}
+
+system_result alterar_brilho(int delta_percentual) {
+    if (comando_existe("brightnessctl")) {
+        command_result result = exec_command_args_result({
+            "brightnessctl",
+            "set",
+            delta_percentual >= 0 ? "+" + std::to_string(delta_percentual) + "%" : std::to_string(std::abs(delta_percentual)) + "%-"
+        });
+        if (result.ok) {
+            return config_result::success("Brilho alterado.", result.mensagem);
+        }
+    }
+
+    return alterar_brilho_sysfs(delta_percentual);
+}
+
 } // namespace
 
 std::string obter_tipo_sessao() {
@@ -52,9 +147,20 @@ void verificarSessao() {
 
 std::vector<DisplayOutput> obter_info_displays() {
     std::vector<DisplayOutput> displays;
+    if (!comando_existe("xrandr") && !comando_existe("wlr-randr")) {
+        return displays;
+    }
+    if (!comando_existe("xrandr")) {
+        return displays;
+    }
+
     std::string output;
     try {
-        output = exec_command("xrandr --verbose");
+        command_result result = exec_command_args_result({"xrandr", "--verbose"});
+        if (!result.ok) {
+            return displays;
+        }
+        output = result.stdout_output;
     } catch (...) {
         return displays;
     }
@@ -120,7 +226,16 @@ std::vector<DisplayOutput> obter_info_displays() {
 
 void listar_resolucao() {
     std::cout << "Lista de saidas e resolucoes suportadas: \n";
-    command_result result = exec_command_args_result({"xrandr"});
+    std::vector<std::string> args;
+    if (comando_existe("xrandr")) {
+        args = {"xrandr"};
+    } else if (comando_existe("wlr-randr")) {
+        args = {"wlr-randr"};
+    } else {
+        std::cout << "Nenhuma ferramenta de display disponivel.\n";
+        return;
+    }
+    command_result result = exec_command_args_result(args);
     std::cout << result.stdout_output;
 }
 
@@ -140,14 +255,23 @@ system_result alterarEscala_result(const std::string& saida, float escala) {
     std::string scale_str = ss.str();
 
     if (sessao == "x11") {
+        if (!comando_existe("xrandr")) {
+            return config_result::error("feature_unavailable", "Controle de escala indisponivel.", "xrandr ausente.");
+        }
         args = {"xrandr", "--output", saida, "--scale", scale_str + "x" + scale_str};
     } else if (sessao == "wayland") {
         const char* desktop = getenv("XDG_SESSION_DESKTOP");
         std::string de = desktop ? std::string(desktop) : "";
         if (de.find("gnome") != std::string::npos) {
+            if (!comando_existe("gsettings")) {
+                return config_result::error("feature_unavailable", "Controle de escala indisponivel.", "gsettings ausente.");
+            }
             int scale_int = static_cast<int>(escala + 0.5f);
             args = {"gsettings", "set", "org.gnome.desktop.interface", "scaling-factor", std::to_string(scale_int)};
         } else {
+            if (!comando_existe("wlr-randr")) {
+                return config_result::error("feature_unavailable", "Controle de escala indisponivel.", "wlr-randr ausente.");
+            }
             args = {"wlr-randr", "--output", saida, "--scale", scale_str};
         }
     } else {
@@ -169,8 +293,14 @@ system_result alterarResolucao_result(const std::string& saida, int width, int h
     std::vector<std::string> args;
 
     if (sessao == "wayland") {
+        if (!comando_existe("wlr-randr")) {
+            return config_result::error("feature_unavailable", "Controle de resolucao indisponivel.", "wlr-randr ausente.");
+        }
         args = {"wlr-randr", "--output", saida, "--mode", mode_str};
     } else if (sessao == "x11") {
+        if (!comando_existe("xrandr")) {
+            return config_result::error("feature_unavailable", "Controle de resolucao indisponivel.", "xrandr ausente.");
+        }
         args = {"xrandr", "--output", saida, "--mode", mode_str};
     } else {
         return config_result::error("display_session_unknown", "Sessao grafica nao suportada.");
@@ -181,11 +311,17 @@ system_result alterarResolucao_result(const std::string& saida, int width, int h
 }
 
 void aumentar_brilho() {
-    (void)exec_command_args_result({"brightnessctl", "set", "+10%"});
-    std::cout << "Brilho aumentado\n";
+    (void)aumentar_brilho_result();
 }
 
 void diminuir_brilho() {
-    (void)exec_command_args_result({"brightnessctl", "set", "10%-"});
-    std::cout << "Brilho diminuído\n";
+    (void)diminuir_brilho_result();
+}
+
+system_result aumentar_brilho_result() {
+    return alterar_brilho(10);
+}
+
+system_result diminuir_brilho_result() {
+    return alterar_brilho(-10);
 }
