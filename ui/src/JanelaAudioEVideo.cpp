@@ -8,7 +8,7 @@
  */
 
 #include "JanelaAudioEVideo.hpp"
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 #include "Utils.hpp"
 #include "GerenciadorTemas.hpp"
 #include "ConfigLayout.hpp"
@@ -74,7 +74,6 @@ JanelaAudioEVideo::~JanelaAudioEVideo() {
 void JanelaAudioEVideo::inicializarDispositivos() {
 dispositivos.clear();
     
-    // 1. Chama o Backend (HardwareControl.cpp via functions.hpp)
     std::vector<device_audio> listaDoSistema = ::listar_dispositivos_audio();
     
     // Fallback se não encontrar nada
@@ -84,7 +83,6 @@ dispositivos.clear();
         return;
     }
 
-    // 2. Converte os dados do backend para a estrutura da UI
     indiceDispositivoAtual = 0; // Padrão
     
     for (size_t i = 0; i < listaDoSistema.size(); i++) {
@@ -565,7 +563,7 @@ void JanelaAudioEVideo::aumentarVolume() {
         gerAudio.tocarSom("select.wav");
         
         // 3. LOGICA REAL: Chama a função do backend (wpctl)
-        ::aumentar_volume(); // Chama a função global do functions.hpp
+        ::aumentar_volume();
 
         
         std::cout << "[AUDIO] Volume UI: " << volumeGeral << "% (Comando enviado)" << std::endl;

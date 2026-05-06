@@ -8,7 +8,7 @@
  */
 
 #include "SystemStatus.hpp"
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 #include <ctime>
 #include <SDL2/SDL.h>
 

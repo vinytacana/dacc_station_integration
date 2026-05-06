@@ -4,7 +4,7 @@
  */
 
 #include "JanelaBluetooth.hpp"
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 #include "Utils.hpp"
 #include "GerenciadorTemas.hpp"
 #include "ConfigLayout.hpp"

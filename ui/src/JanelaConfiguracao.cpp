@@ -2,15 +2,8 @@
  * @file JanelaConfiguracao.cpp
  * @brief Implementação da classe JanelaConfiguracao para gerenciamento das configurações do sistema.
  * 
- * @details Esta classe implementa a janela principal de configurações do sistema, fornecendo acesso
- * a submenus de rede, áudio/vídeo, Bluetooth e informações do sistema. A interface é compatível
- * com controle (gamepad) e mouse, e inclui uma solução definitiva para problemas de renderização
- * de texto ao alternar temas.
- * 
- * @author SeuNome
- * @date Janeiro 2024
- * @version 1.1
- * @note Inclui solução definitiva para problema de textos desaparecendo no modo claro
+ * @details Esta classe implementa a janela principal de configurações do sistema,
+ * fornecendo acesso a rede, áudio/vídeo, Bluetooth e informações do sistema.
  */
 
 #include "JanelaConfiguracao.hpp"
@@ -153,7 +146,6 @@ void JanelaConfiguracao::abrir() {
         if (renderer) {
             aberta = true;
             
-            // CRÍTICO: Limpa cache antes de inicializar
             limparCacheTexto();
             
             inicializarBotoes();
@@ -174,7 +166,6 @@ void JanelaConfiguracao::abrir() {
  * Inclui limpeza do cache de texto para evitar problemas de memória.
  */
 void JanelaConfiguracao::fechar() {
-    // CRÍTICO: Limpa cache ao fechar
     if (renderer) {
         limparCacheTexto();
     }
@@ -200,81 +191,41 @@ void JanelaConfiguracao::fechar() {
     submenuAtivo = SubmenuConfig::NENHUM;
 }
 
-// SOLUÇÃO PARA PROBLEMA DE MUDANÇA DE TEMA
-
 /**
  * @brief Notifica mudança de tema e recria todo o estado visual.
  * 
- * @details SOLUÇÃO DEFINITIVA para o problema de textos desaparecendo ao alternar temas.
- * O problema raiz era que texturas de texto criadas em um renderer não podiam ser usadas
- * em outro. Esta função força a recriação completa de todas as texturas no renderer correto.
- * 
- * @note Processo de 7 passos:
- * 1. Limpar todo o cache de texto
- * 2. Recarregar ícone de bateria
- * 3. Limpar cache dos submenus (se necessário)
- * 4. Reinicializar botões
- * 5. Limpar cache novamente (garantia)
- * 6. Forçar redesenho completo da interface
- * 7. Apresentar na tela
+ * Texturas de texto pertencem ao renderer que as criou; ao alternar o tema,
+ * a janela de configuração precisa recriar esses recursos no renderer ativo.
  */
 void JanelaConfiguracao::notificarMudancaTemaEmTodasJanelas() {
-    std::cout << "\n═══════════════════════════════════════" << std::endl;
-    std::cout << "[CONFIG] MUDANÇA DE TEMA INICIADA" << std::endl;
-    std::cout << "═══════════════════════════════════════\n" << std::endl;
-    
     if (!renderer) {
         std::cout << "[ERRO] Renderer é NULL! Abortando..." << std::endl;
         return;
     }
     
-    // PASSO 1: LIMPAR TODO O CACHE DE TEXTO
-    std::cout << "[1/7] Limpando cache de texto..." << std::endl;
     limparCacheTexto();
-    SDL_Delay(50); // Pequeno delay para garantir limpeza
+    SDL_Delay(50);
     
-    // PASSO 2: RECARREGAR ÍCONE DE BATERIA
-    std::cout << "[2/7] Recarregando ícone de bateria..." << std::endl;
     liberarIconeBateria();
     carregarIconeBateria();
     
-    // PASSO 4: REINICIALIZAR BOTÕES
-    std::cout << "[4/7] Reinicializando botões..." << std::endl;
     inicializarBotoes();
     
-    // PASSO 5: LIMPAR CACHE NOVAMENTE (garantia)
-    std::cout << "[5/7] Limpando cache novamente (garantia)..." << std::endl;
     limparCacheTexto();
-    
-    // PASSO 6: FORÇAR REDESENHO COMPLETO
-    std::cout << "[6/7] Redesenhando interface..." << std::endl;
-    
-    // Limpa o renderer
+
     auto& tema = GerenciadorTemas::getInstance();
     SDL_Color corFundo = tema.getCorFundo();
     SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, 255);
     SDL_RenderClear(renderer);
     
-    // Desenha tudo novamente
     desenhar();
-    
-    // PASSO 7: APRESENTAR NA TELA
-    std::cout << "[7/7] Apresentando na tela..." << std::endl;
     SDL_RenderPresent(renderer);
     
-    // Pequeno delay para estabilização
     SDL_Delay(100);
     
-    // Desenha novamente (double-buffering)
     desenhar();
     SDL_RenderPresent(renderer);
-    
-    std::cout << "\n═══════════════════════════════════════" << std::endl;
-    std::cout << "[CONFIG] MUDANÇA DE TEMA CONCLUÍDA!" << std::endl;
-    std::cout << "═══════════════════════════════════════\n" << std::endl;
 }
-
-// MÉTODOS DE ACESSO
 
 /**
  * @brief Obtém o ID da janela SDL.
@@ -463,8 +414,6 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
     return false;
 }
 
-// MÉTODOS AUXILIARES
-
 /**
  * @brief Obtém a hora atual formatada.
  * 
@@ -518,8 +467,6 @@ std::string JanelaConfiguracao::obterTituloSubmenu() {
             return "";
     }
 }
-
-// MÉTODOS DE DESENHO
 
 /**
  * @brief Desenha a barra de status no topo da janela.

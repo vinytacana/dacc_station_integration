@@ -165,6 +165,8 @@ void carregarJogosDoDisco() {
  * @note Todos os recursos são liberados automaticamente na finalização.
  */
 int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
     
     // FASE 1: INICIALIZAÇÃO DO SISTEMA
     

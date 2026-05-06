@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include <limits.h> 
 #include <stdlib.h> 
-#include <unistd.h>
+#include <sys/wait.h>
 
 using namespace MeuProjeto;
 using namespace std;
@@ -215,8 +215,7 @@ void GerenciarSDL::tocarVideoIntro(const std::string& caminhoVideo) {
     if (encontrado) {
         /**
          * Converte o caminho relativo para caminho absoluto usando realpath().
-         * Isso evita problemas com o MPV ao interpretar caminhos relativos,
-         * especialmente quando executado via system() que pode ter working directory diferente.
+         * Isso evita problemas com o MPV ao interpretar caminhos relativos.
          * 
          * PATH_MAX define o tamanho máximo do buffer de caminho (geralmente 4096 bytes).
          */
@@ -227,28 +226,23 @@ void GerenciarSDL::tocarVideoIntro(const std::string& caminhoVideo) {
 
         std::cout << "[INTRO] Video encontrado! Reproduzindo: " << caminhoFinal << std::endl;
         
-        /**
-         * Monta o comando MPV com parâmetros otimizados:
-         * --fs: Tela Cheia
-         * --ontop: Ficar por cima de outras janelas
-         * --no-border: Sem bordas de janela
-         * --no-osc: Desabilita controles visuais na tela
-         * --no-osd-bar: Remove barra de progresso
-         * --no-input-cursor: Esconde o cursor do mouse
-         * 
-         * O caminho é envolto em aspas duplas para suportar nomes com espaços.
-         */
-        std::string comando = "mpv --fs --ontop --no-border --no-osc --no-osd-bar --no-input-cursor \"" + caminhoFinal + "\"";
-        
-        /**
-         * Executa o comando usando system().
-         * Bloqueia até que o MPV seja fechado.
-         * Retorna 0 se MPV executou normalmente, valor diferente em caso de erro.
-         */
-        int resultado = system(comando.c_str());
-        
-        if (resultado != 0) {
-            std::cerr << "[ERRO] MPV falhou ou foi fechado com erro. Codigo: " << resultado << std::endl;
+        pid_t pid = fork();
+        if (pid == 0) {
+            execlp("mpv", "mpv",
+                   "--fs", "--ontop", "--no-border", "--no-osc",
+                   "--no-osd-bar", "--no-input-cursor",
+                   caminhoFinal.c_str(),
+                   static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        if (pid < 0) {
+            std::cerr << "[ERRO] Falha ao iniciar MPV." << std::endl;
+            return;
+        }
+
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            std::cerr << "[ERRO] MPV falhou ou foi fechado com erro. Codigo: " << status << std::endl;
         }
     } else {
         /**

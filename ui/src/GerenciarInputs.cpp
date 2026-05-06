@@ -1584,7 +1584,7 @@ void GerenciarInputs::executarAcaoBotao(Botao* botao, GerenciarScroll& estado, G
                     /** 
                      * @section EXECUTAR_JOGO
                      * Simula o comportamento de "Play" imediato. Instancia a lógica
-                     * e chama o system() definido na JanelaJogo.
+                     * e solicita a execução via Process Manager.
                      * 
                      * Cria uma janela temporária apenas para acessar o método executarJogo(),
                      * que dispara o processo do jogo no sistema operacional.

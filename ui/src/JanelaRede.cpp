@@ -9,7 +9,7 @@
  */
 
 #include "JanelaRede.hpp"
-#include "functions.hpp"
+#include "config-dacc/functions.hpp"
 #include "Utils.hpp"
 #include "GerenciadorTemas.hpp"
 #include "GerenciadorAudio.hpp"
@@ -1072,7 +1072,7 @@ bool JanelaRede::processarEvento(SDL_Event& evento) {
             }
         }
         
-        // Consome TODOS os eventos quando o teclado está visível
+        // Mantem foco exclusivo no teclado virtual enquanto ele esta visivel.
         return true;
     }
 

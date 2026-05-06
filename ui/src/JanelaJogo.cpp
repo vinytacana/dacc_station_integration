@@ -170,11 +170,9 @@ JanelaJogo::~JanelaJogo() {}
  * 4. Tratamento da tecla ESC para sinalizar o fechamento da janela.
  *
  * @param evento Referência para a estrutura SDL_Event.
- * @param offsetX Deslocamento horizontal (não utilizado diretamente nesta implementação).
- * @param offsetY Deslocamento vertical (não utilizado diretamente nesta implementação).
  * @return true se o evento solicita o fechamento da janela (clique em fechar ou ESC), false caso contrário.
  */
-bool JanelaJogo::tratarEvento(SDL_Event& evento, int offsetX, int offsetY) {
+bool JanelaJogo::tratarEvento(SDL_Event& evento, int, int) {
     botaoFechar.tratarEvento(evento, 0, 0);
     if (evento.type == SDL_MOUSEBUTTONUP && evento.button.button == SDL_BUTTON_LEFT) {
         if (botaoFechar.contemPonto(evento.button.x, evento.button.y)){
@@ -281,14 +279,6 @@ bool JanelaJogo::tratarEventoControle(SDL_Event& evento) {
     return false;
 }
 
-/**
- * @brief Realiza a execução do título selecionado através de chamadas do sistema.
- * Este método identifica o jogo ativo e utiliza a função system() para disparar 
- * o processo correspondente no sistema operacional. Possui mapeamentos específicos 
- * para fins de demonstração (como calculadoras e editores de texto) e um padrão 
- * de execução de binário local para títulos não mapeados. A execução é realizada 
- * em segundo plano (background) utilizando o caractere '&'.
- */
 void JanelaJogo::executarJogo() {
     gerAudio.tocarSom("jogar.wav");
     std::cout << "\n[LAUNCHER] Iniciando: " << nomeJogo << std::endl;
