@@ -1,11 +1,10 @@
 #include "config-dacc/functions.hpp"
+#include "config-dacc/AudioParsing.hpp"
 #include "config-dacc/ConfigResult.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <iostream>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -29,17 +28,6 @@ system_result traduzir_audio_result(
     return config_result::error(codigo, mensagem, command.mensagem);
 }
 
-std::string limpar_nome_audio(std::string raw) {
-    size_t colchete = raw.find('[');
-    if (colchete != std::string::npos) {
-        raw = raw.substr(0, colchete);
-    }
-    while (!raw.empty() && std::isspace(static_cast<unsigned char>(raw.back()))) {
-        raw.pop_back();
-    }
-    return raw;
-}
-
 std::vector<device_audio> listar_dispositivos_wpctl() {
     std::vector<device_audio> lista;
     if (!comando_existe("wpctl")) {
@@ -51,48 +39,7 @@ std::vector<device_audio> listar_dispositivos_wpctl() {
         return lista;
     }
 
-    std::stringstream ss(result.stdout_output);
-    std::string linha;
-    bool na_secao_sinks = false;
-
-    while (std::getline(ss, linha)) {
-        if (linha.find("Sinks:") != std::string::npos) {
-            na_secao_sinks = true;
-            continue;
-        }
-        if (na_secao_sinks &&
-            (linha.find("Sources:") != std::string::npos ||
-             linha.find("Filters:") != std::string::npos ||
-             linha.empty())) {
-            break;
-        }
-        if (!na_secao_sinks) {
-            continue;
-        }
-
-        size_t ponto_pos = linha.find('.');
-        if (ponto_pos == std::string::npos || ponto_pos == 0 ||
-            !std::isdigit(static_cast<unsigned char>(linha[ponto_pos - 1]))) {
-            continue;
-        }
-
-        device_audio dev;
-        dev.padrao = linha.find('*') != std::string::npos;
-        size_t inicio_num = ponto_pos - 1;
-        while (inicio_num > 0 && std::isdigit(static_cast<unsigned char>(linha[inicio_num - 1]))) {
-            inicio_num--;
-        }
-
-        try {
-            dev.id = std::stoi(linha.substr(inicio_num, ponto_pos - inicio_num));
-            if (ponto_pos + 2 < linha.size()) {
-                dev.descricao = limpar_nome_audio(linha.substr(ponto_pos + 2));
-                lista.push_back(dev);
-            }
-        } catch (...) {
-        }
-    }
-    return lista;
+    return config_dacc::audio_parsing::parse_wpctl_sinks(result.stdout_output);
 }
 
 std::vector<device_audio> listar_dispositivos_pactl() {
@@ -106,26 +53,7 @@ std::vector<device_audio> listar_dispositivos_pactl() {
         return lista;
     }
 
-    std::stringstream ss(result.stdout_output);
-    std::string linha;
-    while (std::getline(ss, linha)) {
-        std::stringstream line_ss(linha);
-        std::string id_str;
-        std::string nome;
-        if (!(line_ss >> id_str >> nome)) {
-            continue;
-        }
-        try {
-            device_audio dev;
-            dev.id = std::stoi(id_str);
-            dev.descricao = nome;
-            dev.padrao = false;
-            lista.push_back(dev);
-        } catch (...) {
-        }
-    }
-
-    return lista;
+    return config_dacc::audio_parsing::parse_pactl_sinks_short(result.stdout_output);
 }
 
 std::vector<device_audio> listar_dispositivos_aplay() {
@@ -139,23 +67,41 @@ std::vector<device_audio> listar_dispositivos_aplay() {
         return lista;
     }
 
-    std::stringstream ss(result.stdout_output);
-    std::string linha;
-    int id = 0;
-    while (std::getline(ss, linha)) {
-        if (linha.find("card ") == std::string::npos ||
-            linha.find("device ") == std::string::npos) {
-            continue;
-        }
+    return config_dacc::audio_parsing::parse_aplay_devices(result.stdout_output);
+}
 
-        device_audio dev;
-        dev.id = id++;
-        dev.padrao = dev.id == 0;
-        dev.descricao = linha;
-        lista.push_back(dev);
+system_result executar_comando_audio_result(
+    const std::vector<std::string>& cmd_wp,
+    const std::vector<std::string>& cmd_pa,
+    const std::vector<std::string>& cmd_alsa,
+    const std::string& codigo_erro,
+    const std::string& mensagem_erro
+) {
+    if (comando_existe("wpctl")) {
+        command_result result = exec_command_args_result(cmd_wp);
+        if (result.ok) {
+            return config_result::success("Audio atualizado.", result.mensagem);
+        }
+    }
+    if (comando_existe("pactl")) {
+        command_result result = exec_command_args_result(cmd_pa);
+        if (result.ok) {
+            return config_result::success("Audio atualizado.", result.mensagem);
+        }
+    }
+    if (comando_existe("amixer")) {
+        command_result result = exec_command_args_result(cmd_alsa);
+        if (result.ok) {
+            return config_result::success("Audio atualizado.", result.mensagem);
+        }
+        return traduzir_audio_result(result, codigo_erro, mensagem_erro);
     }
 
-    return lista;
+    return config_result::error(
+        "audio_subsystem_missing",
+        "Subsistema de audio compativel indisponivel.",
+        "wpctl, pactl e amixer ausentes."
+    );
 }
 
 bool executar_comando_audio(
@@ -208,16 +154,40 @@ void definir_volume(int valor_int) {
 }
 
 int obter_volume_atual() {
-    try {
-        std::string saida = exec_command("wpctl get-volume @DEFAULT_AUDIO_SINK@");
-        size_t pos = saida.find("Volume: ");
-        if (pos != std::string::npos) {
-            std::string vol_str = saida.substr(pos + 8);
-            return static_cast<int>(std::stof(vol_str) * 100);
-        }
-    } catch (...) {
+    int volume = 50;
+    if (obter_volume_atual_result(volume).ok) {
+        return volume;
     }
     return 50;
+}
+
+system_result obter_volume_atual_result(int& volume) {
+    if (comando_existe("wpctl")) {
+        command_result result = exec_command_args_result({"wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"});
+        if (result.ok && config_dacc::audio_parsing::parse_wpctl_volume(result.stdout_output, volume)) {
+            return config_result::success("Volume obtido.", result.mensagem);
+        }
+    }
+
+    if (comando_existe("pactl")) {
+        command_result result = exec_command_args_result({"pactl", "get-sink-volume", "@DEFAULT_SINK@"});
+        if (result.ok && config_dacc::audio_parsing::parse_pactl_volume(result.stdout_output, volume)) {
+            return config_result::success("Volume obtido.", result.mensagem);
+        }
+    }
+
+    if (comando_existe("amixer")) {
+        command_result result = exec_command_args_result({"amixer", "get", "Master"});
+        if (result.ok && config_dacc::audio_parsing::parse_amixer_volume(result.stdout_output, volume)) {
+            return config_result::success("Volume obtido.", result.mensagem);
+        }
+    }
+
+    return config_result::error(
+        "audio_subsystem_missing",
+        "Subsistema de audio compativel indisponivel.",
+        "wpctl, pactl e amixer ausentes ou sem volume parseavel."
+    );
 }
 
 std::vector<device_audio> listar_dispositivos_audio() {
@@ -249,6 +219,44 @@ system_result selecionar_dispositivo_audio_result(int id) {
         "audio_subsystem_missing",
         "Subsistema de audio compativel indisponivel.",
         "wpctl e pactl ausentes; selecao via ALSA/aplay nao e suportada."
+    );
+}
+
+system_result aumentar_volume_result() {
+    return executar_comando_audio_result(
+        {"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"},
+        {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%"},
+        {"amixer", "sset", "Master", "5%+"},
+        "audio_volume_failed",
+        "Falha ao aumentar volume."
+    );
+}
+
+system_result diminuir_volume_result() {
+    return executar_comando_audio_result(
+        {"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"},
+        {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%"},
+        {"amixer", "sset", "Master", "5%-"},
+        "audio_volume_failed",
+        "Falha ao diminuir volume."
+    );
+}
+
+system_result definir_volume_result(int valor_int) {
+    if (valor_int > 100) valor_int = 100;
+    if (valor_int < 0) valor_int = 0;
+
+    float valor_float = static_cast<float>(valor_int) / 100.0f;
+    std::string v_str = std::to_string(valor_float);
+    std::replace(v_str.begin(), v_str.end(), ',', '.');
+    std::string v_perc = std::to_string(valor_int) + "%";
+
+    return executar_comando_audio_result(
+        {"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", v_str},
+        {"pactl", "set-sink-volume", "@DEFAULT_SINK@", v_perc},
+        {"amixer", "sset", "Master", v_perc},
+        "audio_volume_failed",
+        "Falha ao definir volume."
     );
 }
 

@@ -8,7 +8,8 @@ BUILD_DIR := build
 TEST_BT_BIN := tests/bin/test_bluetooth_parser
 TEST_NETWORK_BIN := tests/bin/test_network_parser
 TEST_DISPLAY_BIN := tests/bin/test_display_parser
-TEST_BINS := $(TEST_BT_BIN) $(TEST_NETWORK_BIN) $(TEST_DISPLAY_BIN)
+TEST_AUDIO_BIN := tests/bin/test_audio_parser
+TEST_BINS := $(TEST_BT_BIN) $(TEST_NETWORK_BIN) $(TEST_DISPLAY_BIN) $(TEST_AUDIO_BIN)
 
 SRCS_LIB := SystemControl.cpp AudioControl.cpp DisplayControl.cpp NetworkControl.cpp ConfigCommand.cpp BluetoothInternal.cpp BluetoothControl.cpp Capabilities.cpp
 OBJS_LIB := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_LIB))
@@ -37,10 +38,15 @@ $(TEST_DISPLAY_BIN): tests/test_display_parser.cpp include/config-dacc/DisplayPa
 	@mkdir -p tests/bin
 	$(CXX) $(CXXFLAGS) tests/test_display_parser.cpp -o $@
 
+$(TEST_AUDIO_BIN): tests/test_audio_parser.cpp include/config-dacc/AudioParsing.hpp include/config-dacc/functions.hpp
+	@mkdir -p tests/bin
+	$(CXX) $(CXXFLAGS) tests/test_audio_parser.cpp -o $@
+
 test: $(TEST_BINS)
 	./$(TEST_BT_BIN)
 	./$(TEST_NETWORK_BIN)
 	./$(TEST_DISPLAY_BIN)
+	./$(TEST_AUDIO_BIN)
 
 clean:
 	rm -rf $(BUILD_DIR) $(LIB_TARGET) $(TEST_BINS)
