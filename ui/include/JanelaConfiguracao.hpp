@@ -21,6 +21,7 @@
 #include "JanelaAudioEVideo.hpp"
 #include "JanelaInfosSistema.hpp"
 #include "JanelaBluetooth.hpp"
+#include "config-dacc/functions.hpp"
 
 /**
  * @namespace MeuProjeto
@@ -122,6 +123,9 @@ private:
     std::vector<std::unique_ptr<Botao>> botoesMenu; /**< Coleção de ponteiros para os botões do menu principal de config. */
     std::unique_ptr<Botao> btnVoltar;     /**< Botão para retornar ao menu anterior. */
     std::unique_ptr<Botao> btnFechar;     /**< Botão para encerrar a janela de configurações. */
+    station_capabilities capacidadesSistema; /**< Recursos detectados no backend de configuração. */
+    std::string mensagemMenu;             /**< Feedback exibido no menu principal. */
+    bool mensagemMenuErro = false;        /**< Indica se o feedback do menu representa erro/indisponibilidade. */
     
     int indiceFocado = -1; /**< Índice do botão atualmente em foco (para navegação via controle). */
 
@@ -136,6 +140,31 @@ private:
      * @brief Cria e configura as posições e labels dos botões da interface.
      */
     void inicializarBotoes();
+
+    /**
+     * @brief Atualiza o snapshot de capacidades do backend config-dacc.
+     */
+    void atualizarCapacidadesSistema();
+
+    /**
+     * @brief Verifica se um submenu pode ser aberto no ambiente atual.
+     */
+    bool submenuDisponivel(SubmenuConfig submenu) const;
+
+    /**
+     * @brief Retorna uma mensagem curta para explicar por que um submenu está indisponível.
+     */
+    std::string mensagemSubmenuIndisponivel(SubmenuConfig submenu) const;
+
+    /**
+     * @brief Converte índice do menu principal para enum de submenu.
+     */
+    SubmenuConfig submenuPorIndice(int indice) const;
+
+    /**
+     * @brief Ajusta o foco para um item navegável disponível.
+     */
+    void ajustarFocoMenuParaDisponivel(int direcao = 1);
 
     /**
      * @brief Dispara a lógica associada ao clique/seleção de um item do menu.
