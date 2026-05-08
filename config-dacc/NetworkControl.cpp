@@ -1,16 +1,21 @@
 #include "config-dacc/functions.hpp"
 #include "config-dacc/ConfigResult.hpp"
 #include "config-dacc/NetworkParsing.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
+
+namespace err = config_dacc::errors;
 
 std::mutex g_wifi_mutex;
 std::vector<wifi_network> g_wifi_cache_redes;
@@ -21,10 +26,75 @@ constexpr auto WIFI_SCAN_CACHE_TTL = std::chrono::seconds(8);
 
 system_result network_manager_missing_result() {
     return config_result::error(
-        "network_manager_missing",
+        err::NETWORK_MANAGER_MISSING,
         "NetworkManager/nmcli indisponivel.",
         "nmcli ausente no PATH."
     );
+}
+
+bool ler_primeira_linha(const std::filesystem::path& path, std::string& valor) {
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return false;
+    }
+    std::getline(in, valor);
+    return !valor.empty();
+}
+
+bool interface_ativa_sysfs(const std::filesystem::path& interface_path) {
+    std::string operstate;
+    if (ler_primeira_linha(interface_path / "operstate", operstate) && operstate == "up") {
+        return true;
+    }
+
+    std::string carrier;
+    return ler_primeira_linha(interface_path / "carrier", carrier) && carrier == "1";
+}
+
+network_connection_status obter_status_conexao_rede_sysfs() {
+    network_connection_status status;
+    const std::filesystem::path root{"/sys/class/net"};
+    std::error_code ec;
+    if (!std::filesystem::exists(root, ec)) {
+        return status;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+        if (ec) {
+            break;
+        }
+        const std::string nome = entry.path().filename().string();
+        if (nome == "lo" || !interface_ativa_sysfs(entry.path())) {
+            continue;
+        }
+
+        const bool wifi = std::filesystem::exists(entry.path() / "wireless", ec);
+        status.conectado = true;
+        if (wifi && !status.wifi_conectado) {
+            status.wifi_conectado = true;
+            status.dispositivo_wifi = nome;
+            status.conexao_wifi = nome;
+            if (status.tipo.empty()) {
+                status.tipo = "wifi";
+                status.dispositivo = nome;
+                status.conexao = nome;
+            }
+            continue;
+        }
+
+        if (!wifi && !status.cabeado_conectado) {
+            status.cabeado_conectado = true;
+            status.dispositivo_cabeado = nome;
+            status.conexao_cabeada = nome;
+            if (status.tipo.empty() || status.tipo == "wifi") {
+                status.tipo = "ethernet";
+                status.dispositivo = nome;
+                status.conexao = nome;
+            }
+        }
+    }
+
+    return status;
 }
 
 void salvar_cache_wifi(const system_result& result, const std::vector<wifi_network>& redes) {
@@ -62,21 +132,21 @@ system_result traduzir_wifi_result(
     }
     if (output.find("Secrets were required") != std::string::npos ||
         output.find("No password") != std::string::npos) {
-        return config_result::error("wifi_password_required", "A rede exige senha.", output);
+        return config_result::error(err::WIFI_PASSWORD_REQUIRED, "A rede exige senha.", output);
     }
     if (output.find("wrong password") != std::string::npos ||
         output.find("invalid secrets") != std::string::npos) {
-        return config_result::error("wifi_auth_failed", "Senha incorreta ou autenticacao recusada.", output);
+        return config_result::error(err::WIFI_AUTH_FAILED, "Senha incorreta ou autenticacao recusada.", output);
     }
     if (output.find("No network with SSID") != std::string::npos) {
-        return config_result::error("wifi_not_found", "Rede Wi-Fi nao encontrada.", output);
+        return config_result::error(err::WIFI_NOT_FOUND, "Rede Wi-Fi nao encontrada.", output);
     }
     if (output.find("Wi-Fi is disabled") != std::string::npos ||
         output.find("radio is disabled") != std::string::npos) {
-        return config_result::error("wifi_disabled", "Wi-Fi desativado.", output);
+        return config_result::error(err::WIFI_DISABLED, "Wi-Fi desativado.", output);
     }
     if (output.find("not running") != std::string::npos) {
-        return config_result::error("network_manager_unavailable", "NetworkManager indisponivel.", output);
+        return config_result::error(err::NETWORK_MANAGER_UNAVAILABLE, "NetworkManager indisponivel.", output);
     }
     return config_result::error(codigo_falha, mensagem_falha, output);
 }
@@ -113,7 +183,7 @@ system_result listar_wifi_result(std::vector<wifi_network>& redes) {
     if (!radio_result.ok) {
         system_result result = traduzir_wifi_result(
             radio_result,
-            "wifi_status_failed",
+            err::WIFI_STATUS_FAILED,
             "Falha ao consultar estado do Wi-Fi."
         );
         salvar_cache_wifi(result, redes);
@@ -125,7 +195,7 @@ system_result listar_wifi_result(std::vector<wifi_network>& redes) {
     radio.erase(std::remove(radio.begin(), radio.end(), '\r'), radio.end());
     if (radio != "enabled") {
         system_result result = config_result::error(
-            "wifi_disabled",
+            err::WIFI_DISABLED,
             "Wi-Fi desativado.",
             radio_result.mensagem
         );
@@ -139,7 +209,7 @@ system_result listar_wifi_result(std::vector<wifi_network>& redes) {
     if (!scan_result.ok) {
         system_result result = traduzir_wifi_result(
             scan_result,
-            "wifi_scan_failed",
+            err::WIFI_SCAN_FAILED,
             "Falha ao escanear redes Wi-Fi."
         );
         salvar_cache_wifi(result, redes);
@@ -149,7 +219,7 @@ system_result listar_wifi_result(std::vector<wifi_network>& redes) {
     redes = config_dacc::network_parsing::parse_nmcli_wifi_list(scan_result.stdout_output);
     if (redes.empty()) {
         system_result result = config_result::error(
-            "wifi_no_networks",
+            err::WIFI_NO_NETWORKS,
             "Nenhuma rede Wi-Fi encontrada.",
             scan_result.mensagem
         );
@@ -167,6 +237,14 @@ wifi_adapter_status obter_status_wifi() {
     if (!comando_existe("nmcli")) {
         status.disponivel = false;
         status.output = "nmcli ausente no PATH.";
+        network_connection_status conexao = obter_status_conexao_rede_sysfs();
+        status.conectado_wifi = conexao.wifi_conectado;
+        status.conectado_cabeado = conexao.cabeado_conectado;
+        status.enabled = conexao.wifi_conectado;
+        status.dispositivo_wifi = conexao.dispositivo_wifi;
+        status.conexao_wifi = conexao.conexao_wifi;
+        status.dispositivo_cabeado = conexao.dispositivo_cabeado;
+        status.conexao_cabeada = conexao.conexao_cabeada;
         return status;
     }
     command_result result = exec_command_args_result({"nmcli", "radio", "wifi"});
@@ -198,7 +276,7 @@ wifi_adapter_status obter_status_wifi() {
 network_connection_status obter_status_conexao_rede() {
     network_connection_status status;
     if (!comando_existe("nmcli")) {
-        return status;
+        return obter_status_conexao_rede_sysfs();
     }
     command_result result = exec_command_args_result(
         {"nmcli", "-t", "-f", "TYPE,DEVICE,STATE,CONNECTION", "device", "status"}
@@ -256,7 +334,7 @@ system_result definir_estado_wifi_result(bool ligar) {
     );
     system_result traduzido = traduzir_wifi_result(
         result,
-        "wifi_toggle_failed",
+        err::WIFI_TOGGLE_FAILED,
         ligar ? "Falha ao ativar o Wi-Fi." : "Falha ao desativar o Wi-Fi."
     );
     if (!traduzido.ok) {
@@ -269,7 +347,7 @@ system_result definir_estado_wifi_result(bool ligar) {
         return config_result::success(ligar ? "Wi-Fi ativado." : "Wi-Fi desativado.", result.mensagem);
     }
     return config_result::error(
-        "wifi_state_mismatch",
+        err::WIFI_STATE_MISMATCH,
         "O estado do Wi-Fi nao refletiu a solicitacao.",
         status.output
     );
@@ -289,7 +367,7 @@ system_result conectar_wifi_result(const std::string& ssid, const std::string& s
         args.push_back(senha);
     }
     command_result result = exec_command_args_result(args);
-    system_result traduzido = traduzir_wifi_result(result, "wifi_connect_failed", "Falha ao conectar na rede Wi-Fi.");
+    system_result traduzido = traduzir_wifi_result(result, err::WIFI_CONNECT_FAILED, "Falha ao conectar na rede Wi-Fi.");
     if (traduzido.ok) {
         invalidar_cache_wifi();
     }
@@ -305,7 +383,7 @@ system_result desconectar_wifi_result(const std::string& id) {
         return network_manager_missing_result();
     }
     command_result result = exec_command_args_result({"nmcli", "connection", "down", "id", id});
-    system_result traduzido = traduzir_wifi_result(result, "wifi_disconnect_failed", "Falha ao desconectar a rede Wi-Fi.");
+    system_result traduzido = traduzir_wifi_result(result, err::WIFI_DISCONNECT_FAILED, "Falha ao desconectar a rede Wi-Fi.");
     if (traduzido.ok) {
         invalidar_cache_wifi();
     }

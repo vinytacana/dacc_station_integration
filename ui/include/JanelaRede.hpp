@@ -23,6 +23,7 @@
 #include "Botao.hpp"
 #include "TecladoVirtual.hpp"
 #include "ConfigLayout.hpp"
+#include "config-dacc/functions.hpp"
 
 /**
  * @namespace MeuProjeto
@@ -72,6 +73,11 @@ public:
     JanelaRede();
 
     /**
+     * @brief Constrói a janela usando capacidades já detectadas pelo menu principal.
+     */
+    explicit JanelaRede(const station_capabilities& capacidades);
+
+    /**
      * @brief Destrutor da classe JanelaRede.
      */
     ~JanelaRede();
@@ -113,6 +119,7 @@ private:
     bool mensagemErro = false;
     std::thread workerThread;
     std::mutex mtxRede;
+    station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
     
     // Lista de redes disponíveis
     std::vector<RedeInfo> redesDisponiveis; /**< Vetor com todas as redes detectadas. */
@@ -169,6 +176,11 @@ private:
     void desenharToggleWifi(SDL_Renderer* renderer);
 
     void desenharPainelRedeCabeada(SDL_Renderer* renderer);
+
+    /**
+     * @brief Renderiza mensagem quando rede não está disponível no ambiente.
+     */
+    void desenharPainelRedeIndisponivel(SDL_Renderer* renderer);
 
     /**
      * @brief Renderiza a lista de redes disponíveis.

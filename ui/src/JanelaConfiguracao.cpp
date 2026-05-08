@@ -17,6 +17,7 @@
 #include <ctime>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 using namespace MeuProjeto;
 
@@ -114,9 +115,82 @@ void JanelaConfiguracao::inicializarBotoes() {
 
     if (SDL_NumJoysticks() > 0) {
         indiceFocado = 0; 
+        ajustarFocoMenuParaDisponivel();
     } else {
         indiceFocado = -1; 
     }
+}
+
+void JanelaConfiguracao::atualizarCapacidadesSistema() {
+    capacidadesSistema = ::obter_capacidades_sistema();
+}
+
+SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
+    switch (indice) {
+        case 0: return SubmenuConfig::REDE;
+        case 1: return SubmenuConfig::AUDIO_VIDEO;
+        case 2: return SubmenuConfig::BLUETOOTH;
+        case 3: return SubmenuConfig::SISTEMA;
+        default: return SubmenuConfig::NENHUM;
+    }
+}
+
+bool JanelaConfiguracao::submenuDisponivel(SubmenuConfig submenu) const {
+    switch (submenu) {
+        case SubmenuConfig::REDE:
+            return capacidadesSistema.network;
+        case SubmenuConfig::AUDIO_VIDEO:
+            return capacidadesSistema.audio_list ||
+                   capacidadesSistema.volume_control ||
+                   capacidadesSistema.display_info ||
+                   capacidadesSistema.display_resolution ||
+                   capacidadesSistema.display_scale ||
+                   capacidadesSistema.brightness;
+        case SubmenuConfig::BLUETOOTH:
+            return capacidadesSistema.bluetooth;
+        case SubmenuConfig::SISTEMA:
+            return true;
+        case SubmenuConfig::NENHUM:
+        default:
+            return false;
+    }
+}
+
+std::string JanelaConfiguracao::mensagemSubmenuIndisponivel(SubmenuConfig submenu) const {
+    switch (submenu) {
+        case SubmenuConfig::REDE:
+            return "Rede indisponivel: NetworkManager/nmcli nao detectado.";
+        case SubmenuConfig::AUDIO_VIDEO:
+            return "Audio e video indisponiveis neste ambiente.";
+        case SubmenuConfig::BLUETOOTH:
+            return "Bluetooth indisponivel: bluetoothctl nao detectado.";
+        case SubmenuConfig::SISTEMA:
+        case SubmenuConfig::NENHUM:
+        default:
+            return "";
+    }
+}
+
+void JanelaConfiguracao::ajustarFocoMenuParaDisponivel(int direcao) {
+    if (botoesMenu.empty()) {
+        indiceFocado = -1;
+        return;
+    }
+
+    if (indiceFocado < 0 || indiceFocado >= static_cast<int>(botoesMenu.size())) {
+        indiceFocado = 0;
+    }
+
+    direcao = direcao < 0 ? -1 : 1;
+    const int total = static_cast<int>(botoesMenu.size());
+    for (int tentativas = 0; tentativas < total; ++tentativas) {
+        if (submenuDisponivel(submenuPorIndice(indiceFocado))) {
+            return;
+        }
+        indiceFocado = (indiceFocado + direcao + total) % total;
+    }
+
+    indiceFocado = -1;
 }
 
 /**
@@ -127,6 +201,8 @@ void JanelaConfiguracao::inicializarBotoes() {
  */
 void JanelaConfiguracao::abrir() {
     if (aberta) return;
+
+    atualizarCapacidadesSistema();
 
     if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2")) {
         std::cerr << "[AVISO] Qualidade '2' não suportada, tentando '1'..." << std::endl;
@@ -247,6 +323,13 @@ Uint32 JanelaConfiguracao::getIDJanela() const {
 void JanelaConfiguracao::executarAcaoMenu(int indice) {
     std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; 
 
+    SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
+    if (!submenuDisponivel(submenuSelecionado)) {
+        mensagemMenu = mensagemSubmenuIndisponivel(submenuSelecionado);
+        mensagemMenuErro = true;
+        return;
+    }
+
     if (submenuAtivo == SubmenuConfig::REDE && janelaRede) {
         janelaRede->resetar();
     }
@@ -259,13 +342,9 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
         janelaBluetooth->resetar();
     }
 
-    switch (indice) {
-        case 0: submenuAtivo = SubmenuConfig::REDE; break;
-        case 1: submenuAtivo = SubmenuConfig::AUDIO_VIDEO; break;
-        case 2: submenuAtivo = SubmenuConfig::BLUETOOTH; break;
-        case 3: submenuAtivo = SubmenuConfig::SISTEMA; break;
-        default: break;
-    }
+    submenuAtivo = submenuSelecionado;
+    mensagemMenu.clear();
+    mensagemMenuErro = false;
     
     // Limpa cache ao mudar de submenu
     limparCacheTexto();
@@ -354,6 +433,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
                     if (evento.caxis.value > DEADZONE) {
                         if (indiceFocado >= (int)botoesMenu.size() - 1) indiceFocado = 0;
                         else indiceFocado++;
+                        ajustarFocoMenuParaDisponivel(1);
                         gerAudio.tocarSom("navegacao.wav");
                         ultimoInputAnalogico = tempoAtual;
                         return true;
@@ -361,6 +441,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
                     else if (evento.caxis.value < -DEADZONE) {
                         if (indiceFocado <= 0) indiceFocado = botoesMenu.size() - 1;
                         else indiceFocado--;
+                        ajustarFocoMenuParaDisponivel(-1);
                         gerAudio.tocarSom("navegacao.wav");
                         ultimoInputAnalogico = tempoAtual;
                         return true;
@@ -377,6 +458,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
             if (submenuAtivo == SubmenuConfig::NENHUM) {
                 if (indiceFocado <= 0) indiceFocado = botoesMenu.size() - 1;
                 else indiceFocado--;
+                ajustarFocoMenuParaDisponivel(-1);
                 gerAudio.tocarSom("navegacao.wav");
             }
             return true;
@@ -385,6 +467,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
             if (submenuAtivo == SubmenuConfig::NENHUM) {
                 if (indiceFocado >= (int)botoesMenu.size() - 1) indiceFocado = 0;
                 else indiceFocado++;
+                ajustarFocoMenuParaDisponivel(1);
                 gerAudio.tocarSom("navegacao.wav");
             }
             return true;
@@ -560,12 +643,32 @@ void JanelaConfiguracao::desenharMenuPrincipal() {
                   ConfigLayout::F(60)); 
     
     for (int i = 0; i < (int)botoesMenu.size(); i++) {
+        const bool disponivel = submenuDisponivel(submenuPorIndice(i));
+        if (!disponivel) {
+            botoesMenu[i]->setCor({80, 80, 80, 150}, {80, 80, 80, 150}, {80, 80, 80, 150});
+            botoesMenu[i]->setCorTexto({180, 180, 180, 255});
+        }
+
         if (i == indiceFocado && SDL_NumJoysticks() > 0) { 
             botoesMenu[i]->setFocado(true);
         } else {
             botoesMenu[i]->setFocado(false);
         }
         botoesMenu[i]->desenhar(renderer);
+
+        if (!disponivel) {
+            desenharTexto(renderer, "Indisponivel",
+                          ConfigLayout::X(1125), botoesMenu[i]->area.y + ConfigLayout::Y(45),
+                          SDL_Color{190, 190, 190, 255}, ConfigLayout::F(22));
+        }
+    }
+
+    if (!mensagemMenu.empty()) {
+        SDL_Color cor = mensagemMenuErro ? SDL_Color{255, 120, 120, 255}
+                                         : SDL_Color{120, 255, 120, 255};
+        desenharTexto(renderer, mensagemMenu,
+                      ConfigLayout::X(217), ConfigLayout::Y(865),
+                      cor, ConfigLayout::F(22));
     }
 }
 
@@ -590,7 +693,7 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     desenharBarraStatus();
     
     if (!janelaRede) {
-        janelaRede = std::make_unique<JanelaRede>();
+        janelaRede = std::make_unique<JanelaRede>(capacidadesSistema);
     }
 
     janelaRede->desenhar(renderer);
@@ -619,7 +722,7 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     desenharBarraStatus();
     
     if (!janelaAudioVideo) {
-        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>();
+        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(capacidadesSistema);
     }
     
     janelaAudioVideo->desenhar(renderer);
@@ -648,7 +751,7 @@ void JanelaConfiguracao::desenharSubmenuBluetooth() {
     desenharBarraStatus();
     
     if (!janelaBluetooth) {
-        janelaBluetooth = std::make_unique<JanelaBluetooth>();
+        janelaBluetooth = std::make_unique<JanelaBluetooth>(capacidadesSistema);
     }
     
     janelaBluetooth->desenhar(renderer);

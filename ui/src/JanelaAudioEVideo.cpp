@@ -39,12 +39,29 @@ std::string Resolucao::toString() const {
  * @brief Construtor da classe JanelaAudioEVideo.
  * Inicializa o estado e os componentes da tela.
  */
-JanelaAudioEVideo::JanelaAudioEVideo() {
+JanelaAudioEVideo::JanelaAudioEVideo()
+    : JanelaAudioEVideo(::obter_capacidades_sistema()) {}
+
+JanelaAudioEVideo::JanelaAudioEVideo(const station_capabilities& capacidades)
+    : capacidadesSistema(capacidades) {
     inicializarDispositivos();
     inicializarResolucoes();
     inicializarBotoes();
 
-    volumeGeral = ::obter_volume_atual();
+    if (capacidadesSistema.volume_control) {
+        int volume = volumeGeral;
+        system_result volumeResult = ::obter_volume_atual_result(volume);
+        if (volumeResult.ok) {
+            volumeGeral = volume;
+        } else {
+            definirMensagemStatus(
+                volumeResult.mensagem.empty() ? "Volume indisponivel." : volumeResult.mensagem,
+                true
+            );
+        }
+    } else {
+        volumeGeral = 0;
+    }
     
     // Inicializa áreas de interação das barras
     areaBarraVolume = {0, 0, 0, 0};
@@ -73,12 +90,22 @@ JanelaAudioEVideo::~JanelaAudioEVideo() {
  */
 void JanelaAudioEVideo::inicializarDispositivos() {
 dispositivos.clear();
+
+    if (!capacidadesSistema.audio_list) {
+        dispositivos.push_back(DispositivoAudio("Audio indisponivel", -1));
+        indiceDispositivoAtual = 0;
+        return;
+    }
     
-    std::vector<device_audio> listaDoSistema = ::listar_dispositivos_audio();
+    std::vector<device_audio> listaDoSistema;
+    system_result resultado = ::listar_dispositivos_audio_result(listaDoSistema);
     
     // Fallback se não encontrar nada
-    if (listaDoSistema.empty()) {
-        dispositivos.push_back(DispositivoAudio("Nenhum dispositivo encontrado", -1));
+    if (!resultado.ok || listaDoSistema.empty()) {
+        dispositivos.push_back(DispositivoAudio(
+            resultado.mensagem.empty() ? "Nenhum dispositivo encontrado" : resultado.mensagem,
+            -1
+        ));
         indiceDispositivoAtual = 0;
         return;
     }
@@ -105,11 +132,18 @@ dispositivos.clear();
  */
 void JanelaAudioEVideo::inicializarResolucoes() {
     resolucoes.clear();
+
+    if (!capacidadesSistema.display_info) {
+        resolucoes.push_back(Resolucao(1920, 1080));
+        indiceResolucaoAtual = 0;
+        return;
+    }
     
     // 1. Busca info do sistema
-    std::vector<DisplayOutput> displays = ::obter_info_displays();
+    std::vector<DisplayOutput> displays;
+    system_result resultado = ::listar_displays_result(displays);
     
-    if (displays.empty()) {
+    if (!resultado.ok || displays.empty()) {
         // Fallback se não detectar nada (ex: rodando em VM sem xrandr)
         resolucoes.push_back(Resolucao(1920, 1080));
         resolucoes.push_back(Resolucao(1280, 720));
@@ -555,6 +589,11 @@ void JanelaAudioEVideo::desenharBarraProgresso(SDL_Renderer* renderer, int x, in
  * @brief Incrementa o volume.
  */
 void JanelaAudioEVideo::aumentarVolume() {
+    if (!capacidadesSistema.volume_control) {
+        definirMensagemStatus("Controle de volume indisponivel.", true);
+        return;
+    }
+
     // 1. Atualiza a variável interna para feedback visual imediato
     if (volumeGeral < MAX_VOLUME) {
         volumeGeral = std::min(MAX_VOLUME, volumeGeral + 5);
@@ -562,9 +601,14 @@ void JanelaAudioEVideo::aumentarVolume() {
         // 2. Toca o som da UI
         gerAudio.tocarSom("select.wav");
         
-        // 3. LOGICA REAL: Chama a função do backend (wpctl)
-        ::aumentar_volume();
-
+        system_result resultado = ::aumentar_volume_result();
+        if (!resultado.ok) {
+            definirMensagemStatus(
+                resultado.mensagem.empty() ? "Falha ao aumentar volume." : resultado.mensagem,
+                true
+            );
+            return;
+        }
         
         std::cout << "[AUDIO] Volume UI: " << volumeGeral << "% (Comando enviado)" << std::endl;
     }
@@ -574,11 +618,22 @@ void JanelaAudioEVideo::aumentarVolume() {
  * @brief Decrementa o volume.
  */
 void JanelaAudioEVideo::diminuirVolume() {
+    if (!capacidadesSistema.volume_control) {
+        definirMensagemStatus("Controle de volume indisponivel.", true);
+        return;
+    }
 
     if (volumeGeral > 0) {
         volumeGeral = std::max(0, volumeGeral - 5);
         gerAudio.tocarSom("select.wav");
-        ::diminuir_volume(); 
+        system_result resultado = ::diminuir_volume_result();
+        if (!resultado.ok) {
+            definirMensagemStatus(
+                resultado.mensagem.empty() ? "Falha ao diminuir volume." : resultado.mensagem,
+                true
+            );
+            return;
+        }
         std::cout << "[AUDIO] Volume UI: " << volumeGeral << "% (Comando enviado)" << std::endl;
     }
 }
@@ -587,8 +642,20 @@ void JanelaAudioEVideo::diminuirVolume() {
  * @brief Define o volume diretamente.
  */
 void JanelaAudioEVideo::setVolume(int novoVolume) {
+    if (!capacidadesSistema.volume_control) {
+        definirMensagemStatus("Controle de volume indisponivel.", true);
+        return;
+    }
+
     volumeGeral = std::clamp(novoVolume, 0, MAX_VOLUME);
-    ::definir_volume(volumeGeral);
+    system_result resultado = ::definir_volume_result(volumeGeral);
+    if (!resultado.ok) {
+        definirMensagemStatus(
+            resultado.mensagem.empty() ? "Falha ao definir volume." : resultado.mensagem,
+            true
+        );
+        return;
+    }
     std::cout << "[AUDIO] Volume ajustado para: " << volumeGeral << "%" << std::endl;
 }
 
@@ -596,6 +663,10 @@ void JanelaAudioEVideo::setVolume(int novoVolume) {
  * @brief Seleciona o dispositivo anterior.
  */
 void JanelaAudioEVideo::dispositivoAnterior() {
+    if (!capacidadesSistema.audio_select) {
+        definirMensagemStatus("Selecao de dispositivo de audio indisponivel.", true);
+        return;
+    }
     if (dispositivos.empty()) return;
     if (indiceDispositivoAtual > 0) {
         indiceDispositivoAtual--;
@@ -610,6 +681,10 @@ void JanelaAudioEVideo::dispositivoAnterior() {
  * @brief Seleciona o próximo dispositivo.
  */
 void JanelaAudioEVideo::dispositivoProximo() {
+    if (!capacidadesSistema.audio_select) {
+        definirMensagemStatus("Selecao de dispositivo de audio indisponivel.", true);
+        return;
+    }
     if (dispositivos.empty()) return;
     if (indiceDispositivoAtual < (int)dispositivos.size() - 1) {
         indiceDispositivoAtual++;
@@ -623,6 +698,10 @@ void JanelaAudioEVideo::dispositivoProximo() {
  * @brief Seleciona a resolução anterior.
  */
 void JanelaAudioEVideo::resolucaoAnterior() {
+    if (!capacidadesSistema.display_resolution) {
+        definirMensagemStatus("Controle de resolucao indisponivel.", true);
+        return;
+    }
     if (indiceResolucaoAtual > 0) {
         indiceResolucaoAtual--;
     } else {
@@ -636,6 +715,10 @@ void JanelaAudioEVideo::resolucaoAnterior() {
  * @brief Seleciona a próxima resolução.
  */
 void JanelaAudioEVideo::resolucaoProxima() {
+    if (!capacidadesSistema.display_resolution) {
+        definirMensagemStatus("Controle de resolucao indisponivel.", true);
+        return;
+    }
     if (indiceResolucaoAtual < (int)resolucoes.size() - 1) {
         indiceResolucaoAtual++;
     } else {
@@ -649,6 +732,10 @@ void JanelaAudioEVideo::resolucaoProxima() {
  * @brief Incrementa a escala da janela.
  */
 void JanelaAudioEVideo::aumentarEscala() {
+    if (!capacidadesSistema.display_scale) {
+        definirMensagemStatus("Controle de escala indisponivel.", true);
+        return;
+    }
     if (escalaJanela < MAX_ESCALA) {
         escalaJanela = std::min(MAX_ESCALA, escalaJanela + PASSO_ESCALA);
         gerAudio.tocarSom("select.wav");
@@ -660,6 +747,10 @@ void JanelaAudioEVideo::aumentarEscala() {
  * @brief Decrementa a escala da janela.
  */
 void JanelaAudioEVideo::diminuirEscala() {
+    if (!capacidadesSistema.display_scale) {
+        definirMensagemStatus("Controle de escala indisponivel.", true);
+        return;
+    }
     if (escalaJanela > MIN_ESCALA) {
         escalaJanela = std::max(MIN_ESCALA, escalaJanela - PASSO_ESCALA);
         gerAudio.tocarSom("select.wav");
@@ -671,6 +762,10 @@ void JanelaAudioEVideo::diminuirEscala() {
  * @brief Define a escala diretamente.
  */
 void JanelaAudioEVideo::setEscala(float novaEscala) {
+    if (!capacidadesSistema.display_scale) {
+        definirMensagemStatus("Controle de escala indisponivel.", true);
+        return;
+    }
     escalaJanela = std::clamp(novaEscala, MIN_ESCALA, MAX_ESCALA);
     std::cout << "[VIDEO] Escala ajustada para: " << escalaJanela << "x" << std::endl;
 }
@@ -1023,7 +1118,7 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
     definirMensagemStatus("Aplicando configuracoes...");
 
     // 1. Aplicar Áudio
-    if (!dispositivos.empty() && indiceDispositivoAtual >= 0) {
+    if (capacidadesSistema.audio_select && !dispositivos.empty() && indiceDispositivoAtual >= 0) {
         int idReal = dispositivos[indiceDispositivoAtual].id;
         if (idReal >= 0) {
             system_result audio = ::selecionar_dispositivo_audio_result(idReal);
@@ -1040,8 +1135,8 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
     // Precisamos saber o nome do monitor (ex: HDMI-1, eDP-1) dinamicamente
     std::string nomeMonitor = "HDMI-1"; // Fallback padrão
     
-    std::vector<DisplayOutput> displays = ::obter_info_displays();
-    if (!displays.empty()) {
+    std::vector<DisplayOutput> displays;
+    if (capacidadesSistema.display_info && ::listar_displays_result(displays).ok && !displays.empty()) {
         nomeMonitor = displays[0].name; // Pega o primeiro monitor conectado
     } else {
         std::cerr << "[UI] Aviso: Nenhum monitor detectado via backend. Tentando aplicar em " << nomeMonitor << "...\n";
@@ -1050,7 +1145,8 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
     // ---------------------------------------------------------
     // 3. APLICAR RESOLUÇÃO
     // ---------------------------------------------------------
-    if (!resolucoes.empty() && indiceResolucaoAtual >= 0 && indiceResolucaoAtual < (int)resolucoes.size()) {
+    if (capacidadesSistema.display_resolution &&
+        !resolucoes.empty() && indiceResolucaoAtual >= 0 && indiceResolucaoAtual < (int)resolucoes.size()) {
         Resolucao alvo = resolucoes[indiceResolucaoAtual];
         
         // A nova função pede (nome, largura, altura, refresh_rate)
@@ -1069,13 +1165,15 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
     // 4. APLICAR ESCALA
     // ---------------------------------------------------------
     // A nova função pede apenas (nome, float escala)
-    system_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
-    if (!escala.ok) {
-        definirMensagemStatus(
-            escala.mensagem.empty() ? "Falha ao definir escala." : escala.mensagem,
-            true
-        );
-        return;
+    if (capacidadesSistema.display_scale) {
+        system_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
+        if (!escala.ok) {
+            definirMensagemStatus(
+                escala.mensagem.empty() ? "Falha ao definir escala." : escala.mensagem,
+                true
+            );
+            return;
+        }
     }
 
     // ---------------------------------------------------------
@@ -1097,8 +1195,12 @@ void JanelaAudioEVideo::desenharInfoSistema(SDL_Renderer* renderer) {
     Uint32 agora = SDL_GetTicks();
     if (agora - ultimoRefresh > 2000 || ultimoRefresh == 0) {
         sessaoCache = ::obter_tipo_sessao();
-        auto displays = ::obter_info_displays();
-        nomeMonitor = displays.empty() ? "Desconhecido" : displays[0].name;
+        std::vector<DisplayOutput> displays;
+        if (capacidadesSistema.display_info && ::listar_displays_result(displays).ok && !displays.empty()) {
+            nomeMonitor = displays[0].name;
+        } else {
+            nomeMonitor = "Indisponivel";
+        }
         ultimoRefresh = agora;
     }
 

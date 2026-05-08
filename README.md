@@ -42,7 +42,6 @@ O script inicia o servidor de logs, o Process Manager e a interface grafica.
 
 ## Documentacao
 
-* [Plano de Trabalho - Vinicius Tacana](docs/Plano%20de%20Trabalho%20-%20Vinícius%20Tacaná.md)
 * [README do config-dacc](config-dacc/README.md)
 * [README da UI](ui/README)
 * [Documentacao de assets da UI](ui/assets/README.md)

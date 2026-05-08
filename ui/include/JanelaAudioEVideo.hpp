@@ -18,6 +18,7 @@
 #include <string>
 #include "Botao.hpp"
 #include "GerenciadorImagens.hpp"
+#include "config-dacc/functions.hpp"
 
 /**
  * @namespace MeuProjeto
@@ -81,6 +82,11 @@ public:
      * @brief Construtor da classe JanelaAudioEVideo.
      */
     JanelaAudioEVideo();
+
+    /**
+     * @brief Constrói a janela usando capacidades já detectadas pelo menu principal.
+     */
+    explicit JanelaAudioEVideo(const station_capabilities& capacidades);
 
     /**
      * @brief Destrutor da classe JanelaAudioEVideo.
@@ -157,6 +163,7 @@ private:
     
     bool arrastandoVolume = false;          /**< Flag para controle de arrasto do volume. */
     bool arrastandoEscala = false;          /**< Flag para controle de arrasto da escala. */
+    station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
     
     // IMAGEM EXPLICATIVA
     

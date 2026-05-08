@@ -2,6 +2,7 @@
 #define CONFIG_DACC_CONFIG_RESULT_HPP
 
 #include "config-dacc/functions.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 
 #include <string>
 
@@ -10,7 +11,7 @@ namespace config_result {
 inline system_result success(const std::string& mensagem, const std::string& detalhes = "") {
     system_result result;
     result.ok = true;
-    result.codigo = "ok";
+    result.codigo = config_dacc::errors::OK;
     result.mensagem = mensagem;
     result.detalhes = detalhes;
     return result;

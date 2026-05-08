@@ -32,6 +32,7 @@ Ele nao deve:
 ## Arquivos
 
 - `include/config-dacc/functions.hpp`: contrato publico consumido pela UI.
+- `include/config-dacc/ErrorCodes.hpp`: constantes dos codigos estaveis de erro.
 - `functions.hpp`: wrapper de compatibilidade para includes antigos.
 - `ConfigCommand.cpp`: execucao de comandos e utilitarios basicos do sistema.
 - `SystemControl.cpp`: tempo e leitura de bateria.
@@ -60,6 +61,13 @@ Rodar testes do backend:
 
 ```bash
 make -C config-dacc test
+```
+
+Compilar o utilitario de diagnostico de capacidades:
+
+```bash
+make -C config-dacc capabilities-smoke
+./config-dacc/tests/bin/capabilities_smoke
 ```
 
 Limpar artefatos:
@@ -138,6 +146,8 @@ Ordem de fallback atual:
 - rede: `nmcli`, com diferenca entre NetworkManager ausente, Wi-Fi desligado e scan vazio.
 
 Quando uma capacidade faltar, retorne `system_result` com codigo estavel, como `audio_subsystem_missing`, `display_subsystem_missing`, `brightness_not_supported` ou `network_manager_missing`.
+
+Os codigos padronizados ficam centralizados em `include/config-dacc/ErrorCodes.hpp`, no namespace `config_dacc::errors`. Ao adicionar novos retornos `_result`, prefira reutilizar essas constantes em vez de repetir strings diretamente nos controladores.
 
 ## Modulo Sistema e Execucao
 

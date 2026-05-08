@@ -22,6 +22,7 @@
 #include <atomic>
 #include <functional>
 #include "Botao.hpp"
+#include "config-dacc/functions.hpp"
 
 /**
  * @namespace MeuProjeto
@@ -99,6 +100,11 @@ public:
      * @brief Construtor da classe JanelaBluetooth.
      */
     JanelaBluetooth();
+
+    /**
+     * @brief Constrói a janela usando capacidades já detectadas pelo menu principal.
+     */
+    explicit JanelaBluetooth(const station_capabilities& capacidades);
 
     /**
      * @brief Destrutor da classe JanelaBluetooth.
@@ -187,6 +193,7 @@ private:
     bool mensagemErro = false;              /**< Diferencia feedback de erro e sucesso. */
     std::atomic<bool> adaptadorDisponivel{true}; /**< Indica se existe um controller Bluetooth real. */
     std::atomic<bool> adaptadorBloqueado{false}; /**< Indica bloqueio rfkill do adaptador. */
+    station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
     
     /**
      * @brief Inicializa os botões e elementos interativos.

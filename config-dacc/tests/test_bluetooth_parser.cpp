@@ -79,6 +79,14 @@ command_result exec_command_result(const std::string&) {
     return {};
 }
 
+command_result exec_command_args_result(const std::vector<std::string>&) {
+    return {};
+}
+
+bool comando_existe(const std::string&) {
+    return false;
+}
+
 bluetooth_adapter_status obter_status_bluetooth() {
     return {};
 }
