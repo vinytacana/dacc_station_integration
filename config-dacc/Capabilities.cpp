@@ -65,6 +65,16 @@ bool displays_suportam_backend(
     return false;
 }
 
+bool dispositivos_audio_suportam_selecao(const std::vector<device_audio>& dispositivos) {
+    for (const auto& dispositivo : dispositivos) {
+        if (dispositivo.backend == audio_backend::wpctl ||
+            dispositivo.backend == audio_backend::pactl) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 station_capabilities obter_capacidades_sistema() {
@@ -78,7 +88,7 @@ station_capabilities obter_capacidades_sistema() {
     std::vector<device_audio> dispositivos_audio;
     system_result audio_result = listar_dispositivos_audio_result(dispositivos_audio);
     caps.audio_list = capacidade_presente(audio_result, "audio_subsystem_missing");
-    caps.audio_select = capacidade_presente(audio_result, "audio_subsystem_missing");
+    caps.audio_select = caps.audio_list && dispositivos_audio_suportam_selecao(dispositivos_audio);
 
     int volume = 0;
     system_result volume_result = obter_volume_atual_result(volume);
