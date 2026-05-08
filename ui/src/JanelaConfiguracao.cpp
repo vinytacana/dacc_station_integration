@@ -693,7 +693,7 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     desenharBarraStatus();
     
     if (!janelaRede) {
-        janelaRede = std::make_unique<JanelaRede>();
+        janelaRede = std::make_unique<JanelaRede>(capacidadesSistema);
     }
 
     janelaRede->desenhar(renderer);
@@ -722,7 +722,7 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     desenharBarraStatus();
     
     if (!janelaAudioVideo) {
-        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>();
+        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(capacidadesSistema);
     }
     
     janelaAudioVideo->desenhar(renderer);
@@ -751,7 +751,7 @@ void JanelaConfiguracao::desenharSubmenuBluetooth() {
     desenharBarraStatus();
     
     if (!janelaBluetooth) {
-        janelaBluetooth = std::make_unique<JanelaBluetooth>();
+        janelaBluetooth = std::make_unique<JanelaBluetooth>(capacidadesSistema);
     }
     
     janelaBluetooth->desenhar(renderer);

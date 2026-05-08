@@ -67,8 +67,16 @@ private:
  * @brief Construtor da classe JanelaRede.
  * Inicializa o estado e os componentes da tela.
  */
-JanelaRede::JanelaRede() {
+JanelaRede::JanelaRede()
+    : JanelaRede(::obter_capacidades_sistema()) {}
+
+JanelaRede::JanelaRede(const station_capabilities& capacidades)
+    : capacidadesSistema(capacidades) {
     inicializarBotoes();
+    if (!capacidadesSistema.network) {
+        definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
+        return;
+    }
     definirMensagemStatus("Carregando redes Wi-Fi...");
     agendarSincronizacaoComBackend();
 }
@@ -95,6 +103,10 @@ JanelaRede::~JanelaRede() {
  */
 void JanelaRede::inicializarRedes() {
     redesDisponiveis.clear();
+    if (!capacidadesSistema.network) {
+        redeConectada.clear();
+        return;
+    }
     auto redes = ::listar_wifi_parsed();
     for (const auto& rede : redes) {
         bool requerSenha = !rede.seguranca.empty() && rede.seguranca != "--";
@@ -106,6 +118,12 @@ void JanelaRede::inicializarRedes() {
 }
 
 void JanelaRede::sincronizarComBackend() {
+    if (!capacidadesSistema.network) {
+        definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
+        precisaAtualizarInterface = true;
+        return;
+    }
+
     wifi_adapter_status status = ::obter_status_wifi();
     std::vector<RedeInfo> novasRedes;
     std::string novaRedeConectada;
@@ -302,7 +320,9 @@ void JanelaRede::desenhar(SDL_Renderer* renderer) {
     }
 
     desenharCabecalho(renderer);
-    if (redeCabeadaLocal) {
+    if (!capacidadesSistema.network) {
+        desenharPainelRedeIndisponivel(renderer);
+    } else if (redeCabeadaLocal) {
         desenharPainelRedeCabeada(renderer);
     } else {
         desenharToggleWifi(renderer);
@@ -445,6 +465,33 @@ void JanelaRede::desenharPainelRedeCabeada(SDL_Renderer* renderer) {
 
     desenharTexto(renderer, "Lista e scan de Wi-Fi pausados enquanto o cabo estiver ativo.",
                   painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(190),
+                  tema.getCorTextoNormal(), ConfigLayout::F(22));
+}
+
+void JanelaRede::desenharPainelRedeIndisponivel(SDL_Renderer* renderer) {
+    auto& tema = GerenciadorTemas::getInstance();
+    SDL_Rect painel = {
+        ConfigLayout::X(250),
+        ConfigLayout::Y(330),
+        ConfigLayout::X(1025),
+        ConfigLayout::Y(210)
+    };
+
+    SDL_Color fundo = tema.getCorRetangulos();
+    SDL_Color borda = SDL_Color{255, 150, 100, 220};
+    roundedBoxRGBA(renderer, painel.x, painel.y, painel.x + painel.w, painel.y + painel.h,
+                   ConfigLayout::F(18), fundo.r, fundo.g, fundo.b, 210);
+    roundedRectangleRGBA(renderer, painel.x, painel.y, painel.x + painel.w, painel.y + painel.h,
+                         ConfigLayout::F(18), borda.r, borda.g, borda.b, borda.a);
+
+    desenharTexto(renderer, "Rede indisponivel neste ambiente",
+                  painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(35),
+                  tema.getCorTextoNegrito(), ConfigLayout::F(34));
+    desenharTexto(renderer, "NetworkManager/nmcli nao foi detectado pelo backend.",
+                  painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(95),
+                  tema.getCorTextoNormal(), ConfigLayout::F(24));
+    desenharTexto(renderer, "A interface ocultara conexoes Wi-Fi ate essa capacidade estar disponivel.",
+                  painel.x + ConfigLayout::X(35), painel.y + ConfigLayout::Y(140),
                   tema.getCorTextoNormal(), ConfigLayout::F(22));
 }
 
@@ -671,6 +718,11 @@ void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
  * @brief Alterna o estado do Wi-Fi entre ON e OFF.
  */
 void JanelaRede::toggleWifi() {
+    if (!capacidadesSistema.network) {
+        definirMensagemStatus("Rede indisponivel: nmcli ausente.", true);
+        return;
+    }
+
     bool estadoDesejado = false;
     {
         std::lock_guard<std::mutex> lock(mtxRede);
@@ -807,6 +859,11 @@ void JanelaRede::confirmarSenha() {
  * @param indice Índice da rede na lista de redes disponíveis.
  */
 void JanelaRede::selecionarRede(int indice) {
+    if (!capacidadesSistema.network) {
+        definirMensagemStatus("Rede indisponivel: nmcli ausente.", true);
+        return;
+    }
+
     RedeInfo redeSelecionada("", false, false, 0);
     bool wifiAtivoLocal = false;
     {
@@ -916,6 +973,11 @@ void JanelaRede::confirmarSelecao() {
  * 
  */
 bool JanelaRede::processarEvento(SDL_Event& evento) {
+    if (!capacidadesSistema.network) {
+        (void)evento;
+        return false;
+    }
+
     if (tecladoVisivel) {
 
         // Cria um adaptador para permitir que o TecladoVirtual modifique senhaAtual
@@ -1209,5 +1271,9 @@ void JanelaRede::resetar() {
     
     // Recarrega a imagem explicativa (pode ter mudado o tema)
     liberarImagemExplicativa();
+    if (!capacidadesSistema.network) {
+        definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
+        return;
+    }
     agendarSincronizacaoComBackend("Atualizando redes Wi-Fi...");
 }

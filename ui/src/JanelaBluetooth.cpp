@@ -120,8 +120,18 @@ void logErroBluetooth(const std::string& operacao, const system_result& resultad
 
 } // namespace
 
-JanelaBluetooth::JanelaBluetooth() {
-    sincronizarComHardware();
+JanelaBluetooth::JanelaBluetooth()
+    : JanelaBluetooth(::obter_capacidades_sistema()) {}
+
+JanelaBluetooth::JanelaBluetooth(const station_capabilities& capacidades)
+    : capacidadesSistema(capacidades) {
+    if (capacidadesSistema.bluetooth) {
+        sincronizarComHardware();
+    } else {
+        bluetoothAtivo = false;
+        adaptadorDisponivel = false;
+        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+    }
     inicializarBotoes();
 }
 
@@ -137,6 +147,14 @@ JanelaBluetooth::~JanelaBluetooth() {
 }
 
 void JanelaBluetooth::sincronizarComHardware() {
+    if (!capacidadesSistema.bluetooth) {
+        bluetoothAtivo = false;
+        adaptadorDisponivel = false;
+        adaptadorBloqueado = false;
+        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        return;
+    }
+
     bluetooth_ui_snapshot snapshot = ::obter_estado_bluetooth_ui();
     bluetoothAtivo = snapshot.adapter.powered;
     adaptadorDisponivel = snapshot.adapter.controller_disponivel;
@@ -243,7 +261,10 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
     desenharStatusOperacional(renderer);
     desenharToggleBluetooth(renderer);
 
-    if (!adaptadorDisponivel) {
+    if (!capacidadesSistema.bluetooth) {
+        desenharPainelVazio(renderer, ConfigLayout::X(250), ConfigLayout::Y(360),
+                            ConfigLayout::X(1000), "Bluetooth indisponivel: bluetoothctl nao detectado.");
+    } else if (!adaptadorDisponivel) {
         desenharPainelVazio(renderer, ConfigLayout::X(250), ConfigLayout::Y(360),
                             ConfigLayout::X(1000), "Nenhum adaptador Bluetooth detectado no sistema.");
     } else if (bluetoothAtivo) {
@@ -260,7 +281,11 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
 void JanelaBluetooth::desenharToggleBluetooth(SDL_Renderer* renderer) {
     if (!btnToggleBluetooth) return;
 
-    btnToggleBluetooth->setTexto(bluetoothAtivo ? "Bluetooth: ON" : "Bluetooth: OFF");
+    if (!capacidadesSistema.bluetooth) {
+        btnToggleBluetooth->setTexto("Bluetooth: indisponivel");
+    } else {
+        btnToggleBluetooth->setTexto(bluetoothAtivo ? "Bluetooth: ON" : "Bluetooth: OFF");
+    }
     btnToggleBluetooth->setFocado(indiceFocado == -1);
     btnToggleBluetooth->desenhar(renderer);
 }
@@ -497,6 +522,8 @@ void JanelaBluetooth::desenharStatusOperacional(SDL_Renderer* renderer) {
     std::string resumo;
     if (!adaptadorDisponivel) {
         resumo = "Adaptador: indisponivel";
+    } else if (!capacidadesSistema.bluetooth) {
+        resumo = "Backend Bluetooth: indisponivel";
     } else if (adaptadorBloqueado && !bluetoothAtivo) {
         resumo = "Adaptador: bloqueado";
     } else {
@@ -694,6 +721,11 @@ void JanelaBluetooth::acionarItem(SecaoBluetooth secao, int indiceLocal, bool ac
 }
 
 void JanelaBluetooth::toggleBluetooth() {
+    if (!capacidadesSistema.bluetooth) {
+        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        return;
+    }
+
     if (alternandoBluetooth.exchange(true)) return;
 
     bool estadoDesejado = !bluetoothAtivo.load();
@@ -723,6 +755,11 @@ void JanelaBluetooth::toggleBluetooth() {
 }
 
 void JanelaBluetooth::iniciarEscaneamento() {
+    if (!capacidadesSistema.bluetooth) {
+        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        return;
+    }
+
     if (!bluetoothAtivo || escaneando) return;
     if (operacaoEmAndamento.exchange(true)) {
         definirMensagemStatus("Ha uma operacao Bluetooth em andamento.", true);
