@@ -161,6 +161,12 @@ bool obter_estado_bluetooth() {
 bluetooth_adapter_status obter_status_bluetooth() {
     bluetooth_adapter_status status;
 
+    if (!comando_existe("bluetoothctl")) {
+        status.controller_disponivel = false;
+        status.show_output = "bluetoothctl ausente no PATH.";
+        return status;
+    }
+
     system_result show_result = bluetooth_internal::executar_bluetoothctl("show");
     status.show_output = show_result.mensagem;
     if (!show_result.ok ||
@@ -172,11 +178,13 @@ bluetooth_adapter_status obter_status_bluetooth() {
         status.powered = true;
     }
 
-    command_result rfkill = exec_command_result("rfkill list bluetooth");
-    if (!rfkill.stdout_output.empty()) {
-        status.rfkill_output = rfkill.stdout_output;
-        status.soft_blocked = status.rfkill_output.find("Soft blocked: yes") != std::string::npos;
-        status.hard_blocked = status.rfkill_output.find("Hard blocked: yes") != std::string::npos;
+    if (comando_existe("rfkill")) {
+        command_result rfkill = exec_command_args_result({"rfkill", "list", "bluetooth"});
+        if (!rfkill.stdout_output.empty()) {
+            status.rfkill_output = rfkill.stdout_output;
+            status.soft_blocked = status.rfkill_output.find("Soft blocked: yes") != std::string::npos;
+            status.hard_blocked = status.rfkill_output.find("Hard blocked: yes") != std::string::npos;
+        }
     }
 
     return status;
@@ -327,6 +335,10 @@ std::vector<device_bt> listar_dispositivos_bluetooth_pareados() {
 }
 
 std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
+    if (!comando_existe("bluetoothctl")) {
+        return {};
+    }
+
     int master_fd;
     pid_t pid = forkpty(&master_fd, nullptr, nullptr, nullptr);
     if (pid < 0) {
@@ -339,8 +351,10 @@ std::vector<device_bt> scan_dispositivos_bluetooth(int segundos) {
         _exit(1);
     }
 
-    command_result rfkill = exec_command_result("rfkill unblock bluetooth");
-    (void)rfkill;
+    if (comando_existe("rfkill")) {
+        command_result rfkill = exec_command_args_result({"rfkill", "unblock", "bluetooth"});
+        (void)rfkill;
+    }
 
     write(master_fd, "power on\n", 9);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));

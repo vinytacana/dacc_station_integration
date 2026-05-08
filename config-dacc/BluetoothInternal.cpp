@@ -234,6 +234,13 @@ system_result make_bt_success(const std::string& mensagem, const std::string& de
 }
 
 system_result executar_bluetoothctl(const std::string& comando, int timeout_ms) {
+    if (!comando_existe("bluetoothctl")) {
+        return make_bt_error(
+            "bluetoothctl_missing",
+            "Bluetooth indisponivel.",
+            "bluetoothctl ausente no PATH."
+        );
+    }
     std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
     return executar_bluetoothctl_locked(comando, timeout_ms);
 }
@@ -245,6 +252,14 @@ system_result executar_bluetoothctl_ate(
     const std::vector<std::string>& comandos_finalizacao,
     int timeout_ms
 ) {
+    if (!comando_existe("bluetoothctl")) {
+        return make_bt_error(
+            "bluetoothctl_missing",
+            "Bluetooth indisponivel.",
+            "bluetoothctl ausente no PATH."
+        );
+    }
+
     std::lock_guard<std::mutex> lock(g_bluetooth_mutex);
 
     BluetoothctlSession session;
@@ -622,7 +637,11 @@ std::vector<device_bt> ordenar_dispositivos(const std::unordered_map<std::string
 }
 
 system_result garantir_bluetooth_desbloqueado() {
-    command_result rfkill = exec_command_result("rfkill unblock bluetooth");
+    if (!comando_existe("rfkill")) {
+        return make_bt_success("rfkill ausente; desbloqueio Bluetooth ignorado.");
+    }
+
+    command_result rfkill = exec_command_args_result({"rfkill", "unblock", "bluetooth"});
     if (!rfkill.ok) {
         return make_bt_error("rfkill_unblock_failed", "Falha ao desbloquear o Bluetooth.", rfkill.mensagem);
     }

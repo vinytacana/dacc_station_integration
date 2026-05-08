@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -25,6 +27,71 @@ system_result network_manager_missing_result() {
         "NetworkManager/nmcli indisponivel.",
         "nmcli ausente no PATH."
     );
+}
+
+bool ler_primeira_linha(const std::filesystem::path& path, std::string& valor) {
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        return false;
+    }
+    std::getline(in, valor);
+    return !valor.empty();
+}
+
+bool interface_ativa_sysfs(const std::filesystem::path& interface_path) {
+    std::string operstate;
+    if (ler_primeira_linha(interface_path / "operstate", operstate) && operstate == "up") {
+        return true;
+    }
+
+    std::string carrier;
+    return ler_primeira_linha(interface_path / "carrier", carrier) && carrier == "1";
+}
+
+network_connection_status obter_status_conexao_rede_sysfs() {
+    network_connection_status status;
+    const std::filesystem::path root{"/sys/class/net"};
+    std::error_code ec;
+    if (!std::filesystem::exists(root, ec)) {
+        return status;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
+        if (ec) {
+            break;
+        }
+        const std::string nome = entry.path().filename().string();
+        if (nome == "lo" || !interface_ativa_sysfs(entry.path())) {
+            continue;
+        }
+
+        const bool wifi = std::filesystem::exists(entry.path() / "wireless", ec);
+        status.conectado = true;
+        if (wifi && !status.wifi_conectado) {
+            status.wifi_conectado = true;
+            status.dispositivo_wifi = nome;
+            status.conexao_wifi = nome;
+            if (status.tipo.empty()) {
+                status.tipo = "wifi";
+                status.dispositivo = nome;
+                status.conexao = nome;
+            }
+            continue;
+        }
+
+        if (!wifi && !status.cabeado_conectado) {
+            status.cabeado_conectado = true;
+            status.dispositivo_cabeado = nome;
+            status.conexao_cabeada = nome;
+            if (status.tipo.empty() || status.tipo == "wifi") {
+                status.tipo = "ethernet";
+                status.dispositivo = nome;
+                status.conexao = nome;
+            }
+        }
+    }
+
+    return status;
 }
 
 void salvar_cache_wifi(const system_result& result, const std::vector<wifi_network>& redes) {
@@ -167,6 +234,14 @@ wifi_adapter_status obter_status_wifi() {
     if (!comando_existe("nmcli")) {
         status.disponivel = false;
         status.output = "nmcli ausente no PATH.";
+        network_connection_status conexao = obter_status_conexao_rede_sysfs();
+        status.conectado_wifi = conexao.wifi_conectado;
+        status.conectado_cabeado = conexao.cabeado_conectado;
+        status.enabled = conexao.wifi_conectado;
+        status.dispositivo_wifi = conexao.dispositivo_wifi;
+        status.conexao_wifi = conexao.conexao_wifi;
+        status.dispositivo_cabeado = conexao.dispositivo_cabeado;
+        status.conexao_cabeada = conexao.conexao_cabeada;
         return status;
     }
     command_result result = exec_command_args_result({"nmcli", "radio", "wifi"});
@@ -198,7 +273,7 @@ wifi_adapter_status obter_status_wifi() {
 network_connection_status obter_status_conexao_rede() {
     network_connection_status status;
     if (!comando_existe("nmcli")) {
-        return status;
+        return obter_status_conexao_rede_sysfs();
     }
     command_result result = exec_command_args_result(
         {"nmcli", "-t", "-f", "TYPE,DEVICE,STATE,CONNECTION", "device", "status"}
