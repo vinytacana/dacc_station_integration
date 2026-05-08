@@ -1,4 +1,5 @@
 #include "config-dacc/functions.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -7,6 +8,8 @@
 #include <unistd.h>
 
 namespace {
+
+namespace err = config_dacc::errors;
 
 bool grupo_usuario_existe(const std::string& grupo) {
     command_result result = exec_command_args_result({"id", "-nG"});
@@ -87,22 +90,22 @@ station_capabilities obter_capacidades_sistema() {
 
     std::vector<device_audio> dispositivos_audio;
     system_result audio_result = listar_dispositivos_audio_result(dispositivos_audio);
-    caps.audio_list = capacidade_presente(audio_result, "audio_subsystem_missing");
+    caps.audio_list = capacidade_presente(audio_result, err::AUDIO_SUBSYSTEM_MISSING);
     caps.audio_select = caps.audio_list && dispositivos_audio_suportam_selecao(dispositivos_audio);
 
     int volume = 0;
     system_result volume_result = obter_volume_atual_result(volume);
-    caps.volume_control = capacidade_presente(volume_result, "audio_subsystem_missing");
+    caps.volume_control = capacidade_presente(volume_result, err::AUDIO_SUBSYSTEM_MISSING);
 
     std::vector<wifi_network> redes;
     system_result network_result = listar_wifi_result(redes);
-    caps.network = capacidade_presente(network_result, "network_manager_missing");
+    caps.network = capacidade_presente(network_result, err::NETWORK_MANAGER_MISSING);
 
     caps.bluetooth = comando_existe("bluetoothctl");
 
     std::vector<DisplayOutput> displays;
     system_result display_result = listar_displays_result(displays);
-    caps.display_info = capacidade_presente(display_result, "display_subsystem_missing");
+    caps.display_info = capacidade_presente(display_result, err::DISPLAY_SUBSYSTEM_MISSING);
     const bool tem_display_xrandr = displays_suportam_backend(displays, display_backend::xrandr);
     const bool tem_display_wlrrandr = displays_suportam_backend(displays, display_backend::wlrrandr);
     caps.display_resolution = (caps.session_type == "x11" && tem_display_xrandr) ||
@@ -115,7 +118,7 @@ station_capabilities obter_capacidades_sistema() {
     caps.backlight_sysfs = backlight_sysfs_disponivel();
     int brilho = 0;
     system_result brightness_result = obter_brilho_result(brilho);
-    caps.brightness = capacidade_presente(brightness_result, "brightness_not_supported");
+    caps.brightness = capacidade_presente(brightness_result, err::BRIGHTNESS_NOT_SUPPORTED);
     caps.intro_video = comando_existe("mpv");
     caps.user_video_group = grupo_usuario_existe("video");
     caps.user_audio_group = grupo_usuario_existe("audio");

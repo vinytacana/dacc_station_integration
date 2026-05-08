@@ -1,4 +1,5 @@
 #include "BluetoothInternal.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -15,6 +16,8 @@
 #include <unistd.h>
 
 namespace bluetooth_internal {
+
+namespace err = config_dacc::errors;
 
 namespace {
 
@@ -69,34 +72,34 @@ system_result mapear_erro_bluetoothctl(
 ) {
     const std::string& saida = comando_result.mensagem.empty() ? comando_result.detalhes : comando_result.mensagem;
 
-    if (comando_result.codigo == "bluetoothctl_signaled") {
-        return make_bt_error("bluetoothctl_signaled", "bluetoothctl foi interrompido.", comando_result.detalhes);
+    if (comando_result.codigo == err::BLUETOOTHCTL_SIGNALED) {
+        return make_bt_error(err::BLUETOOTHCTL_SIGNALED, "bluetoothctl foi interrompido.", comando_result.detalhes);
     }
-    if (comando_result.codigo == "bluetoothctl_timeout") {
-        return make_bt_error("bluetoothctl_timeout", "bluetoothctl excedeu o tempo limite.", comando_result.detalhes);
+    if (comando_result.codigo == err::BLUETOOTHCTL_TIMEOUT) {
+        return make_bt_error(err::BLUETOOTHCTL_TIMEOUT, "bluetoothctl excedeu o tempo limite.", comando_result.detalhes);
     }
     if (saida.find("No default controller available") != std::string::npos) {
-        return make_bt_error("adapter_unavailable", "Nenhum adaptador Bluetooth disponivel.", saida);
+        return make_bt_error(err::ADAPTER_UNAVAILABLE, "Nenhum adaptador Bluetooth disponivel.", saida);
     }
     if (saida.find("rfkill") != std::string::npos || saida.find("blocked") != std::string::npos) {
-        return make_bt_error("adapter_blocked", "Bluetooth bloqueado.", saida);
+        return make_bt_error(err::ADAPTER_BLOCKED, "Bluetooth bloqueado.", saida);
     }
     if (saida.find("not available") != std::string::npos) {
-        return make_bt_error("device_unavailable", "Dispositivo Bluetooth indisponivel.", saida);
+        return make_bt_error(err::DEVICE_UNAVAILABLE, "Dispositivo Bluetooth indisponivel.", saida);
     }
     if (saida.find("not connected") != std::string::npos) {
-        return make_bt_error("device_not_connected", "Dispositivo nao esta conectado.", saida);
+        return make_bt_error(err::DEVICE_NOT_CONNECTED, "Dispositivo nao esta conectado.", saida);
     }
     if (saida.find("AlreadyExists") != std::string::npos || saida.find("Already Connected") != std::string::npos) {
-        return make_bt_error("already_done", "Operacao ja aplicada ao dispositivo.", saida);
+        return make_bt_error(err::ALREADY_DONE, "Operacao ja aplicada ao dispositivo.", saida);
     }
     if (saida.find("Authentication") != std::string::npos ||
         saida.find("Failed to pair") != std::string::npos ||
         saida.find("org.bluez.Error.Authentication") != std::string::npos) {
-        return make_bt_error("authentication_failed", "Falha de autenticacao no dispositivo Bluetooth.", saida);
+        return make_bt_error(err::AUTHENTICATION_FAILED, "Falha de autenticacao no dispositivo Bluetooth.", saida);
     }
     if (saida.find("timed out") != std::string::npos || saida.find("Timeout") != std::string::npos) {
-        return make_bt_error("operation_timeout", "Operacao Bluetooth expirou.", saida);
+        return make_bt_error(err::OPERATION_TIMEOUT, "Operacao Bluetooth expirou.", saida);
     }
     return make_bt_error(codigo_falha, mensagem_falha, saida);
 }
@@ -106,7 +109,7 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
     BluetoothctlSession session;
     session.pid = forkpty(&session.master_fd, nullptr, nullptr, nullptr);
     if (session.pid < 0) {
-        return make_bt_error("forkpty_failed", "Falha ao iniciar bluetoothctl.", std::strerror(errno));
+        return make_bt_error(err::FORKPTY_FAILED, "Falha ao iniciar bluetoothctl.", std::strerror(errno));
     }
 
     if (session.pid == 0) {
@@ -117,7 +120,7 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
     const std::string entrada = comando + "\nquit\n";
     ssize_t escritos = write(session.master_fd, entrada.c_str(), entrada.size());
     if (escritos < 0) {
-        return make_bt_error("write_failed", "Falha ao enviar comando ao bluetoothctl.", std::strerror(errno));
+        return make_bt_error(err::WRITE_FAILED, "Falha ao enviar comando ao bluetoothctl.", std::strerror(errno));
     }
 
     char buffer[1024];
@@ -149,7 +152,7 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
                 break;
             }
         } else if (ret < 0) {
-            return make_bt_error("read_failed", "Falha ao ler resposta do bluetoothctl.", std::strerror(errno));
+            return make_bt_error(err::READ_FAILED, "Falha ao ler resposta do bluetoothctl.", std::strerror(errno));
         }
 
         const auto decorrido = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -159,7 +162,7 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
             session.kill_if_running(SIGKILL);
             session.enable_blocking_wait();
             return make_bt_error(
-                "bluetoothctl_timeout",
+                err::BLUETOOTHCTL_TIMEOUT,
                 "bluetoothctl excedeu o tempo limite.",
                 "Comando: " + comando
             );
@@ -177,11 +180,11 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
     resultado.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     resultado.mensagem = remover_ansi(saida);
     if (resultado.ok) {
-        resultado.codigo = "ok";
+        resultado.codigo = err::OK;
     } else if (WIFSIGNALED(status)) {
-        resultado.codigo = "bluetoothctl_signaled";
+        resultado.codigo = err::BLUETOOTHCTL_SIGNALED;
     } else {
-        resultado.codigo = "bluetoothctl_failed";
+        resultado.codigo = err::BLUETOOTHCTL_FAILED;
     }
     resultado.detalhes = resultado.mensagem;
     if (!resultado.ok && resultado.mensagem.empty()) {
@@ -227,7 +230,7 @@ system_result make_bt_error(const std::string& codigo, const std::string& mensag
 system_result make_bt_success(const std::string& mensagem, const std::string& detalhes) {
     system_result result;
     result.ok = true;
-    result.codigo = "ok";
+    result.codigo = err::OK;
     result.mensagem = mensagem;
     result.detalhes = detalhes;
     return result;
@@ -236,7 +239,7 @@ system_result make_bt_success(const std::string& mensagem, const std::string& de
 system_result executar_bluetoothctl(const std::string& comando, int timeout_ms) {
     if (!comando_existe("bluetoothctl")) {
         return make_bt_error(
-            "bluetoothctl_missing",
+            err::BLUETOOTHCTL_MISSING,
             "Bluetooth indisponivel.",
             "bluetoothctl ausente no PATH."
         );
@@ -254,7 +257,7 @@ system_result executar_bluetoothctl_ate(
 ) {
     if (!comando_existe("bluetoothctl")) {
         return make_bt_error(
-            "bluetoothctl_missing",
+            err::BLUETOOTHCTL_MISSING,
             "Bluetooth indisponivel.",
             "bluetoothctl ausente no PATH."
         );
@@ -265,7 +268,7 @@ system_result executar_bluetoothctl_ate(
     BluetoothctlSession session;
     session.pid = forkpty(&session.master_fd, nullptr, nullptr, nullptr);
     if (session.pid < 0) {
-        return make_bt_error("forkpty_failed", "Falha ao iniciar bluetoothctl.", std::strerror(errno));
+        return make_bt_error(err::FORKPTY_FAILED, "Falha ao iniciar bluetoothctl.", std::strerror(errno));
     }
 
     if (session.pid == 0) {
@@ -280,7 +283,7 @@ system_result executar_bluetoothctl_ate(
 
     for (const auto& comando : comandos) {
         if (!escrever_linha(comando)) {
-            return make_bt_error("write_failed", "Falha ao enviar comando ao bluetoothctl.", std::strerror(errno));
+            return make_bt_error(err::WRITE_FAILED, "Falha ao enviar comando ao bluetoothctl.", std::strerror(errno));
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(180));
     }
@@ -358,7 +361,7 @@ system_result executar_bluetoothctl_ate(
                 break;
             }
         } else if (ret < 0) {
-            return make_bt_error("read_failed", "Falha ao ler resposta do bluetoothctl.", std::strerror(errno));
+            return make_bt_error(err::READ_FAILED, "Falha ao ler resposta do bluetoothctl.", std::strerror(errno));
         }
 
         const auto decorrido = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -379,7 +382,7 @@ system_result executar_bluetoothctl_ate(
             session.kill_if_running(SIGKILL);
             session.enable_blocking_wait();
             return make_bt_error(
-                "bluetoothctl_timeout",
+                err::BLUETOOTHCTL_TIMEOUT,
                 "bluetoothctl excedeu o tempo limite.",
                 remover_ansi(saida)
             );
@@ -449,11 +452,11 @@ system_result executar_bluetoothctl_ate(
 
     system_result resultado;
     resultado.ok = sucesso || (WIFEXITED(status) && WEXITSTATUS(status) == 0 && marcadores_sucesso.empty());
-    resultado.codigo = resultado.ok ? "ok" : "bluetoothctl_failed";
+    resultado.codigo = resultado.ok ? err::OK : err::BLUETOOTHCTL_FAILED;
     resultado.mensagem = remover_ansi(saida);
     resultado.detalhes = resultado.mensagem;
     if (!resultado.ok && WIFSIGNALED(status)) {
-        resultado.codigo = "bluetoothctl_signaled";
+        resultado.codigo = err::BLUETOOTHCTL_SIGNALED;
     }
     return resultado;
 }
@@ -643,7 +646,7 @@ system_result garantir_bluetooth_desbloqueado() {
 
     command_result rfkill = exec_command_args_result({"rfkill", "unblock", "bluetooth"});
     if (!rfkill.ok) {
-        return make_bt_error("rfkill_unblock_failed", "Falha ao desbloquear o Bluetooth.", rfkill.mensagem);
+        return make_bt_error(err::RFKILL_UNBLOCK_FAILED, "Falha ao desbloquear o Bluetooth.", rfkill.mensagem);
     }
     return make_bt_success("Bluetooth desbloqueado.");
 }
@@ -651,13 +654,13 @@ system_result garantir_bluetooth_desbloqueado() {
 system_result validar_adaptador_pronto() {
     bluetooth_adapter_status status = obter_status_bluetooth();
     if (!status.controller_disponivel) {
-        return make_bt_error("adapter_unavailable", "Nenhum adaptador Bluetooth disponivel.", status.show_output);
+        return make_bt_error(err::ADAPTER_UNAVAILABLE, "Nenhum adaptador Bluetooth disponivel.", status.show_output);
     }
     if (status.hard_blocked) {
-        return make_bt_error("adapter_hard_blocked", "Bluetooth bloqueado fisicamente.", status.rfkill_output);
+        return make_bt_error(err::ADAPTER_HARD_BLOCKED, "Bluetooth bloqueado fisicamente.", status.rfkill_output);
     }
     if (status.soft_blocked) {
-        return make_bt_error("adapter_soft_blocked", "Bluetooth bloqueado por software.", status.rfkill_output);
+        return make_bt_error(err::ADAPTER_SOFT_BLOCKED, "Bluetooth bloqueado por software.", status.rfkill_output);
     }
     return make_bt_success("Adaptador Bluetooth pronto.");
 }

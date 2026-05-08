@@ -1,6 +1,7 @@
 #include "config-dacc/functions.hpp"
 #include "config-dacc/AudioParsing.hpp"
 #include "config-dacc/ConfigResult.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -11,6 +12,8 @@
 #include <vector>
 
 namespace {
+
+namespace err = config_dacc::errors;
 
 std::mutex g_audio_mutex;
 std::vector<device_audio> g_audio_cache_dispositivos;
@@ -29,7 +32,7 @@ system_result traduzir_audio_result(
     }
     if (command.mensagem.find("No such entity") != std::string::npos ||
         command.mensagem.find("not found") != std::string::npos) {
-        return config_result::error("audio_device_not_found", "Dispositivo de audio nao encontrado.", command.mensagem);
+        return config_result::error(err::AUDIO_DEVICE_NOT_FOUND, "Dispositivo de audio nao encontrado.", command.mensagem);
     }
     return config_result::error(codigo, mensagem, command.mensagem);
 }
@@ -39,7 +42,7 @@ system_result executar_desmutar_audio_result(const std::vector<std::string>& cmd
     if (result.ok) {
         return config_result::success("Audio atualizado.", result.mensagem);
     }
-    return traduzir_audio_result(result, "audio_mute_failed", "Falha ao remover mudo.");
+    return traduzir_audio_result(result, err::AUDIO_MUTE_FAILED, "Falha ao remover mudo.");
 }
 
 system_result executar_comando_audio_result(
@@ -80,7 +83,7 @@ system_result executar_comando_audio_result(
     }
 
     return config_result::error(
-        "audio_subsystem_missing",
+        err::AUDIO_SUBSYSTEM_MISSING,
         "Subsistema de audio compativel indisponivel.",
         "wpctl, pactl e amixer ausentes."
     );
@@ -163,7 +166,7 @@ system_result obter_volume_atual_result(int& volume) {
     }
 
     return config_result::error(
-        "audio_subsystem_missing",
+        err::AUDIO_SUBSYSTEM_MISSING,
         "Subsistema de audio compativel indisponivel.",
         "wpctl, pactl e amixer ausentes ou sem volume parseavel."
     );
@@ -192,7 +195,7 @@ system_result obter_mudo_result(bool& mudo) {
     }
 
     return config_result::error(
-        "audio_subsystem_missing",
+        err::AUDIO_SUBSYSTEM_MISSING,
         "Subsistema de audio compativel indisponivel.",
         "wpctl, pactl e amixer ausentes ou sem estado de mudo parseavel."
     );
@@ -220,7 +223,7 @@ system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispos
 
     if (!tem_wpctl && !tem_pactl && !tem_aplay) {
         system_result result = config_result::error(
-            "audio_subsystem_missing",
+            err::AUDIO_SUBSYSTEM_MISSING,
             "Subsistema de audio compativel indisponivel.",
             "wpctl, pactl e aplay ausentes."
         );
@@ -280,7 +283,7 @@ system_result listar_dispositivos_audio_result(std::vector<device_audio>& dispos
     }
 
     system_result result = config_result::error(
-        "audio_no_devices",
+        err::AUDIO_NO_DEVICES,
         "Nenhum dispositivo de audio encontrado.",
         descrever_tentativas(tentativas)
     );
@@ -306,7 +309,7 @@ system_result selecionar_dispositivo_audio_result(int id) {
     }
 
     return config_result::error(
-        "audio_device_not_found",
+        err::AUDIO_DEVICE_NOT_FOUND,
         "Dispositivo de audio nao encontrado.",
         "id=" + std::to_string(id)
     );
@@ -315,30 +318,30 @@ system_result selecionar_dispositivo_audio_result(int id) {
 system_result selecionar_dispositivo_audio_result(const device_audio& dispositivo) {
     if (dispositivo.backend == audio_backend::wpctl) {
         if (!comando_existe("wpctl")) {
-            return config_result::error("audio_subsystem_missing", "Subsistema de audio compativel indisponivel.", "wpctl ausente.");
+            return config_result::error(err::AUDIO_SUBSYSTEM_MISSING, "Subsistema de audio compativel indisponivel.", "wpctl ausente.");
         }
         const std::string id = dispositivo.backend_id.empty() ? std::to_string(dispositivo.id) : dispositivo.backend_id;
         command_result result = exec_command_args_result({"wpctl", "set-default", id});
-        system_result traduzido = traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
+        system_result traduzido = traduzir_audio_result(result, err::AUDIO_SELECT_FAILED, "Falha ao definir dispositivo de audio.");
         if (traduzido.ok) invalidar_cache_audio();
         return traduzido;
     }
 
     if (dispositivo.backend == audio_backend::pactl) {
         if (!comando_existe("pactl")) {
-            return config_result::error("audio_subsystem_missing", "Subsistema de audio compativel indisponivel.", "pactl ausente.");
+            return config_result::error(err::AUDIO_SUBSYSTEM_MISSING, "Subsistema de audio compativel indisponivel.", "pactl ausente.");
         }
         if (dispositivo.backend_id.empty()) {
-            return config_result::error("audio_device_not_found", "Dispositivo de audio nao encontrado.", "backend_id pactl vazio.");
+            return config_result::error(err::AUDIO_DEVICE_NOT_FOUND, "Dispositivo de audio nao encontrado.", "backend_id pactl vazio.");
         }
         command_result result = exec_command_args_result({"pactl", "set-default-sink", dispositivo.backend_id});
-        system_result traduzido = traduzir_audio_result(result, "audio_select_failed", "Falha ao definir dispositivo de audio.");
+        system_result traduzido = traduzir_audio_result(result, err::AUDIO_SELECT_FAILED, "Falha ao definir dispositivo de audio.");
         if (traduzido.ok) invalidar_cache_audio();
         return traduzido;
     }
 
     return config_result::error(
-        "audio_select_unsupported",
+        err::AUDIO_SELECT_UNSUPPORTED,
         "Selecao de dispositivo nao suportada neste backend de audio.",
         "backend=alsa backend_id=" + dispositivo.backend_id
     );
@@ -350,7 +353,7 @@ system_result aumentar_volume_result() {
         {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%"},
         {"amixer", "sset", "Master", "5%+"},
         true,
-        "audio_volume_failed",
+        err::AUDIO_VOLUME_FAILED,
         "Falha ao aumentar volume."
     );
 }
@@ -361,7 +364,7 @@ system_result diminuir_volume_result() {
         {"pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%"},
         {"amixer", "sset", "Master", "5%-"},
         false,
-        "audio_volume_failed",
+        err::AUDIO_VOLUME_FAILED,
         "Falha ao diminuir volume."
     );
 }
@@ -380,7 +383,7 @@ system_result definir_volume_result(int valor_int) {
         {"pactl", "set-sink-volume", "@DEFAULT_SINK@", v_perc},
         {"amixer", "sset", "Master", v_perc},
         valor_int > 0,
-        "audio_volume_failed",
+        err::AUDIO_VOLUME_FAILED,
         "Falha ao definir volume."
     );
 }
@@ -391,7 +394,7 @@ system_result alternar_mudo_result() {
         {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"},
         {"amixer", "sset", "Master", "toggle"},
         false,
-        "audio_mute_failed",
+        err::AUDIO_MUTE_FAILED,
         "Falha ao alternar mudo."
     );
 }

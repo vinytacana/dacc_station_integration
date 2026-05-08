@@ -1,6 +1,7 @@
 #include "config-dacc/functions.hpp"
 #include "config-dacc/ConfigResult.hpp"
 #include "config-dacc/DisplayParsing.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -15,6 +16,8 @@
 #include <vector>
 
 namespace {
+
+namespace err = config_dacc::errors;
 
 std::mutex g_display_mutex;
 std::mutex g_brightness_mutex;
@@ -39,11 +42,11 @@ system_result traduzir_display_result(
     }
     if (command.mensagem.find("unknown output") != std::string::npos ||
         command.mensagem.find("cannot find output") != std::string::npos) {
-        return config_result::error("display_output_not_found", "Saida de video nao encontrada.", command.mensagem);
+        return config_result::error(err::DISPLAY_OUTPUT_NOT_FOUND, "Saida de video nao encontrada.", command.mensagem);
     }
     if (command.mensagem.find("cannot find mode") != std::string::npos ||
         command.mensagem.find("bad mode") != std::string::npos) {
-        return config_result::error("display_mode_unsupported", "Resolucao nao suportada para a saida.", command.mensagem);
+        return config_result::error(err::DISPLAY_MODE_UNSUPPORTED, "Resolucao nao suportada para a saida.", command.mensagem);
     }
     return config_result::error(codigo, mensagem, command.mensagem);
 }
@@ -271,7 +274,7 @@ system_result listar_displays_result(std::vector<DisplayOutput>& displays) {
 
     if (!tem_xrandr && !tem_wlr) {
         system_result result = config_result::error(
-            "display_subsystem_missing",
+            err::DISPLAY_SUBSYSTEM_MISSING,
             "Subsistema de display indisponivel.",
             "xrandr e wlr-randr ausentes."
         );
@@ -325,7 +328,7 @@ system_result listar_displays_result(std::vector<DisplayOutput>& displays) {
     }
 
     system_result result = config_result::error(
-        "display_no_outputs",
+        err::DISPLAY_NO_OUTPUTS,
         "Nenhum display encontrado.",
         descrever_tentativas(tentativas)
     );
@@ -365,7 +368,7 @@ system_result alterarEscala_result(const std::string& saida, float escala) {
 
     if (sessao == "x11") {
         if (!comando_existe("xrandr")) {
-            return config_result::error("feature_unavailable", "Controle de escala indisponivel.", "xrandr ausente.");
+            return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de escala indisponivel.", "xrandr ausente.");
         }
         args = {"xrandr", "--output", saida, "--scale", scale_str + "x" + scale_str};
     } else if (sessao == "wayland") {
@@ -373,22 +376,22 @@ system_result alterarEscala_result(const std::string& saida, float escala) {
         std::string de = desktop ? std::string(desktop) : "";
         if (de.find("gnome") != std::string::npos) {
             if (!comando_existe("gsettings")) {
-                return config_result::error("feature_unavailable", "Controle de escala indisponivel.", "gsettings ausente.");
+                return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de escala indisponivel.", "gsettings ausente.");
             }
             int scale_int = static_cast<int>(escala + 0.5f);
             args = {"gsettings", "set", "org.gnome.desktop.interface", "scaling-factor", std::to_string(scale_int)};
         } else {
             if (!comando_existe("wlr-randr")) {
-                return config_result::error("feature_unavailable", "Controle de escala indisponivel.", "wlr-randr ausente.");
+                return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de escala indisponivel.", "wlr-randr ausente.");
             }
             args = {"wlr-randr", "--output", saida, "--scale", scale_str};
         }
     } else {
-        return config_result::error("display_session_unknown", "Sessao grafica nao suportada.");
+        return config_result::error(err::DISPLAY_SESSION_UNKNOWN, "Sessao grafica nao suportada.");
     }
 
     command_result result = exec_command_args_result(args);
-    system_result traduzido = traduzir_display_result(result, "display_scale_failed", "Falha ao alterar escala.");
+    system_result traduzido = traduzir_display_result(result, err::DISPLAY_SCALE_FAILED, "Falha ao alterar escala.");
     if (traduzido.ok) invalidar_cache_display();
     return traduzido;
 }
@@ -405,20 +408,20 @@ system_result alterarResolucao_result(const std::string& saida, int width, int h
 
     if (sessao == "wayland") {
         if (!comando_existe("wlr-randr")) {
-            return config_result::error("feature_unavailable", "Controle de resolucao indisponivel.", "wlr-randr ausente.");
+            return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de resolucao indisponivel.", "wlr-randr ausente.");
         }
         args = {"wlr-randr", "--output", saida, "--mode", mode_str};
     } else if (sessao == "x11") {
         if (!comando_existe("xrandr")) {
-            return config_result::error("feature_unavailable", "Controle de resolucao indisponivel.", "xrandr ausente.");
+            return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de resolucao indisponivel.", "xrandr ausente.");
         }
         args = {"xrandr", "--output", saida, "--mode", mode_str};
     } else {
-        return config_result::error("display_session_unknown", "Sessao grafica nao suportada.");
+        return config_result::error(err::DISPLAY_SESSION_UNKNOWN, "Sessao grafica nao suportada.");
     }
 
     command_result result = exec_command_args_result(args);
-    system_result traduzido = traduzir_display_result(result, "display_resolution_failed", "Falha ao alterar resolucao.");
+    system_result traduzido = traduzir_display_result(result, err::DISPLAY_RESOLUTION_FAILED, "Falha ao alterar resolucao.");
     if (traduzido.ok) invalidar_cache_display();
     return traduzido;
 }
@@ -463,7 +466,7 @@ system_result obter_brilho_result(int& brilho) {
     tentativas.push_back("sysfs: " + detalhes);
 
     system_result result = config_result::error(
-        "brightness_not_supported",
+        err::BRIGHTNESS_NOT_SUPPORTED,
         "Controle de brilho nao suportado neste ambiente.",
         descrever_tentativas(tentativas)
     );
@@ -494,7 +497,7 @@ system_result definir_brilho_result(int valor) {
     tentativas.push_back("sysfs: " + detalhes);
 
     return config_result::error(
-        "brightness_not_supported",
+        err::BRIGHTNESS_NOT_SUPPORTED,
         "Controle de brilho nao suportado neste ambiente.",
         descrever_tentativas(tentativas)
     );
@@ -539,7 +542,7 @@ system_result alterar_brilho_result(int delta) {
     }
 
     return config_result::error(
-        "brightness_not_supported",
+        err::BRIGHTNESS_NOT_SUPPORTED,
         "Controle de brilho nao suportado neste ambiente.",
         descrever_tentativas(tentativas)
     );
