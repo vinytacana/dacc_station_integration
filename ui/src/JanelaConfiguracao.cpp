@@ -42,6 +42,7 @@ JanelaConfiguracao::JanelaConfiguracao() {}
 JanelaConfiguracao::~JanelaConfiguracao() {
     liberarIconeBateria();
     fechar();
+    aguardarAtualizacaoCapacidades();
 }
 
 // INICIALIZAÇÃO
@@ -123,17 +124,71 @@ void JanelaConfiguracao::inicializarBotoes() {
 }
 
 void JanelaConfiguracao::atualizarCapacidadesSistema() {
-    capacidadesSistema = ::obter_capacidades_sistema();
+    station_capabilities capacidades = ::obter_capacidades_sistema();
+    std::lock_guard<std::mutex> lock(mutexCapacidades);
+    capacidadesSistema = std::move(capacidades);
+    capacidadesCarregadas = true;
+    recriarBotoesAposCapacidades = true;
 }
 
 void JanelaConfiguracao::atualizarCapacidadesERecriarSubmenus() {
-    atualizarCapacidadesSistema();
     janelaRede.reset();
     janelaAudioVideo.reset();
     janelaBluetooth.reset();
-    mensagemMenu = "Capacidades do sistema atualizadas.";
-    mensagemMenuErro = false;
-    ajustarFocoMenuParaDisponivel();
+    iniciarAtualizacaoCapacidadesSegundoPlano(false);
+}
+
+void JanelaConfiguracao::iniciarAtualizacaoCapacidadesSegundoPlano(bool descartarSubmenus) {
+    if (descartarSubmenus) {
+        janelaRede.reset();
+        janelaAudioVideo.reset();
+        janelaBluetooth.reset();
+    }
+
+    if (atualizacaoCapacidadesEmAndamento.exchange(true)) {
+        return;
+    }
+
+    if (threadCapacidades.joinable()) {
+        threadCapacidades.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        capacidadesCarregadas = false;
+        mensagemMenu = "Verificando capacidades do sistema...";
+        mensagemMenuErro = false;
+    }
+
+    threadCapacidades = std::thread([this]() {
+        station_capabilities capacidades = ::obter_capacidades_sistema();
+        {
+            std::lock_guard<std::mutex> lock(mutexCapacidades);
+            capacidadesSistema = std::move(capacidades);
+            capacidadesCarregadas = true;
+            recriarBotoesAposCapacidades = true;
+            mensagemMenu.clear();
+            mensagemMenuErro = false;
+        }
+        atualizacaoCapacidadesEmAndamento = false;
+    });
+}
+
+void JanelaConfiguracao::aguardarAtualizacaoCapacidades() {
+    if (threadCapacidades.joinable()) {
+        threadCapacidades.join();
+    }
+    atualizacaoCapacidadesEmAndamento = false;
+}
+
+station_capabilities JanelaConfiguracao::obterSnapshotCapacidades() const {
+    std::lock_guard<std::mutex> lock(mutexCapacidades);
+    return capacidadesSistema;
+}
+
+bool JanelaConfiguracao::capacidadesForamCarregadas() const {
+    std::lock_guard<std::mutex> lock(mutexCapacidades);
+    return capacidadesCarregadas;
 }
 
 SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
@@ -147,17 +202,22 @@ SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
 }
 
 bool JanelaConfiguracao::submenuDisponivel(SubmenuConfig submenu) const {
+    if (!capacidadesForamCarregadas()) {
+        return submenu == SubmenuConfig::SISTEMA;
+    }
+
+    station_capabilities capacidades = obterSnapshotCapacidades();
     switch (submenu) {
         case SubmenuConfig::REDE:
-            return capacidadesSistema.network;
+            return capacidades.network;
         case SubmenuConfig::AUDIO_VIDEO:
-            return capacidadesSistema.audio_list ||
-                   capacidadesSistema.volume_control ||
-                   capacidadesSistema.display_info ||
-                   capacidadesSistema.display_resolution ||
-                   capacidadesSistema.display_scale;
+            return capacidades.audio_list ||
+                   capacidades.volume_control ||
+                   capacidades.display_info ||
+                   capacidades.display_resolution ||
+                   capacidades.display_scale;
         case SubmenuConfig::BLUETOOTH:
-            return capacidadesSistema.bluetooth;
+            return capacidades.bluetooth;
         case SubmenuConfig::SISTEMA:
             return true;
         case SubmenuConfig::NENHUM:
@@ -212,8 +272,6 @@ void JanelaConfiguracao::ajustarFocoMenuParaDisponivel(int direcao) {
 void JanelaConfiguracao::abrir() {
     if (aberta) return;
 
-    atualizarCapacidadesSistema();
-
     if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2")) {
         std::cerr << "[AVISO] Qualidade '2' não suportada, tentando '1'..." << std::endl;
         if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1")) {
@@ -241,6 +299,7 @@ void JanelaConfiguracao::abrir() {
             // Força renderização inicial
             desenhar();
             SDL_RenderPresent(renderer);
+            iniciarAtualizacaoCapacidadesSegundoPlano(false);
         }
     }
 }
@@ -335,7 +394,10 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
 
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
-        mensagemMenu = mensagemSubmenuIndisponivel(submenuSelecionado);
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        mensagemMenu = capacidadesCarregadas
+            ? mensagemSubmenuIndisponivel(submenuSelecionado)
+            : "Aguarde a verificacao de capacidades do sistema.";
         mensagemMenuErro = true;
         return;
     }
@@ -353,8 +415,11 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
     }
 
     submenuAtivo = submenuSelecionado;
-    mensagemMenu.clear();
-    mensagemMenuErro = false;
+    {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        mensagemMenu.clear();
+        mensagemMenuErro = false;
+    }
     
     // Limpa cache ao mudar de submenu
     limparCacheTexto();
@@ -673,16 +738,24 @@ void JanelaConfiguracao::desenharMenuPrincipal() {
         botoesMenu[i]->desenhar(renderer);
 
         if (!disponivel) {
-            desenharTexto(renderer, "Indisponivel",
+            desenharTexto(renderer, capacidadesForamCarregadas() ? "Indisponivel" : "Verificando...",
                           ConfigLayout::X(1125), botoesMenu[i]->area.y + ConfigLayout::Y(45),
                           SDL_Color{190, 190, 190, 255}, ConfigLayout::F(22));
         }
     }
 
-    if (!mensagemMenu.empty()) {
-        SDL_Color cor = mensagemMenuErro ? SDL_Color{255, 120, 120, 255}
-                                         : SDL_Color{120, 255, 120, 255};
-        desenharTexto(renderer, mensagemMenu,
+    std::string mensagemLocal;
+    bool mensagemErroLocal = false;
+    {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        mensagemLocal = mensagemMenu;
+        mensagemErroLocal = mensagemMenuErro;
+    }
+
+    if (!mensagemLocal.empty()) {
+        SDL_Color cor = mensagemErroLocal ? SDL_Color{255, 120, 120, 255}
+                                          : SDL_Color{120, 255, 120, 255};
+        desenharTexto(renderer, mensagemLocal,
                       ConfigLayout::X(217), ConfigLayout::Y(865),
                       cor, ConfigLayout::F(22));
     }
@@ -709,7 +782,7 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     desenharBarraStatus();
     
     if (!janelaRede) {
-        janelaRede = std::make_unique<JanelaRede>(capacidadesSistema);
+        janelaRede = std::make_unique<JanelaRede>(obterSnapshotCapacidades());
     }
 
     janelaRede->desenhar(renderer);
@@ -738,7 +811,7 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     desenharBarraStatus();
     
     if (!janelaAudioVideo) {
-        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(capacidadesSistema);
+        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(obterSnapshotCapacidades());
     }
     
     janelaAudioVideo->desenhar(renderer);
@@ -767,7 +840,7 @@ void JanelaConfiguracao::desenharSubmenuBluetooth() {
     desenharBarraStatus();
     
     if (!janelaBluetooth) {
-        janelaBluetooth = std::make_unique<JanelaBluetooth>(capacidadesSistema);
+        janelaBluetooth = std::make_unique<JanelaBluetooth>(obterSnapshotCapacidades());
     }
     
     janelaBluetooth->desenhar(renderer);
@@ -813,6 +886,17 @@ void JanelaConfiguracao::desenharSubmenuSistemaInfos() {
  */
 void JanelaConfiguracao::desenhar() {
     if (!aberta || !renderer) return;
+
+    bool deveRecriarBotoes = false;
+    if (submenuAtivo == SubmenuConfig::NENHUM) {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        deveRecriarBotoes = recriarBotoesAposCapacidades;
+        recriarBotoesAposCapacidades = false;
+    }
+    if (deveRecriarBotoes) {
+        inicializarBotoes();
+        limparCacheTexto();
+    }
 
     auto& tema = GerenciadorTemas::getInstance();
 

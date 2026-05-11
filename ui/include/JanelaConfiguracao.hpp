@@ -13,6 +13,9 @@
 #pragma once
 
 #include <SDL2/SDL.h>
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include <memory>
 #include <string>
@@ -124,6 +127,11 @@ private:
     std::unique_ptr<Botao> btnVoltar;     /**< Botão para retornar ao menu anterior. */
     std::unique_ptr<Botao> btnFechar;     /**< Botão para encerrar a janela de configurações. */
     station_capabilities capacidadesSistema; /**< Recursos detectados no backend de configuração. */
+    mutable std::mutex mutexCapacidades;   /**< Protege snapshot de capacidades e mensagem do menu. */
+    std::thread threadCapacidades;         /**< Atualização de capacidades fora do caminho de clique. */
+    std::atomic<bool> atualizacaoCapacidadesEmAndamento{false}; /**< Evita scans simultâneos. */
+    bool capacidadesCarregadas = false;    /**< Indica se o snapshot pesado já terminou. */
+    bool recriarBotoesAposCapacidades = false; /**< Recria botões no thread principal após o scan. */
     std::string mensagemMenu;             /**< Feedback exibido no menu principal. */
     bool mensagemMenuErro = false;        /**< Indica se o feedback do menu representa erro/indisponibilidade. */
     
@@ -145,6 +153,26 @@ private:
      * @brief Atualiza o snapshot de capacidades do backend config-dacc.
      */
     void atualizarCapacidadesSistema();
+
+    /**
+     * @brief Inicia atualização de capacidades em segundo plano.
+     */
+    void iniciarAtualizacaoCapacidadesSegundoPlano(bool descartarSubmenus);
+
+    /**
+     * @brief Aguarda a atualização de capacidades, quando houver uma thread finalizável.
+     */
+    void aguardarAtualizacaoCapacidades();
+
+    /**
+     * @brief Obtém uma cópia segura do snapshot de capacidades.
+     */
+    station_capabilities obterSnapshotCapacidades() const;
+
+    /**
+     * @brief Indica se a verificação inicial de capacidades já terminou.
+     */
+    bool capacidadesForamCarregadas() const;
 
     /**
      * @brief Atualiza capacidades e descarta submenus para recriá-los com o novo snapshot.
