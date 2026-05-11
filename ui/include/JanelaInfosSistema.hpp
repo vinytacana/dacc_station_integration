@@ -73,7 +73,6 @@ struct Colaborador {
  * - Informações de hardware (CPU, RAM, GPU, SO)
  * - Informações do projeto (nome, versão, data)
  * - Lista de colaboradores e suas funções
- * - Ícone de bateria na barra de status
  * - Sistema de scroll via mouse e gamepad
  * - Barra de rolagem visual no lado direito
  * - Imagem explicativa dos controles na parte inferior
@@ -87,7 +86,7 @@ public:
 
     /**
      * @brief Destrutor da classe JanelaInfosSistema.
-     * Libera texturas alocadas (bateria e explicação).
+     * Libera texturas alocadas.
      */
     ~JanelaInfosSistema();
 
@@ -110,7 +109,7 @@ public:
     void resetar();
 
     /**
-     * @brief Carrega as texturas necessárias (bateria e explicação).
+     * @brief Carrega as texturas necessárias.
      * Deve ser chamado após ter um renderer válido.
      * @param renderer Ponteiro para o renderizador SDL.
      */

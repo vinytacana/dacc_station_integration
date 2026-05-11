@@ -210,7 +210,7 @@ private:
 
     /**
      * @brief Obtém o percentual de bateria do sistema.
-     * @return Valor inteiro entre 0 e 100 representando a carga da bateria.
+     * @return Valor entre 0 e 100, ou BATERIA_INDISPONIVEL quando nao houver bateria.
      */
     int obterNivelBateria();
 

@@ -5,6 +5,8 @@
 
 namespace MeuProjeto {
 
+constexpr int BATERIA_INDISPONIVEL = -1;
+
 /**
  * @struct SystemData
  * @brief Estrutura contendo dados do status atual do sistema
@@ -37,6 +39,7 @@ struct SystemData {
      * 
      * Valor inteiro representando a porcentagem de carga da bateria,
      * variando de 0 (completamente descarregada) a 100 (completamente carregada).
+     * Quando o sistema nao expor bateria, usa BATERIA_INDISPONIVEL.
      */
     int batteryLevel;
 };

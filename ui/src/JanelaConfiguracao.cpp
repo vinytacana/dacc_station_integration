@@ -12,6 +12,7 @@
 #include "ConfigLayout.hpp"
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
+#include "SystemStatus.hpp"
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <ctime>
@@ -518,14 +519,16 @@ std::string JanelaConfiguracao::obterHoraAtual() {
  * 
  * @details Usa as funções SDL para obter informações de energia.
  * 
- * @return Percentual da bateria (0-100), ou 100 se não for possível determinar.
+ * @return Percentual da bateria (0-100), ou BATERIA_INDISPONIVEL se não houver bateria.
  */
 int JanelaConfiguracao::obterNivelBateria() {
-    int percentual = -1;
-    SDL_GetPowerInfo(nullptr, &percentual);
+    int percentual = ::obter_bateria();
+    if (percentual == BATERIA_INDISPONIVEL) {
+        SDL_GetPowerInfo(nullptr, &percentual);
+    }
     
-    if (percentual == -1) {
-        return 100;
+    if (percentual < 0 || percentual > 100) {
+        return BATERIA_INDISPONIVEL;
     }
     
     return percentual;
@@ -563,9 +566,14 @@ void JanelaConfiguracao::desenharBarraStatus() {
     std::string hora = obterHoraAtual();
     int bateria = obterNivelBateria();
     
-    std::stringstream ssBateria;
-    ssBateria << bateria << "%";
-    std::string textoBateria = ssBateria.str();
+    std::string textoBateria;
+    if (bateria == BATERIA_INDISPONIVEL) {
+        textoBateria = "AC/Desktop";
+    } else {
+        std::stringstream ssBateria;
+        ssBateria << bateria << "%";
+        textoBateria = ssBateria.str();
+    }
     
     int posX = ConfigLayout::X(762);
     int posY = ConfigLayout::Y(25);
@@ -574,7 +582,10 @@ void JanelaConfiguracao::desenharBarraStatus() {
     desenharTexto(renderer, hora, posX - ConfigLayout::X(100), posY, 
                   tema.getCorTextoNegrito(), ConfigLayout::F(24));
     
-    if (texturaBateria) {
+    if (bateria == BATERIA_INDISPONIVEL) {
+        desenharTexto(renderer, textoBateria, posX + ConfigLayout::X(20), posY,
+                      tema.getCorTextoNegrito(), ConfigLayout::F(24));
+    } else if (texturaBateria) {
         int larguraIcone = ConfigLayout::X(100);
         int alturaIcone = ConfigLayout::Y(50);
         
