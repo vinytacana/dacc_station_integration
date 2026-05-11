@@ -332,7 +332,6 @@ Uint32 JanelaConfiguracao::getIDJanela() const {
  */
 void JanelaConfiguracao::executarAcaoMenu(int indice) {
     std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; 
-    atualizarCapacidadesSistema();
 
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
