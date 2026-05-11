@@ -191,7 +191,7 @@ void GraphicsUtils::drawOverlay(SDL_Renderer* renderer, int width, int height, i
 void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TTF_Font* font) {
     /**
      * Obtém dados em cache do SystemStatus (atualizado a cada 1 segundo).
-     * Contém: currentTime (string HH:MM), wifiConnected (bool), batteryLevel (int 0-100)
+     * Contém: currentTime (string HH:MM), wifiConnected (bool), batteryLevel (int 0-100 ou BATERIA_INDISPONIVEL)
      */
     SystemData data = SystemStatus::getInstance().getCachedData();
     
@@ -260,29 +260,47 @@ void GraphicsUtils::drawSystemTopBar(SDL_Renderer* renderer, int screenWidth, TT
         int batX = clockX - 50; ///< 50px de espaçamento do relógio
         int batY = topMargin + 5; ///< Ajuste vertical para alinhamento
 
-        /**
-         * Desenha contorno da bateria com cantos arredondados.
-         * Utiliza cinza claro (200,200,200) para visibilidade.
-         */
-        roundedRectangleRGBA(renderer, batX, batY, batX + batW, batY + batH, 4, 200, 200, 200, 255);
-        
-        /**
-         * Desenha o terminal positivo da bateria (pequeno retângulo à direita).
-         * Representa o "bico" típico de ícones de bateria.
-         */
-        boxRGBA(renderer, batX + batW, batY + 6, batX + batW + 4, batY + batH - 6, 200, 200, 200, 255);
-        
-        /**
-         * Calcula largura do preenchimento baseado no nível de carga.
-         * batteryLevel varia de 0-100, convertido proporcionalmente.
-         * Limitadores garantem que não exceda dimensões da bateria.
-         */
-        int fillW = (int)(batW * (data.batteryLevel / 100.0f));
-        if(fillW > batW - 6) fillW = batW - 6; ///< Margem interna de 3px
-        if(fillW < 0) fillW = 0; ///< Nunca negativo
-        
-        /// Desenha preenchimento branco proporcional à carga
-        boxRGBA(renderer, batX + 3, batY + 3, batX + 3 + fillW, batY + batH - 3, 255, 255, 255, 255);
+        if (data.batteryLevel == BATERIA_INDISPONIVEL) {
+            SDL_Surface* acSurf = TTF_RenderUTF8_Blended(font, "AC", white);
+            if (acSurf) {
+                SDL_Texture* acTex = SDL_CreateTextureFromSurface(renderer, acSurf);
+                if (acTex) {
+                    SDL_Rect acDst = {
+                        batX + (batW - acSurf->w) / 2,
+                        batY + (batH - acSurf->h) / 2,
+                        acSurf->w,
+                        acSurf->h
+                    };
+                    SDL_RenderCopy(renderer, acTex, NULL, &acDst);
+                    SDL_DestroyTexture(acTex);
+                }
+                SDL_FreeSurface(acSurf);
+            }
+        } else {
+            /**
+             * Desenha contorno da bateria com cantos arredondados.
+             * Utiliza cinza claro (200,200,200) para visibilidade.
+             */
+            roundedRectangleRGBA(renderer, batX, batY, batX + batW, batY + batH, 4, 200, 200, 200, 255);
+
+            /**
+             * Desenha o terminal positivo da bateria (pequeno retângulo à direita).
+             * Representa o "bico" típico de ícones de bateria.
+             */
+            boxRGBA(renderer, batX + batW, batY + 6, batX + batW + 4, batY + batH - 6, 200, 200, 200, 255);
+
+            /**
+             * Calcula largura do preenchimento baseado no nível de carga.
+             * batteryLevel varia de 0-100, convertido proporcionalmente.
+             * Limitadores garantem que não exceda dimensões da bateria.
+             */
+            int fillW = (int)(batW * (data.batteryLevel / 100.0f));
+            if(fillW > batW - 6) fillW = batW - 6; ///< Margem interna de 3px
+            if(fillW < 0) fillW = 0; ///< Nunca negativo
+
+            /// Desenha preenchimento branco proporcional à carga
+            boxRGBA(renderer, batX + 3, batY + 3, batX + 3 + fillW, batY + batH - 3, 255, 255, 255, 255);
+        }
 
         // INDICADOR WiFi (À Esquerda da Bateria)
         

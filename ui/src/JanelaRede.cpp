@@ -9,6 +9,7 @@
  */
 
 #include "JanelaRede.hpp"
+#include "config-dacc/ErrorCodes.hpp"
 #include "config-dacc/functions.hpp"
 #include "Utils.hpp"
 #include "GerenciadorTemas.hpp"
@@ -41,6 +42,25 @@ extern GerenciadorImagens gerImg;
  */
 
 namespace MeuProjeto { 
+
+namespace {
+
+std::vector<RedeInfo> converterRedesWifi(const std::vector<wifi_network>& redes, std::string& redeConectada) {
+    std::vector<RedeInfo> redesUi;
+    redesUi.reserve(redes.size());
+
+    for (const auto& rede : redes) {
+        bool requerSenha = !rede.seguranca.empty() && rede.seguranca != "--";
+        redesUi.emplace_back(rede.ssid, rede.em_uso, requerSenha, rede.sinal);
+        if (rede.em_uso) {
+            redeConectada = rede.ssid;
+        }
+    }
+
+    return redesUi;
+}
+
+} // namespace
 
 class StringInputAdapter : public BotaoPesquisa {
 public:
@@ -98,8 +118,7 @@ JanelaRede::~JanelaRede() {
 /**
  * @brief Inicializa a lista de redes disponíveis com dados de exemplo.
  * 
- * Em uma implementação real, esta função consultaria o sistema operacional
- * para obter a lista de redes Wi-Fi detectadas.
+ * Consulta o backend de configuração para obter a lista de redes Wi-Fi detectadas.
  */
 void JanelaRede::inicializarRedes() {
     redesDisponiveis.clear();
@@ -107,14 +126,13 @@ void JanelaRede::inicializarRedes() {
         redeConectada.clear();
         return;
     }
-    auto redes = ::listar_wifi_parsed();
-    for (const auto& rede : redes) {
-        bool requerSenha = !rede.seguranca.empty() && rede.seguranca != "--";
-        redesDisponiveis.push_back(RedeInfo(rede.ssid, rede.em_uso, requerSenha, rede.sinal));
-        if (rede.em_uso) {
-            redeConectada = rede.ssid;
-        }
+    std::vector<wifi_network> redes;
+    system_result resultado = ::listar_wifi_result(redes);
+    if (!resultado.ok && resultado.codigo != config_dacc::errors::WIFI_NO_NETWORKS) {
+        definirMensagemStatus(resultado.mensagem.empty() ? "Falha ao listar redes Wi-Fi." : resultado.mensagem, true);
+        return;
     }
+    redesDisponiveis = converterRedesWifi(redes, redeConectada);
 }
 
 void JanelaRede::sincronizarComBackend() {
@@ -127,15 +145,15 @@ void JanelaRede::sincronizarComBackend() {
     wifi_adapter_status status = ::obter_status_wifi();
     std::vector<RedeInfo> novasRedes;
     std::string novaRedeConectada;
+    system_result scanResult;
+    bool scanExecutado = false;
 
     if (!status.conectado_cabeado) {
-        auto redes = ::listar_wifi_parsed();
-        for (const auto& rede : redes) {
-            bool requerSenha = !rede.seguranca.empty() && rede.seguranca != "--";
-            novasRedes.emplace_back(rede.ssid, rede.em_uso, requerSenha, rede.sinal);
-            if (rede.em_uso) {
-                novaRedeConectada = rede.ssid;
-            }
+        std::vector<wifi_network> redes;
+        scanResult = ::listar_wifi_result(redes);
+        scanExecutado = true;
+        if (scanResult.ok || scanResult.codigo == config_dacc::errors::WIFI_NO_NETWORKS) {
+            novasRedes = converterRedesWifi(redes, novaRedeConectada);
         }
     }
 
@@ -149,6 +167,9 @@ void JanelaRede::sincronizarComBackend() {
     if (redeCabeadaAtiva) {
         mensagemStatus = "Conexao cabeada ativa. Scan Wi-Fi pausado.";
         mensagemErro = false;
+    } else if (scanExecutado && !scanResult.ok && scanResult.codigo != config_dacc::errors::WIFI_NO_NETWORKS) {
+        mensagemStatus = scanResult.mensagem.empty() ? "Falha ao listar redes Wi-Fi." : scanResult.mensagem;
+        mensagemErro = true;
     } else if (redesDisponiveis.empty() && wifiAtivo) {
         mensagemStatus = "Nenhuma rede Wi-Fi detectada.";
         mensagemErro = false;

@@ -70,8 +70,11 @@ void SystemStatus::update() {
     }
 
     int battery = ::obter_bateria();
-    if (battery < 0) {
+    if (battery == BATERIA_INDISPONIVEL) {
         SDL_GetPowerInfo(nullptr, &battery);
+    }
+    if (battery < 0 || battery > 100) {
+        battery = BATERIA_INDISPONIVEL;
     }
     cache.batteryLevel = battery;
 }

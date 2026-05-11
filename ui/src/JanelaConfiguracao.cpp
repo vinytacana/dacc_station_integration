@@ -12,6 +12,7 @@
 #include "ConfigLayout.hpp"
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
+#include "SystemStatus.hpp"
 #include <iostream>
 #include <SDL2/SDL.h>
 #include <ctime>
@@ -41,6 +42,7 @@ JanelaConfiguracao::JanelaConfiguracao() {}
 JanelaConfiguracao::~JanelaConfiguracao() {
     liberarIconeBateria();
     fechar();
+    aguardarAtualizacaoCapacidades();
 }
 
 // INICIALIZAÇÃO
@@ -122,7 +124,73 @@ void JanelaConfiguracao::inicializarBotoes() {
 }
 
 void JanelaConfiguracao::atualizarCapacidadesSistema() {
-    capacidadesSistema = ::obter_capacidades_sistema();
+    station_capabilities capacidades = ::obter_capacidades_sistema();
+    std::lock_guard<std::mutex> lock(mutexCapacidades);
+    capacidadesSistema = std::move(capacidades);
+    capacidadesCarregadas = true;
+    recriarBotoesAposCapacidades = true;
+}
+
+void JanelaConfiguracao::iniciarAtualizacaoCapacidadesSegundoPlano(bool descartarSubmenus) {
+    if (descartarSubmenus) {
+        janelaRede.reset();
+        janelaAudioVideo.reset();
+        janelaBluetooth.reset();
+    }
+
+    if (atualizacaoCapacidadesEmAndamento.exchange(true)) {
+        return;
+    }
+
+    if (capacidadesForamCarregadas()) {
+        atualizacaoCapacidadesEmAndamento = false;
+        return;
+    }
+
+    if (threadCapacidades.joinable()) {
+        threadCapacidades.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        capacidadesCarregadas = false;
+        mensagemMenu = "Verificando capacidades do sistema...";
+        mensagemMenuErro = false;
+    }
+
+    threadCapacidades = std::thread([this]() {
+        station_capabilities capacidades = ::obter_capacidades_sistema();
+        {
+            std::lock_guard<std::mutex> lock(mutexCapacidades);
+            capacidadesSistema = std::move(capacidades);
+            capacidadesCarregadas = true;
+            recriarBotoesAposCapacidades = true;
+            mensagemMenu.clear();
+            mensagemMenuErro = false;
+        }
+        atualizacaoCapacidadesEmAndamento = false;
+    });
+}
+
+void JanelaConfiguracao::aguardarAtualizacaoCapacidades() {
+    if (threadCapacidades.joinable()) {
+        threadCapacidades.join();
+    }
+    atualizacaoCapacidadesEmAndamento = false;
+}
+
+station_capabilities JanelaConfiguracao::obterSnapshotCapacidades() const {
+    std::lock_guard<std::mutex> lock(mutexCapacidades);
+    return capacidadesSistema;
+}
+
+bool JanelaConfiguracao::capacidadesForamCarregadas() const {
+    std::lock_guard<std::mutex> lock(mutexCapacidades);
+    return capacidadesCarregadas;
+}
+
+bool JanelaConfiguracao::verificandoCapacidades() const {
+    return atualizacaoCapacidadesEmAndamento.load();
 }
 
 SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
@@ -136,18 +204,23 @@ SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
 }
 
 bool JanelaConfiguracao::submenuDisponivel(SubmenuConfig submenu) const {
+    if (!capacidadesForamCarregadas()) {
+        return true;
+    }
+
+    station_capabilities capacidades = obterSnapshotCapacidades();
     switch (submenu) {
         case SubmenuConfig::REDE:
-            return capacidadesSistema.network;
+            return capacidades.network;
         case SubmenuConfig::AUDIO_VIDEO:
-            return capacidadesSistema.audio_list ||
-                   capacidadesSistema.volume_control ||
-                   capacidadesSistema.display_info ||
-                   capacidadesSistema.display_resolution ||
-                   capacidadesSistema.display_scale ||
-                   capacidadesSistema.brightness;
+            return capacidades.audio_list ||
+                   capacidades.volume_control ||
+                   capacidades.display_info ||
+                   capacidades.display_resolution ||
+                   capacidades.display_scale ||
+                   capacidades.brightness;
         case SubmenuConfig::BLUETOOTH:
-            return capacidadesSistema.bluetooth;
+            return capacidades.bluetooth;
         case SubmenuConfig::SISTEMA:
             return true;
         case SubmenuConfig::NENHUM:
@@ -202,8 +275,6 @@ void JanelaConfiguracao::ajustarFocoMenuParaDisponivel(int direcao) {
 void JanelaConfiguracao::abrir() {
     if (aberta) return;
 
-    atualizarCapacidadesSistema();
-
     if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2")) {
         std::cerr << "[AVISO] Qualidade '2' não suportada, tentando '1'..." << std::endl;
         if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1")) {
@@ -231,6 +302,9 @@ void JanelaConfiguracao::abrir() {
             // Força renderização inicial
             desenhar();
             SDL_RenderPresent(renderer);
+            if (!capacidadesForamCarregadas()) {
+                iniciarAtualizacaoCapacidadesSegundoPlano(false);
+            }
         }
     }
 }
@@ -325,6 +399,7 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
 
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
         mensagemMenu = mensagemSubmenuIndisponivel(submenuSelecionado);
         mensagemMenuErro = true;
         return;
@@ -343,8 +418,11 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
     }
 
     submenuAtivo = submenuSelecionado;
-    mensagemMenu.clear();
-    mensagemMenuErro = false;
+    {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        mensagemMenu.clear();
+        mensagemMenuErro = false;
+    }
     
     // Limpa cache ao mudar de submenu
     limparCacheTexto();
@@ -518,17 +596,12 @@ std::string JanelaConfiguracao::obterHoraAtual() {
  * 
  * @details Usa as funções SDL para obter informações de energia.
  * 
- * @return Percentual da bateria (0-100), ou 100 se não for possível determinar.
+ * @return Percentual da bateria (0-100), ou BATERIA_INDISPONIVEL se não houver bateria.
  */
 int JanelaConfiguracao::obterNivelBateria() {
-    int percentual = -1;
-    SDL_GetPowerInfo(nullptr, &percentual);
-    
-    if (percentual == -1) {
-        return 100;
-    }
-    
-    return percentual;
+    SystemStatus& status = SystemStatus::getInstance();
+    status.update();
+    return status.getCachedData().batteryLevel;
 }
 
 /**
@@ -563,9 +636,14 @@ void JanelaConfiguracao::desenharBarraStatus() {
     std::string hora = obterHoraAtual();
     int bateria = obterNivelBateria();
     
-    std::stringstream ssBateria;
-    ssBateria << bateria << "%";
-    std::string textoBateria = ssBateria.str();
+    std::string textoBateria;
+    if (bateria == BATERIA_INDISPONIVEL) {
+        textoBateria = "AC/Desktop";
+    } else {
+        std::stringstream ssBateria;
+        ssBateria << bateria << "%";
+        textoBateria = ssBateria.str();
+    }
     
     int posX = ConfigLayout::X(762);
     int posY = ConfigLayout::Y(25);
@@ -574,7 +652,10 @@ void JanelaConfiguracao::desenharBarraStatus() {
     desenharTexto(renderer, hora, posX - ConfigLayout::X(100), posY, 
                   tema.getCorTextoNegrito(), ConfigLayout::F(24));
     
-    if (texturaBateria) {
+    if (bateria == BATERIA_INDISPONIVEL) {
+        desenharTexto(renderer, textoBateria, posX + ConfigLayout::X(20), posY,
+                      tema.getCorTextoNegrito(), ConfigLayout::F(24));
+    } else if (texturaBateria) {
         int larguraIcone = ConfigLayout::X(100);
         int alturaIcone = ConfigLayout::Y(50);
         
@@ -663,10 +744,24 @@ void JanelaConfiguracao::desenharMenuPrincipal() {
         }
     }
 
-    if (!mensagemMenu.empty()) {
-        SDL_Color cor = mensagemMenuErro ? SDL_Color{255, 120, 120, 255}
-                                         : SDL_Color{120, 255, 120, 255};
-        desenharTexto(renderer, mensagemMenu,
+    if (verificandoCapacidades()) {
+        desenharTexto(renderer, "Verificando capacidades em segundo plano...",
+                      ConfigLayout::X(217), ConfigLayout::Y(840),
+                      SDL_Color{190, 190, 190, 255}, ConfigLayout::F(20));
+    }
+
+    std::string mensagemLocal;
+    bool mensagemErroLocal = false;
+    {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        mensagemLocal = mensagemMenu;
+        mensagemErroLocal = mensagemMenuErro;
+    }
+
+    if (!mensagemLocal.empty()) {
+        SDL_Color cor = mensagemErroLocal ? SDL_Color{255, 120, 120, 255}
+                                          : SDL_Color{120, 255, 120, 255};
+        desenharTexto(renderer, mensagemLocal,
                       ConfigLayout::X(217), ConfigLayout::Y(865),
                       cor, ConfigLayout::F(22));
     }
@@ -693,7 +788,7 @@ void JanelaConfiguracao::desenharSubmenuRede() {
     desenharBarraStatus();
     
     if (!janelaRede) {
-        janelaRede = std::make_unique<JanelaRede>(capacidadesSistema);
+        janelaRede = std::make_unique<JanelaRede>(obterSnapshotCapacidades());
     }
 
     janelaRede->desenhar(renderer);
@@ -722,7 +817,7 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     desenharBarraStatus();
     
     if (!janelaAudioVideo) {
-        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(capacidadesSistema);
+        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(obterSnapshotCapacidades());
     }
     
     janelaAudioVideo->desenhar(renderer);
@@ -751,7 +846,7 @@ void JanelaConfiguracao::desenharSubmenuBluetooth() {
     desenharBarraStatus();
     
     if (!janelaBluetooth) {
-        janelaBluetooth = std::make_unique<JanelaBluetooth>(capacidadesSistema);
+        janelaBluetooth = std::make_unique<JanelaBluetooth>(obterSnapshotCapacidades());
     }
     
     janelaBluetooth->desenhar(renderer);
@@ -797,6 +892,17 @@ void JanelaConfiguracao::desenharSubmenuSistemaInfos() {
  */
 void JanelaConfiguracao::desenhar() {
     if (!aberta || !renderer) return;
+
+    bool deveRecriarBotoes = false;
+    if (submenuAtivo == SubmenuConfig::NENHUM) {
+        std::lock_guard<std::mutex> lock(mutexCapacidades);
+        deveRecriarBotoes = recriarBotoesAposCapacidades;
+        recriarBotoesAposCapacidades = false;
+    }
+    if (deveRecriarBotoes) {
+        inicializarBotoes();
+        limparCacheTexto();
+    }
 
     auto& tema = GerenciadorTemas::getInstance();
 

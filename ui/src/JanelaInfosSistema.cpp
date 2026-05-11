@@ -130,14 +130,14 @@ void JanelaInfosSistema::coletarInfosHardware() {
  * macros predefinidas do preprocessador C++
  */
 void JanelaInfosSistema::inicializarInfosProjeto() {
-    projeto.nome = "Game Library Interface";
-    projeto.versao = "1.0.0";
+    projeto.nome = "DACC Station";
+    projeto.versao = "PJ053-2025";
     
     std::stringstream ss;
     ss << __DATE__ << " " << __TIME__;
     projeto.dataCompilacao = ss.str();
     
-    projeto.descricao = "Interface moderna para gerenciamento de biblioteca de jogos";
+    projeto.descricao = "Console academico para preservar, executar e configurar jogos do DACC";
 }
 
 /**
@@ -154,24 +154,30 @@ void JanelaInfosSistema::inicializarInfosProjeto() {
  * @note Este método limpa o vetor antes de adicionar novos colaboradores,
  * permitindo reinicialização segura
  * 
- * @warning A implementação atual contém colaboradores duplicados
- * (aparentemente para fins de teste de scroll)
  */
 void JanelaInfosSistema::inicializarColaboradores() {
     colaboradores.clear();
     
-    colaboradores.push_back(Colaborador("Desenvolvedor Principal", "Arquitetura e Desenvolvimento"));
-    colaboradores.push_back(Colaborador("Designer UI/UX", "Interface e Experiência"));
-    colaboradores.push_back(Colaborador("Testador QA", "Testes e Qualidade"));
-    colaboradores.push_back(Colaborador("Documentação", "Documentação Técnica"));
-    colaboradores.push_back(Colaborador("Desenvolvedor Principal", "Arquitetura e Desenvolvimento"));
-    colaboradores.push_back(Colaborador("Designer UI/UX", "Interface e Experiência"));
-    colaboradores.push_back(Colaborador("Testador QA", "Testes e Qualidade"));
-    colaboradores.push_back(Colaborador("Documentação", "Documentação Técnica"));
-    colaboradores.push_back(Colaborador("Desenvolvedor Principal", "Arquitetura e Desenvolvimento"));
-    colaboradores.push_back(Colaborador("Designer UI/UX", "Interface e Experiência"));
-    colaboradores.push_back(Colaborador("Testador QA", "Testes e Qualidade"));
-    colaboradores.push_back(Colaborador("Documentação", "Documentação Técnica"));
+    colaboradores.push_back(Colaborador(
+        "Feliph de Matos Macêdo Lima",
+        "Executor de jogos, monitoramento de processos e telemetria"
+    ));
+    colaboradores.push_back(Colaborador(
+        "João Eduardo Coelho Neves",
+        "Interface gráfica, experiência do usuário e integração com o executor"
+    ));
+    colaboradores.push_back(Colaborador(
+        "João Henrique Vieira do Carmo",
+        "Sistema de arquivos, benchmarks e compatibilidade dos jogos"
+    ));
+    colaboradores.push_back(Colaborador(
+        "Vinícius dos Santos Tacaná",
+        "Configurações do sistema, periféricos e documentação técnica"
+    ));
+    colaboradores.push_back(Colaborador(
+        "Valmir Batista Prestes de Souza",
+        "Orientação do projeto"
+    ));
 }
 
 /**
@@ -722,7 +728,7 @@ int JanelaInfosSistema::desenharSecaoProjeto(SDL_Renderer* renderer, int posY) {
 int JanelaInfosSistema::desenharSecaoColaboradores(SDL_Renderer* renderer, int posY) {
     auto& tema = GerenciadorTemas::getInstance();
     int baseX = ConfigLayout::X(250);
-    int espacamentoLinha = ConfigLayout::Y(40);
+    int espacamentoColaborador = ConfigLayout::Y(72);
     
     desenharTexto(renderer, "COLABORADORES", 
                   baseX, posY, 
@@ -732,15 +738,22 @@ int JanelaInfosSistema::desenharSecaoColaboradores(SDL_Renderer* renderer, int p
     posY += ConfigLayout::Y(60);
     
     for (const auto& colaborador : colaboradores) {
-        std::stringstream ss;
-        ss << "• " << colaborador.nome << " - " << colaborador.funcao;
+        std::stringstream ssNome;
+        ssNome << "• " << colaborador.nome;
         
-        desenharTexto(renderer, ss.str(), 
-                      baseX + ConfigLayout::X(30), posY, 
-                      tema.getCorTextoNormal(), 
+        desenharTexto(renderer, ssNome.str(),
+                      baseX + ConfigLayout::X(30), posY,
+                      tema.getCorTextoNegrito(),
                       ConfigLayout::F(24),
+                      TipoFonte::NEGRITO);
+        posY += ConfigLayout::Y(32);
+
+        desenharTexto(renderer, colaborador.funcao,
+                      baseX + ConfigLayout::X(65), posY,
+                      tema.getCorTextoNormal(),
+                      ConfigLayout::F(21),
                       TipoFonte::NORMAL);
-        posY += espacamentoLinha;
+        posY += espacamentoColaborador - ConfigLayout::Y(32);
     }
     
     return posY + ConfigLayout::Y(20);

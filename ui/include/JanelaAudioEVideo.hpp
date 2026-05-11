@@ -117,6 +117,10 @@ private:
     int volumeGeral = 80;                   /**< Volume geral (0-100). */
     const int MAX_VOLUME = 100;             /**< Volume máximo. */
     const int NUM_BARRAS_VOLUME = 20;       /**< Número de barras para representar o volume. */
+
+    int brilhoGeral = 100;                  /**< Brilho geral (0-100). */
+    const int MAX_BRILHO = 100;             /**< Brilho máximo. */
+    const int NUM_BARRAS_BRILHO = 20;       /**< Número de barras para representar o brilho. */
     
     std::vector<DispositivoAudio> dispositivos; /**< Lista de dispositivos de áudio disponíveis. */
     int indiceDispositivoAtual = 0;         /**< Índice do dispositivo atualmente selecionado. */
@@ -145,11 +149,14 @@ private:
     
     std::unique_ptr<Botao> btnEscalaDecremento;  /**< Botão para diminuir escala. */
     std::unique_ptr<Botao> btnEscalaIncremento;  /**< Botão para aumentar escala. */
+
+    std::unique_ptr<Botao> btnBrilhoDecremento;  /**< Botão para diminuir brilho. */
+    std::unique_ptr<Botao> btnBrilhoIncremento;  /**< Botão para aumentar brilho. */
     std::unique_ptr<Botao> btnAplicar;
     // CONTROLE DE NAVEGAÇÃO
     
     int indiceFocado = -1;                  /**< Índice do elemento atualmente focado. */
-    const int NUM_ELEMENTOS_FOCAVEIS = 9;   /**< Total de elementos navegáveis (4 grupos x 2 botões). */
+    const int NUM_ELEMENTOS_FOCAVEIS = 11;  /**< Total de elementos navegáveis. */
     
     // Controle de Input de Periféricos
     Uint32 ultimoInputAnalogico = 0;        /**< Timestamp do último input analógico. */
@@ -160,9 +167,11 @@ private:
     
     SDL_Rect areaBarraVolume;               /**< Área clicável da barra de volume. */
     SDL_Rect areaBarraEscala;               /**< Área clicável da barra de escala. */
+    SDL_Rect areaBarraBrilho;               /**< Área clicável da barra de brilho. */
     
     bool arrastandoVolume = false;          /**< Flag para controle de arrasto do volume. */
     bool arrastandoEscala = false;          /**< Flag para controle de arrasto da escala. */
+    bool arrastandoBrilho = false;          /**< Flag para controle de arrasto do brilho. */
     station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
     
     // IMAGEM EXPLICATIVA
@@ -218,6 +227,12 @@ private:
     void desenharControleEscala(SDL_Renderer* renderer);
 
     /**
+     * @brief Renderiza o controle de brilho com barra progressiva.
+     * @param renderer Renderizador SDL.
+     */
+    void desenharControleBrilho(SDL_Renderer* renderer);
+
+    /**
      * @brief Renderiza a imagem explicativa no rodapé da tela.
      * 
      * A imagem é exibida com altura fixa de 30px ocupando toda a largura
@@ -262,6 +277,22 @@ private:
      * @param novoVolume Novo valor de volume (0-100).
      */
     void setVolume(int novoVolume);
+
+    /**
+     * @brief Incrementa o brilho.
+     */
+    void aumentarBrilho();
+
+    /**
+     * @brief Decrementa o brilho.
+     */
+    void diminuirBrilho();
+
+    /**
+     * @brief Define o brilho diretamente (usado para clique/arrasto).
+     * @param novoBrilho Novo valor de brilho (0-100).
+     */
+    void setBrilho(int novoBrilho);
 
     /**
      * @brief Seleciona o dispositivo anterior na lista.
@@ -341,6 +372,14 @@ private:
     bool processarCliqueBarraEscala(int mouseX, int mouseY);
 
     /**
+     * @brief Processa clique na barra de brilho.
+     * @param mouseX Coordenada X do mouse.
+     * @param mouseY Coordenada Y do mouse.
+     * @return true se o clique foi na barra.
+     */
+    bool processarCliqueBarraBrilho(int mouseX, int mouseY);
+
+    /**
      * @brief Calcula o volume baseado na posição X do mouse na barra.
      * @param mouseX Coordenada X do mouse.
      * @return Valor de volume calculado (0-100).
@@ -353,6 +392,13 @@ private:
      * @return Valor de escala calculado (0.5-2.0).
      */
     float calcularEscalaAPartirDoPonto(int mouseX);
+
+    /**
+     * @brief Calcula o brilho baseado na posição X do mouse na barra.
+     * @param mouseX Coordenada X do mouse.
+     * @return Valor de brilho calculado (0-100).
+     */
+    int calcularBrilhoAPartirDoPonto(int mouseX);
 
     void aplicarAlteracoes();
 
