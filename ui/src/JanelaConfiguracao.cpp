@@ -126,6 +126,16 @@ void JanelaConfiguracao::atualizarCapacidadesSistema() {
     capacidadesSistema = ::obter_capacidades_sistema();
 }
 
+void JanelaConfiguracao::atualizarCapacidadesERecriarSubmenus() {
+    atualizarCapacidadesSistema();
+    janelaRede.reset();
+    janelaAudioVideo.reset();
+    janelaBluetooth.reset();
+    mensagemMenu = "Capacidades do sistema atualizadas.";
+    mensagemMenuErro = false;
+    ajustarFocoMenuParaDisponivel();
+}
+
 SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
     switch (indice) {
         case 0: return SubmenuConfig::REDE;
@@ -145,8 +155,7 @@ bool JanelaConfiguracao::submenuDisponivel(SubmenuConfig submenu) const {
                    capacidadesSistema.volume_control ||
                    capacidadesSistema.display_info ||
                    capacidadesSistema.display_resolution ||
-                   capacidadesSistema.display_scale ||
-                   capacidadesSistema.brightness;
+                   capacidadesSistema.display_scale;
         case SubmenuConfig::BLUETOOTH:
             return capacidadesSistema.bluetooth;
         case SubmenuConfig::SISTEMA:
@@ -323,6 +332,7 @@ Uint32 JanelaConfiguracao::getIDJanela() const {
  */
 void JanelaConfiguracao::executarAcaoMenu(int indice) {
     std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; 
+    atualizarCapacidadesSistema();
 
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
@@ -381,6 +391,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
         if (btnVoltar->tratarEvento(evento, 0, 0) && evento.type == SDL_MOUSEBUTTONUP) {
             gerAudio.tocarSom("navegacao.wav");
             submenuAtivo = SubmenuConfig::NENHUM;
+            atualizarCapacidadesERecriarSubmenus();
             limparCacheTexto(); // Limpa ao voltar
             return true;
         }
@@ -479,6 +490,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
                 executarAcaoMenu(indiceFocado);
             } else if (submenuAtivo != SubmenuConfig::NENHUM) {
                 submenuAtivo = SubmenuConfig::NENHUM; 
+                atualizarCapacidadesERecriarSubmenus();
                 limparCacheTexto();
             }
             return true;
@@ -486,6 +498,7 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
         else if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
             if (submenuAtivo != SubmenuConfig::NENHUM) {
                 submenuAtivo = SubmenuConfig::NENHUM; 
+                atualizarCapacidadesERecriarSubmenus();
                 limparCacheTexto();
             } else {
                 gerAudio.tocarSom("fechar.wav");

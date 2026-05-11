@@ -26,6 +26,24 @@ using namespace MeuProjeto;
 extern GerenciadorAudio gerAudio;
 extern GerenciadorImagens gerImg;
 
+namespace {
+
+void configurarBotaoPorSuporte(std::unique_ptr<Botao>& botao, bool suportado) {
+    if (!botao || suportado) {
+        return;
+    }
+
+    botao->setCor({80, 80, 80, 150}, {80, 80, 80, 150}, {80, 80, 80, 150});
+    botao->setCorTexto({180, 180, 180, 255});
+    botao->setFocado(false);
+}
+
+SDL_Color corTextoSecundario(bool suportado, const SDL_Color& corPadrao) {
+    return suportado ? corPadrao : SDL_Color{170, 170, 170, 255};
+}
+
+} // namespace
+
 /**
  * @brief Retorna a resolução formatada como string.
  */
@@ -89,7 +107,7 @@ JanelaAudioEVideo::~JanelaAudioEVideo() {
  * @brief Inicializa a lista de dispositivos de áudio com dados de exemplo.
  */
 void JanelaAudioEVideo::inicializarDispositivos() {
-dispositivos.clear();
+    dispositivos.clear();
 
     if (!capacidadesSistema.audio_list) {
         dispositivos.push_back(DispositivoAudio("Audio indisponivel", -1));
@@ -270,6 +288,15 @@ void JanelaAudioEVideo::inicializarBotoes() {
     );
     btnAplicar->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
     btnAplicar->setRetanguloBordasArredondadas(15);
+
+    configurarBotaoPorSuporte(btnVolumeDecremento, capacidadesSistema.volume_control);
+    configurarBotaoPorSuporte(btnVolumeIncremento, capacidadesSistema.volume_control);
+    configurarBotaoPorSuporte(btnDispositivoAnterior, capacidadesSistema.audio_select);
+    configurarBotaoPorSuporte(btnDispositivoProximo, capacidadesSistema.audio_select);
+    configurarBotaoPorSuporte(btnResolucaoAnterior, capacidadesSistema.display_resolution);
+    configurarBotaoPorSuporte(btnResolucaoProxima, capacidadesSistema.display_resolution);
+    configurarBotaoPorSuporte(btnEscalaDecremento, capacidadesSistema.display_scale);
+    configurarBotaoPorSuporte(btnEscalaIncremento, capacidadesSistema.display_scale);
     // ---------------------------
 }
 
@@ -338,13 +365,13 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 0 e 1)
-    if (indiceFocado == 0 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.volume_control && indiceFocado == 0 && SDL_NumJoysticks() > 0) {
         btnVolumeDecremento->setFocado(true);
     } else {
         btnVolumeDecremento->setFocado(false);
     }
     
-    if (indiceFocado == 1 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.volume_control && indiceFocado == 1 && SDL_NumJoysticks() > 0) {
         btnVolumeIncremento->setFocado(true);
     } else {
         btnVolumeIncremento->setFocado(false);
@@ -366,8 +393,8 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     areaBarraVolume = {barraX, barraY, barraLargura, barraAltura};
     
     // Desenha a barra de volume
-    SDL_Color corPreenchida = tema.getCorDestaque();
-    SDL_Color corVazia = tema.getCorBotaoNormal();
+    SDL_Color corPreenchida = capacidadesSistema.volume_control ? tema.getCorDestaque() : SDL_Color{120, 120, 120, 160};
+    SDL_Color corVazia = capacidadesSistema.volume_control ? tema.getCorBotaoNormal() : SDL_Color{70, 70, 70, 130};
     
     desenharBarraProgresso(renderer, barraX, barraY, barraLargura, barraAltura,
                           NUM_BARRAS_VOLUME, barrasPreenchidas, 
@@ -378,8 +405,14 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     ss << volumeGeral << "%";
     desenharTexto(renderer, ss.str(), 
                   ConfigLayout::X(1350), ConfigLayout::Y(335), 
-                  tema.getCorTextoNegrito(), 
+                  corTextoSecundario(capacidadesSistema.volume_control, tema.getCorTextoNegrito()),
                   ConfigLayout::F(28));
+
+    if (!capacidadesSistema.volume_control) {
+        desenharTexto(renderer, "Controle indisponivel",
+                      ConfigLayout::X(340), ConfigLayout::Y(385),
+                      SDL_Color{170, 170, 170, 255}, ConfigLayout::F(20));
+    }
 }
 
 /**
@@ -395,13 +428,13 @@ void JanelaAudioEVideo::desenharSeletorDispositivo(SDL_Renderer* renderer) {
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 2 e 3)
-    if (indiceFocado == 2 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.audio_select && indiceFocado == 2 && SDL_NumJoysticks() > 0) {
         btnDispositivoAnterior->setFocado(true);
     } else {
         btnDispositivoAnterior->setFocado(false);
     }
     
-    if (indiceFocado == 3 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.audio_select && indiceFocado == 3 && SDL_NumJoysticks() > 0) {
         btnDispositivoProximo->setFocado(true);
     } else {
         btnDispositivoProximo->setFocado(false);
@@ -415,7 +448,7 @@ void JanelaAudioEVideo::desenharSeletorDispositivo(SDL_Renderer* renderer) {
     std::string dispositivo = dispositivos[indiceDispositivoAtual].nome;
     desenharTexto(renderer, dispositivo, 
                   ConfigLayout::X(340), ConfigLayout::Y(495), 
-                  tema.getCorTextoNormal(), 
+                  corTextoSecundario(capacidadesSistema.audio_select, tema.getCorTextoNormal()),
                   ConfigLayout::F(28));
 }
 
@@ -432,13 +465,13 @@ void JanelaAudioEVideo::desenharSeletorResolucao(SDL_Renderer* renderer) {
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 4 e 5)
-    if (indiceFocado == 4 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.display_resolution && indiceFocado == 4 && SDL_NumJoysticks() > 0) {
         btnResolucaoAnterior->setFocado(true);
     } else {
         btnResolucaoAnterior->setFocado(false);
     }
     
-    if (indiceFocado == 5 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.display_resolution && indiceFocado == 5 && SDL_NumJoysticks() > 0) {
         btnResolucaoProxima->setFocado(true);
     } else {
         btnResolucaoProxima->setFocado(false);
@@ -449,10 +482,12 @@ void JanelaAudioEVideo::desenharSeletorResolucao(SDL_Renderer* renderer) {
     btnResolucaoProxima->desenhar(renderer);
     
     // Texto da resolução atual
-    std::string resolucao = resolucoes[indiceResolucaoAtual].toString();
+    std::string resolucao = capacidadesSistema.display_resolution
+        ? resolucoes[indiceResolucaoAtual].toString()
+        : "Resolucao indisponivel";
     desenharTexto(renderer, resolucao, 
                   ConfigLayout::X(340), ConfigLayout::Y(655), 
-                  tema.getCorTextoNormal(), 
+                  corTextoSecundario(capacidadesSistema.display_resolution, tema.getCorTextoNormal()),
                   ConfigLayout::F(28));
 }
 
@@ -469,13 +504,13 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 6 e 7)
-    if (indiceFocado == 6 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.display_scale && indiceFocado == 6 && SDL_NumJoysticks() > 0) {
         btnEscalaDecremento->setFocado(true);
     } else {
         btnEscalaDecremento->setFocado(false);
     }
     
-    if (indiceFocado == 7 && SDL_NumJoysticks() > 0) {
+    if (capacidadesSistema.display_scale && indiceFocado == 7 && SDL_NumJoysticks() > 0) {
         btnEscalaIncremento->setFocado(true);
     } else {
         btnEscalaIncremento->setFocado(false);
@@ -499,8 +534,8 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     areaBarraEscala = {barraX, barraY, barraLargura, barraAltura};
     
     // Desenha a barra de escala
-    SDL_Color corPreenchida = tema.getCorDestaque();
-    SDL_Color corVazia = tema.getCorBotaoNormal();
+    SDL_Color corPreenchida = capacidadesSistema.display_scale ? tema.getCorDestaque() : SDL_Color{120, 120, 120, 160};
+    SDL_Color corVazia = capacidadesSistema.display_scale ? tema.getCorBotaoNormal() : SDL_Color{70, 70, 70, 130};
     
     desenharBarraProgresso(renderer, barraX, barraY, barraLargura, barraAltura,
                           NUM_BARRAS_ESCALA, barrasPreenchidas, 
@@ -511,8 +546,14 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     ss << std::fixed << std::setprecision(1) << escalaJanela << "x";
     desenharTexto(renderer, ss.str(), 
                   ConfigLayout::X(1350), ConfigLayout::Y(815), 
-                  tema.getCorTextoNegrito(), 
+                  corTextoSecundario(capacidadesSistema.display_scale, tema.getCorTextoNegrito()),
                   ConfigLayout::F(28));
+
+    if (!capacidadesSistema.display_scale) {
+        desenharTexto(renderer, "Escala indisponivel nesta sessao",
+                      ConfigLayout::X(340), ConfigLayout::Y(865),
+                      SDL_Color{170, 170, 170, 255}, ConfigLayout::F(20));
+    }
 }
 
 /**
@@ -869,6 +910,9 @@ float JanelaAudioEVideo::calcularEscalaAPartirDoPonto(int mouseX) {
  * @brief Processa clique na barra de volume.
  */
 bool JanelaAudioEVideo::processarCliqueBarraVolume(int mouseX, int mouseY) {
+    if (!capacidadesSistema.volume_control) {
+        return false;
+    }
     if (mouseX >= areaBarraVolume.x && mouseX <= areaBarraVolume.x + areaBarraVolume.w &&
         mouseY >= areaBarraVolume.y && mouseY <= areaBarraVolume.y + areaBarraVolume.h) {
         int novoVolume = calcularVolumeAPartirDoPonto(mouseX);
@@ -883,6 +927,9 @@ bool JanelaAudioEVideo::processarCliqueBarraVolume(int mouseX, int mouseY) {
  * @brief Processa clique na barra de escala.
  */
 bool JanelaAudioEVideo::processarCliqueBarraEscala(int mouseX, int mouseY) {
+    if (!capacidadesSistema.display_scale) {
+        return false;
+    }
     if (mouseX >= areaBarraEscala.x && mouseX <= areaBarraEscala.x + areaBarraEscala.w &&
         mouseY >= areaBarraEscala.y && mouseY <= areaBarraEscala.y + areaBarraEscala.h) {
         float novaEscala = calcularEscalaAPartirDoPonto(mouseX);
@@ -915,38 +962,38 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
             }
             
             // Verifica clique nos botões
-            if (btnVolumeDecremento && btnVolumeDecremento->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.volume_control && btnVolumeDecremento && btnVolumeDecremento->contemPonto(mouseX, mouseY)) {
                 diminuirVolume();
                 return true;
             }
-            if (btnVolumeIncremento && btnVolumeIncremento->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.volume_control && btnVolumeIncremento && btnVolumeIncremento->contemPonto(mouseX, mouseY)) {
                 aumentarVolume();
                 return true;
             }
             
-            if (btnDispositivoAnterior && btnDispositivoAnterior->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.audio_select && btnDispositivoAnterior && btnDispositivoAnterior->contemPonto(mouseX, mouseY)) {
                 dispositivoAnterior();
                 return true;
             }
-            if (btnDispositivoProximo && btnDispositivoProximo->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.audio_select && btnDispositivoProximo && btnDispositivoProximo->contemPonto(mouseX, mouseY)) {
                 dispositivoProximo();
                 return true;
             }
             
-            if (btnResolucaoAnterior && btnResolucaoAnterior->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.display_resolution && btnResolucaoAnterior && btnResolucaoAnterior->contemPonto(mouseX, mouseY)) {
                 resolucaoAnterior();
                 return true;
             }
-            if (btnResolucaoProxima && btnResolucaoProxima->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.display_resolution && btnResolucaoProxima && btnResolucaoProxima->contemPonto(mouseX, mouseY)) {
                 resolucaoProxima();
                 return true;
             }
             
-            if (btnEscalaDecremento && btnEscalaDecremento->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.display_scale && btnEscalaDecremento && btnEscalaDecremento->contemPonto(mouseX, mouseY)) {
                 diminuirEscala();
                 return true;
             }
-            if (btnEscalaIncremento && btnEscalaIncremento->contemPonto(mouseX, mouseY)) {
+            if (capacidadesSistema.display_scale && btnEscalaIncremento && btnEscalaIncremento->contemPonto(mouseX, mouseY)) {
                 aumentarEscala();
                 return true;
             }

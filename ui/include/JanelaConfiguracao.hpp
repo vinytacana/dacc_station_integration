@@ -147,6 +147,11 @@ private:
     void atualizarCapacidadesSistema();
 
     /**
+     * @brief Atualiza capacidades e descarta submenus para recriá-los com o novo snapshot.
+     */
+    void atualizarCapacidadesERecriarSubmenus();
+
+    /**
      * @brief Verifica se um submenu pode ser aberto no ambiente atual.
      */
     bool submenuDisponivel(SubmenuConfig submenu) const;
