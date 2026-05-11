@@ -131,13 +131,6 @@ void JanelaConfiguracao::atualizarCapacidadesSistema() {
     recriarBotoesAposCapacidades = true;
 }
 
-void JanelaConfiguracao::atualizarCapacidadesERecriarSubmenus() {
-    janelaRede.reset();
-    janelaAudioVideo.reset();
-    janelaBluetooth.reset();
-    iniciarAtualizacaoCapacidadesSegundoPlano(false);
-}
-
 void JanelaConfiguracao::iniciarAtualizacaoCapacidadesSegundoPlano(bool descartarSubmenus) {
     if (descartarSubmenus) {
         janelaRede.reset();
@@ -146,6 +139,11 @@ void JanelaConfiguracao::iniciarAtualizacaoCapacidadesSegundoPlano(bool descarta
     }
 
     if (atualizacaoCapacidadesEmAndamento.exchange(true)) {
+        return;
+    }
+
+    if (capacidadesForamCarregadas()) {
+        atualizacaoCapacidadesEmAndamento = false;
         return;
     }
 
@@ -191,6 +189,10 @@ bool JanelaConfiguracao::capacidadesForamCarregadas() const {
     return capacidadesCarregadas;
 }
 
+bool JanelaConfiguracao::verificandoCapacidades() const {
+    return atualizacaoCapacidadesEmAndamento.load();
+}
+
 SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
     switch (indice) {
         case 0: return SubmenuConfig::REDE;
@@ -203,7 +205,7 @@ SubmenuConfig JanelaConfiguracao::submenuPorIndice(int indice) const {
 
 bool JanelaConfiguracao::submenuDisponivel(SubmenuConfig submenu) const {
     if (!capacidadesForamCarregadas()) {
-        return submenu == SubmenuConfig::SISTEMA;
+        return true;
     }
 
     station_capabilities capacidades = obterSnapshotCapacidades();
@@ -299,7 +301,9 @@ void JanelaConfiguracao::abrir() {
             // Força renderização inicial
             desenhar();
             SDL_RenderPresent(renderer);
-            iniciarAtualizacaoCapacidadesSegundoPlano(false);
+            if (!capacidadesForamCarregadas()) {
+                iniciarAtualizacaoCapacidadesSegundoPlano(false);
+            }
         }
     }
 }
@@ -395,9 +399,7 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
         std::lock_guard<std::mutex> lock(mutexCapacidades);
-        mensagemMenu = capacidadesCarregadas
-            ? mensagemSubmenuIndisponivel(submenuSelecionado)
-            : "Aguarde a verificacao de capacidades do sistema.";
+        mensagemMenu = mensagemSubmenuIndisponivel(submenuSelecionado);
         mensagemMenuErro = true;
         return;
     }
@@ -455,7 +457,6 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
         if (btnVoltar->tratarEvento(evento, 0, 0) && evento.type == SDL_MOUSEBUTTONUP) {
             gerAudio.tocarSom("navegacao.wav");
             submenuAtivo = SubmenuConfig::NENHUM;
-            atualizarCapacidadesERecriarSubmenus();
             limparCacheTexto(); // Limpa ao voltar
             return true;
         }
@@ -554,7 +555,6 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
                 executarAcaoMenu(indiceFocado);
             } else if (submenuAtivo != SubmenuConfig::NENHUM) {
                 submenuAtivo = SubmenuConfig::NENHUM; 
-                atualizarCapacidadesERecriarSubmenus();
                 limparCacheTexto();
             }
             return true;
@@ -562,7 +562,6 @@ bool JanelaConfiguracao::processarEvento(SDL_Event& evento) {
         else if (evento.cbutton.button == SDL_CONTROLLER_BUTTON_B) {
             if (submenuAtivo != SubmenuConfig::NENHUM) {
                 submenuAtivo = SubmenuConfig::NENHUM; 
-                atualizarCapacidadesERecriarSubmenus();
                 limparCacheTexto();
             } else {
                 gerAudio.tocarSom("fechar.wav");
@@ -738,10 +737,16 @@ void JanelaConfiguracao::desenharMenuPrincipal() {
         botoesMenu[i]->desenhar(renderer);
 
         if (!disponivel) {
-            desenharTexto(renderer, capacidadesForamCarregadas() ? "Indisponivel" : "Verificando...",
+            desenharTexto(renderer, "Indisponivel",
                           ConfigLayout::X(1125), botoesMenu[i]->area.y + ConfigLayout::Y(45),
                           SDL_Color{190, 190, 190, 255}, ConfigLayout::F(22));
         }
+    }
+
+    if (verificandoCapacidades()) {
+        desenharTexto(renderer, "Verificando capacidades em segundo plano...",
+                      ConfigLayout::X(217), ConfigLayout::Y(840),
+                      SDL_Color{190, 190, 190, 255}, ConfigLayout::F(20));
     }
 
     std::string mensagemLocal;

@@ -175,9 +175,9 @@ private:
     bool capacidadesForamCarregadas() const;
 
     /**
-     * @brief Atualiza capacidades e descarta submenus para recriá-los com o novo snapshot.
+     * @brief Indica se o menu ainda está verificando capacidades em segundo plano.
      */
-    void atualizarCapacidadesERecriarSubmenus();
+    bool verificandoCapacidades() const;
 
     /**
      * @brief Verifica se um submenu pode ser aberto no ambiente atual.
