@@ -522,16 +522,9 @@ std::string JanelaConfiguracao::obterHoraAtual() {
  * @return Percentual da bateria (0-100), ou BATERIA_INDISPONIVEL se não houver bateria.
  */
 int JanelaConfiguracao::obterNivelBateria() {
-    int percentual = ::obter_bateria();
-    if (percentual == BATERIA_INDISPONIVEL) {
-        SDL_GetPowerInfo(nullptr, &percentual);
-    }
-    
-    if (percentual < 0 || percentual > 100) {
-        return BATERIA_INDISPONIVEL;
-    }
-    
-    return percentual;
+    SystemStatus& status = SystemStatus::getInstance();
+    status.update();
+    return status.getCachedData().batteryLevel;
 }
 
 /**
