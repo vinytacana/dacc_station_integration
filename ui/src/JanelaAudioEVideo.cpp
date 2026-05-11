@@ -28,6 +28,35 @@ extern GerenciadorImagens gerImg;
 
 namespace {
 
+constexpr int LAYOUT_LARGURA_TELA = 1525;
+constexpr int LAYOUT_CONTROLE_X = 250;
+constexpr int LAYOUT_BARRA_X = 330;
+constexpr int LAYOUT_BARRA_LARGURA = 910;
+constexpr int LAYOUT_BOTAO_LARGURA = 60;
+constexpr int LAYOUT_BOTAO_ALTURA = 50;
+constexpr int LAYOUT_BOTAO_GAP = 20;
+constexpr int LAYOUT_VALOR_X = 1350;
+constexpr int LAYOUT_LABEL_Y_INICIAL = 250;
+constexpr int LAYOUT_GRUPO_GAP = 135;
+constexpr int LAYOUT_LABEL_CONTROLE_GAP = 45;
+constexpr int LAYOUT_APLICAR_X = 1200;
+constexpr int LAYOUT_APLICAR_Y = 970;
+constexpr int LAYOUT_APLICAR_LARGURA = 200;
+constexpr int LAYOUT_RODAPE_Y = 1050;
+constexpr int LAYOUT_RODAPE_ALTURA = 30;
+
+int labelY(int grupo) {
+    return LAYOUT_LABEL_Y_INICIAL + (grupo * LAYOUT_GRUPO_GAP);
+}
+
+int controleY(int grupo) {
+    return labelY(grupo) + LAYOUT_LABEL_CONTROLE_GAP;
+}
+
+int botaoIncrementoX() {
+    return LAYOUT_BARRA_X + LAYOUT_BARRA_LARGURA + LAYOUT_BOTAO_GAP;
+}
+
 void configurarBotaoPorSuporte(std::unique_ptr<Botao>& botao, bool suportado) {
     if (!botao || suportado) {
         return;
@@ -234,16 +263,16 @@ void JanelaAudioEVideo::inicializarBotoes() {
 
     // Botões de Volume
     btnVolumeDecremento = std::make_unique<Botao>(
-        ConfigLayout::X(250), ConfigLayout::Y(320),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(controleY(0)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "-"
     );
     btnVolumeDecremento->setCor(btnNormal, btnHover, btnPress);
     btnVolumeDecremento->setRetanguloBordasArredondadas(15);
 
     btnVolumeIncremento = std::make_unique<Botao>(
-        ConfigLayout::X(1260), ConfigLayout::Y(320),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(botaoIncrementoX()), ConfigLayout::Y(controleY(0)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "+"
     );
     btnVolumeIncremento->setCor(btnNormal, btnHover, btnPress);
@@ -251,16 +280,16 @@ void JanelaAudioEVideo::inicializarBotoes() {
 
     // Botões de Dispositivo
     btnDispositivoAnterior = std::make_unique<Botao>(
-        ConfigLayout::X(250), ConfigLayout::Y(480),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(controleY(1)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "<"
     );
     btnDispositivoAnterior->setCor(btnNormal, btnHover, btnPress);
     btnDispositivoAnterior->setRetanguloBordasArredondadas(15);
 
     btnDispositivoProximo = std::make_unique<Botao>(
-        ConfigLayout::X(1260), ConfigLayout::Y(480),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(botaoIncrementoX()), ConfigLayout::Y(controleY(1)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         ">"
     );
     btnDispositivoProximo->setCor(btnNormal, btnHover, btnPress);
@@ -268,16 +297,16 @@ void JanelaAudioEVideo::inicializarBotoes() {
 
     // Botões de Resolução
     btnResolucaoAnterior = std::make_unique<Botao>(
-        ConfigLayout::X(250), ConfigLayout::Y(640),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(controleY(2)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "<"
     );
     btnResolucaoAnterior->setCor(btnNormal, btnHover, btnPress);
     btnResolucaoAnterior->setRetanguloBordasArredondadas(15);
 
     btnResolucaoProxima = std::make_unique<Botao>(
-        ConfigLayout::X(1260), ConfigLayout::Y(640),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(botaoIncrementoX()), ConfigLayout::Y(controleY(2)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         ">"
     );
     btnResolucaoProxima->setCor(btnNormal, btnHover, btnPress);
@@ -285,16 +314,16 @@ void JanelaAudioEVideo::inicializarBotoes() {
 
     // Botões de Escala
     btnEscalaDecremento = std::make_unique<Botao>(
-        ConfigLayout::X(250), ConfigLayout::Y(800),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(controleY(3)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "-"
     );
     btnEscalaDecremento->setCor(btnNormal, btnHover, btnPress);
     btnEscalaDecremento->setRetanguloBordasArredondadas(15);
 
     btnEscalaIncremento = std::make_unique<Botao>(
-        ConfigLayout::X(1260), ConfigLayout::Y(800),
-        ConfigLayout::X(60), ConfigLayout::Y(60),
+        ConfigLayout::X(botaoIncrementoX()), ConfigLayout::Y(controleY(3)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "+"
     );
     btnEscalaIncremento->setCor(btnNormal, btnHover, btnPress);
@@ -302,16 +331,16 @@ void JanelaAudioEVideo::inicializarBotoes() {
 
     // Botões de Brilho
     btnBrilhoDecremento = std::make_unique<Botao>(
-        ConfigLayout::X(250), ConfigLayout::Y(915),
-        ConfigLayout::X(60), ConfigLayout::Y(50),
+        ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(controleY(4)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "-"
     );
     btnBrilhoDecremento->setCor(btnNormal, btnHover, btnPress);
     btnBrilhoDecremento->setRetanguloBordasArredondadas(15);
 
     btnBrilhoIncremento = std::make_unique<Botao>(
-        ConfigLayout::X(1260), ConfigLayout::Y(915),
-        ConfigLayout::X(60), ConfigLayout::Y(50),
+        ConfigLayout::X(botaoIncrementoX()), ConfigLayout::Y(controleY(4)),
+        ConfigLayout::X(LAYOUT_BOTAO_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "+"
     );
     btnBrilhoIncremento->setCor(btnNormal, btnHover, btnPress);
@@ -327,8 +356,8 @@ void JanelaAudioEVideo::inicializarBotoes() {
     // --- NOVO: Botão Aplicar ---
     // Posicionado lá embaixo, centralizado ou à direita
     btnAplicar = std::make_unique<Botao>(
-        ConfigLayout::X(1200), ConfigLayout::Y(990), // Posição X, Y
-        ConfigLayout::X(200), ConfigLayout::Y(50),   // Largura, Altura
+        ConfigLayout::X(LAYOUT_APLICAR_X), ConfigLayout::Y(LAYOUT_APLICAR_Y),
+        ConfigLayout::X(LAYOUT_APLICAR_LARGURA), ConfigLayout::Y(LAYOUT_BOTAO_ALTURA),
         "Aplicar"
     );
     btnAplicar->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
@@ -391,7 +420,7 @@ void JanelaAudioEVideo::desenharCabecalho(SDL_Renderer* renderer) {
     // Calcula largura do texto para centralizar
     // Estima aproximadamente 0.6 * tamanhoFonte por caractere
     int larguraEstimada = static_cast<int>(titulo.length() * tamanhoFonte * 0.4);
-    int larguraTela = ConfigLayout::X(1525);
+    int larguraTela = ConfigLayout::X(LAYOUT_LARGURA_TELA);
     int posX = (larguraTela - larguraEstimada) / 2;
     
     desenharTexto(renderer, titulo, 
@@ -407,9 +436,9 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     
     // Label
-    desenharTexto(renderer, "Volume Geral:", 
-                  ConfigLayout::X(250), ConfigLayout::Y(250), 
-                  tema.getCorTextoNegrito(), 
+    desenharTexto(renderer, "Volume Geral:",
+                  ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(labelY(0)),
+                  tema.getCorTextoNegrito(),
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 0 e 1)
@@ -433,10 +462,10 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     int barrasPreenchidas = (volumeGeral * NUM_BARRAS_VOLUME) / MAX_VOLUME;
     
     // Define área da barra para interação com mouse
-    int barraX = ConfigLayout::X(330);
-    int barraY = ConfigLayout::Y(320);
-    int barraLargura = ConfigLayout::X(910);
-    int barraAltura = ConfigLayout::Y(60);
+    int barraX = ConfigLayout::X(LAYOUT_BARRA_X);
+    int barraY = ConfigLayout::Y(controleY(0));
+    int barraLargura = ConfigLayout::X(LAYOUT_BARRA_LARGURA);
+    int barraAltura = ConfigLayout::Y(LAYOUT_BOTAO_ALTURA);
     
     areaBarraVolume = {barraX, barraY, barraLargura, barraAltura};
     
@@ -451,14 +480,14 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     // Texto do percentual
     std::stringstream ss;
     ss << volumeGeral << "%";
-    desenharTexto(renderer, ss.str(), 
-                  ConfigLayout::X(1350), ConfigLayout::Y(335), 
+    desenharTexto(renderer, ss.str(),
+                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(0) + 10),
                   corTextoSecundario(capacidadesSistema.volume_control, tema.getCorTextoNegrito()),
                   ConfigLayout::F(28));
 
     if (!capacidadesSistema.volume_control) {
         desenharTexto(renderer, "Controle indisponivel",
-                      ConfigLayout::X(340), ConfigLayout::Y(385),
+                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(0) + 60),
                       SDL_Color{170, 170, 170, 255}, ConfigLayout::F(20));
     }
 }
@@ -470,9 +499,9 @@ void JanelaAudioEVideo::desenharSeletorDispositivo(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     
     // Label
-    desenharTexto(renderer, "Dispositivo de Saída:", 
-                  ConfigLayout::X(250), ConfigLayout::Y(410), 
-                  tema.getCorTextoNegrito(), 
+    desenharTexto(renderer, "Dispositivo de Saída:",
+                  ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(labelY(1)),
+                  tema.getCorTextoNegrito(),
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 2 e 3)
@@ -494,8 +523,8 @@ void JanelaAudioEVideo::desenharSeletorDispositivo(SDL_Renderer* renderer) {
     
     // Texto do dispositivo atual
     std::string dispositivo = dispositivos[indiceDispositivoAtual].nome;
-    desenharTexto(renderer, dispositivo, 
-                  ConfigLayout::X(340), ConfigLayout::Y(495), 
+    desenharTexto(renderer, dispositivo,
+                  ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(1) + 10),
                   corTextoSecundario(capacidadesSistema.audio_select, tema.getCorTextoNormal()),
                   ConfigLayout::F(28));
 }
@@ -507,9 +536,9 @@ void JanelaAudioEVideo::desenharSeletorResolucao(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     
     // Label
-    desenharTexto(renderer, "Resolução:", 
-                  ConfigLayout::X(250), ConfigLayout::Y(570), 
-                  tema.getCorTextoNegrito(), 
+    desenharTexto(renderer, "Resolução:",
+                  ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(labelY(2)),
+                  tema.getCorTextoNegrito(),
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 4 e 5)
@@ -533,8 +562,8 @@ void JanelaAudioEVideo::desenharSeletorResolucao(SDL_Renderer* renderer) {
     std::string resolucao = capacidadesSistema.display_resolution
         ? resolucoes[indiceResolucaoAtual].toString()
         : "Resolucao indisponivel";
-    desenharTexto(renderer, resolucao, 
-                  ConfigLayout::X(340), ConfigLayout::Y(655), 
+    desenharTexto(renderer, resolucao,
+                  ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(2) + 10),
                   corTextoSecundario(capacidadesSistema.display_resolution, tema.getCorTextoNormal()),
                   ConfigLayout::F(28));
 }
@@ -546,9 +575,9 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
     
     // Label
-    desenharTexto(renderer, "Escala da Janela:", 
-                  ConfigLayout::X(250), ConfigLayout::Y(730), 
-                  tema.getCorTextoNegrito(), 
+    desenharTexto(renderer, "Escala da Janela:",
+                  ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(labelY(3)),
+                  tema.getCorTextoNegrito(),
                   ConfigLayout::F(32));
     
     // Aplica foco aos botões se necessário (índices 6 e 7)
@@ -574,10 +603,10 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     int barrasPreenchidas = static_cast<int>(escalaRelativa * NUM_BARRAS_ESCALA);
     
     // Define área da barra para interação com mouse
-    int barraX = ConfigLayout::X(330);
-    int barraY = ConfigLayout::Y(800);
-    int barraLargura = ConfigLayout::X(910);
-    int barraAltura = ConfigLayout::Y(60);
+    int barraX = ConfigLayout::X(LAYOUT_BARRA_X);
+    int barraY = ConfigLayout::Y(controleY(3));
+    int barraLargura = ConfigLayout::X(LAYOUT_BARRA_LARGURA);
+    int barraAltura = ConfigLayout::Y(LAYOUT_BOTAO_ALTURA);
     
     areaBarraEscala = {barraX, barraY, barraLargura, barraAltura};
     
@@ -592,14 +621,14 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     // Texto da escala
     std::stringstream ss;
     ss << std::fixed << std::setprecision(1) << escalaJanela << "x";
-    desenharTexto(renderer, ss.str(), 
-                  ConfigLayout::X(1350), ConfigLayout::Y(815), 
+    desenharTexto(renderer, ss.str(),
+                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(3) + 10),
                   corTextoSecundario(capacidadesSistema.display_scale, tema.getCorTextoNegrito()),
                   ConfigLayout::F(28));
 
     if (!capacidadesSistema.display_scale) {
         desenharTexto(renderer, "Escala indisponivel nesta sessao",
-                      ConfigLayout::X(340), ConfigLayout::Y(865),
+                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(3) + 60),
                       SDL_Color{170, 170, 170, 255}, ConfigLayout::F(20));
     }
 }
@@ -611,7 +640,7 @@ void JanelaAudioEVideo::desenharControleBrilho(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
 
     desenharTexto(renderer, "Brilho:",
-                  ConfigLayout::X(250), ConfigLayout::Y(875),
+                  ConfigLayout::X(LAYOUT_CONTROLE_X), ConfigLayout::Y(labelY(4)),
                   tema.getCorTextoNegrito(),
                   ConfigLayout::F(28));
 
@@ -632,10 +661,10 @@ void JanelaAudioEVideo::desenharControleBrilho(SDL_Renderer* renderer) {
 
     int barrasPreenchidas = (brilhoGeral * NUM_BARRAS_BRILHO) / MAX_BRILHO;
 
-    int barraX = ConfigLayout::X(330);
-    int barraY = ConfigLayout::Y(915);
-    int barraLargura = ConfigLayout::X(910);
-    int barraAltura = ConfigLayout::Y(50);
+    int barraX = ConfigLayout::X(LAYOUT_BARRA_X);
+    int barraY = ConfigLayout::Y(controleY(4));
+    int barraLargura = ConfigLayout::X(LAYOUT_BARRA_LARGURA);
+    int barraAltura = ConfigLayout::Y(LAYOUT_BOTAO_ALTURA);
 
     areaBarraBrilho = {barraX, barraY, barraLargura, barraAltura};
 
@@ -649,13 +678,13 @@ void JanelaAudioEVideo::desenharControleBrilho(SDL_Renderer* renderer) {
     std::stringstream ss;
     ss << brilhoGeral << "%";
     desenharTexto(renderer, ss.str(),
-                  ConfigLayout::X(1350), ConfigLayout::Y(925),
+                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(4) + 10),
                   corTextoSecundario(capacidadesSistema.brightness, tema.getCorTextoNegrito()),
                   ConfigLayout::F(26));
 
     if (!capacidadesSistema.brightness) {
         desenharTexto(renderer, "Brilho indisponivel neste ambiente",
-                      ConfigLayout::X(340), ConfigLayout::Y(970),
+                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(4) + 60),
                       SDL_Color{170, 170, 170, 255}, ConfigLayout::F(18));
     }
 }
@@ -688,11 +717,11 @@ void JanelaAudioEVideo::desenharImagemExplicativa(SDL_Renderer* renderer) {
     }
     
     // 1. Define a altura fixa da imagem e largura total da tela
-    int larguraTela = ConfigLayout::X(1525); 
-    int alturaImagem = ConfigLayout::Y(30);
+    int larguraTela = ConfigLayout::X(LAYOUT_LARGURA_TELA);
+    int alturaImagem = ConfigLayout::Y(LAYOUT_RODAPE_ALTURA);
     
     // 2. Define a posição Y como (Altura da Tela - Altura da Imagem)
-    int posY = ConfigLayout::Y(1080) - alturaImagem;
+    int posY = ConfigLayout::Y(LAYOUT_RODAPE_Y);
     
     // 3. Monta o retângulo de destino
     SDL_Rect destExplicacao = {
