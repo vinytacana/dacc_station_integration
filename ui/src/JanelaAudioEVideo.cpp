@@ -42,6 +42,16 @@ SDL_Color corTextoSecundario(bool suportado, const SDL_Color& corPadrao) {
     return suportado ? corPadrao : SDL_Color{170, 170, 170, 255};
 }
 
+int calcularSegmentoSlider(int mouseX, const SDL_Rect& area, int totalSegmentos) {
+    if (totalSegmentos <= 0 || area.w <= 0) {
+        return 0;
+    }
+
+    int posicao = std::clamp(mouseX - area.x, 0, area.w - 1);
+    int segmento = (posicao * totalSegmentos) / area.w + 1;
+    return std::clamp(segmento, 0, totalSegmentos);
+}
+
 } // namespace
 
 /**
@@ -1041,27 +1051,25 @@ void JanelaAudioEVideo::confirmarSelecao() {
  * @brief Calcula o volume baseado na posição X do mouse.
  */
 int JanelaAudioEVideo::calcularVolumeAPartirDoPonto(int mouseX) {
-    int posicaoRelativa = mouseX - areaBarraVolume.x;
-    float percentual = (float)posicaoRelativa / areaBarraVolume.w;
-    return (int)(percentual * MAX_VOLUME);
+    int segmento = calcularSegmentoSlider(mouseX, areaBarraVolume, NUM_BARRAS_VOLUME);
+    return segmento * (MAX_VOLUME / NUM_BARRAS_VOLUME);
 }
 
 /**
  * @brief Calcula a escala baseada na posição X do mouse.
  */
 float JanelaAudioEVideo::calcularEscalaAPartirDoPonto(int mouseX) {
-    int posicaoRelativa = mouseX - areaBarraEscala.x;
-    float percentual = (float)posicaoRelativa / areaBarraEscala.w;
-    return MIN_ESCALA + (percentual * (MAX_ESCALA - MIN_ESCALA));
+    int segmento = calcularSegmentoSlider(mouseX, areaBarraEscala, NUM_BARRAS_ESCALA);
+    float passoVisual = (MAX_ESCALA - MIN_ESCALA) / NUM_BARRAS_ESCALA;
+    return MIN_ESCALA + (segmento * passoVisual);
 }
 
 /**
  * @brief Calcula o brilho baseado na posição X do mouse.
  */
 int JanelaAudioEVideo::calcularBrilhoAPartirDoPonto(int mouseX) {
-    int posicaoRelativa = mouseX - areaBarraBrilho.x;
-    float percentual = (float)posicaoRelativa / areaBarraBrilho.w;
-    return (int)(percentual * MAX_BRILHO);
+    int segmento = calcularSegmentoSlider(mouseX, areaBarraBrilho, NUM_BARRAS_BRILHO);
+    return segmento * (MAX_BRILHO / NUM_BARRAS_BRILHO);
 }
 
 /**
