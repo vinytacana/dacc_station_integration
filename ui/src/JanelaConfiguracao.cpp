@@ -217,7 +217,8 @@ bool JanelaConfiguracao::submenuDisponivel(SubmenuConfig submenu) const {
                    capacidades.volume_control ||
                    capacidades.display_info ||
                    capacidades.display_resolution ||
-                   capacidades.display_scale;
+                   capacidades.display_scale ||
+                   capacidades.brightness;
         case SubmenuConfig::BLUETOOTH:
             return capacidades.bluetooth;
         case SubmenuConfig::SISTEMA:
