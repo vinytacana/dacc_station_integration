@@ -199,7 +199,6 @@ void JanelaAudioEVideo::inicializarDispositivos() {
         }
     }
     
-    std::cout << "[UI] Carregados " << dispositivos.size() << " dispositivos de áudio.\n";
 }
 
 /**
@@ -768,13 +767,10 @@ void JanelaAudioEVideo::aumentarVolume() {
         return;
     }
 
-    // 1. Atualiza a variável interna para feedback visual imediato
     if (volumeGeral < MAX_VOLUME) {
         volumeGeral = std::min(MAX_VOLUME, volumeGeral + 5);
-        
-        // 2. Toca o som da UI
         gerAudio.tocarSom("select.wav");
-        
+
         system_result resultado = ::aumentar_volume_result();
         if (!resultado.ok) {
             definirMensagemStatus(
@@ -783,8 +779,6 @@ void JanelaAudioEVideo::aumentarVolume() {
             );
             return;
         }
-        
-        std::cout << "[AUDIO] Volume UI: " << volumeGeral << "% (Comando enviado)" << std::endl;
     }
 }
 
@@ -808,7 +802,6 @@ void JanelaAudioEVideo::diminuirVolume() {
             );
             return;
         }
-        std::cout << "[AUDIO] Volume UI: " << volumeGeral << "% (Comando enviado)" << std::endl;
     }
 }
 
@@ -816,21 +809,32 @@ void JanelaAudioEVideo::diminuirVolume() {
  * @brief Define o volume diretamente.
  */
 void JanelaAudioEVideo::setVolume(int novoVolume) {
+    int volumeAnterior = volumeGeral;
+    atualizarVolumeVisual(novoVolume);
+    if (!aplicarVolumeAtual()) {
+        volumeGeral = volumeAnterior;
+    }
+}
+
+void JanelaAudioEVideo::atualizarVolumeVisual(int novoVolume) {
+    volumeGeral = std::clamp(novoVolume, 0, MAX_VOLUME);
+}
+
+bool JanelaAudioEVideo::aplicarVolumeAtual() {
     if (!capacidadesSistema.volume_control) {
         definirMensagemStatus("Controle de volume indisponivel.", true);
-        return;
+        return false;
     }
 
-    volumeGeral = std::clamp(novoVolume, 0, MAX_VOLUME);
     system_result resultado = ::definir_volume_result(volumeGeral);
     if (!resultado.ok) {
         definirMensagemStatus(
             resultado.mensagem.empty() ? "Falha ao definir volume." : resultado.mensagem,
             true
         );
-        return;
+        return false;
     }
-    std::cout << "[AUDIO] Volume ajustado para: " << volumeGeral << "%" << std::endl;
+    return true;
 }
 
 /**
@@ -867,23 +871,32 @@ void JanelaAudioEVideo::diminuirBrilho() {
  * @brief Define o brilho diretamente.
  */
 void JanelaAudioEVideo::setBrilho(int novoBrilho) {
+    int brilhoAnterior = brilhoGeral;
+    atualizarBrilhoVisual(novoBrilho);
+    if (!aplicarBrilhoAtual()) {
+        brilhoGeral = brilhoAnterior;
+    }
+}
+
+void JanelaAudioEVideo::atualizarBrilhoVisual(int novoBrilho) {
+    brilhoGeral = std::clamp(novoBrilho, 0, MAX_BRILHO);
+}
+
+bool JanelaAudioEVideo::aplicarBrilhoAtual() {
     if (!capacidadesSistema.brightness) {
         definirMensagemStatus("Controle de brilho indisponivel.", true);
-        return;
+        return false;
     }
 
-    int brilhoAnterior = brilhoGeral;
-    brilhoGeral = std::clamp(novoBrilho, 0, MAX_BRILHO);
     system_result resultado = ::definir_brilho_result(brilhoGeral);
     if (!resultado.ok) {
-        brilhoGeral = brilhoAnterior;
         definirMensagemStatus(
             resultado.mensagem.empty() ? "Falha ao definir brilho." : resultado.mensagem,
             true
         );
-        return;
+        return false;
     }
-    std::cout << "[VIDEO] Brilho ajustado para: " << brilhoGeral << "%" << std::endl;
+    return true;
 }
 
 /**
@@ -935,7 +948,6 @@ void JanelaAudioEVideo::resolucaoAnterior() {
         indiceResolucaoAtual = resolucoes.size() - 1; // Wrap around
     }
     gerAudio.tocarSom("navegacao.wav");
-    std::cout << "[VIDEO] Resolução: " << resolucoes[indiceResolucaoAtual].toString() << std::endl;
 }
 
 /**
@@ -952,7 +964,6 @@ void JanelaAudioEVideo::resolucaoProxima() {
         indiceResolucaoAtual = 0; // Wrap around
     }
     gerAudio.tocarSom("navegacao.wav");
-    std::cout << "[VIDEO] Resolução: " << resolucoes[indiceResolucaoAtual].toString() << std::endl;
 }
 
 /**
@@ -966,7 +977,6 @@ void JanelaAudioEVideo::aumentarEscala() {
     if (escalaJanela < MAX_ESCALA) {
         escalaJanela = std::min(MAX_ESCALA, escalaJanela + PASSO_ESCALA);
         gerAudio.tocarSom("select.wav");
-        std::cout << "[VIDEO] Escala: " << escalaJanela << "x" << std::endl;
     }
 }
 
@@ -981,7 +991,6 @@ void JanelaAudioEVideo::diminuirEscala() {
     if (escalaJanela > MIN_ESCALA) {
         escalaJanela = std::max(MIN_ESCALA, escalaJanela - PASSO_ESCALA);
         gerAudio.tocarSom("select.wav");
-        std::cout << "[VIDEO] Escala: " << escalaJanela << "x" << std::endl;
     }
 }
 
@@ -994,7 +1003,6 @@ void JanelaAudioEVideo::setEscala(float novaEscala) {
         return;
     }
     escalaJanela = std::clamp(novaEscala, MIN_ESCALA, MAX_ESCALA);
-    std::cout << "[VIDEO] Escala ajustada para: " << escalaJanela << "x" << std::endl;
 }
 
 void JanelaAudioEVideo::definirMensagemStatus(const std::string& mensagem, bool erro) {
@@ -1104,15 +1112,17 @@ int JanelaAudioEVideo::calcularBrilhoAPartirDoPonto(int mouseX) {
 /**
  * @brief Processa clique na barra de volume.
  */
-bool JanelaAudioEVideo::processarCliqueBarraVolume(int mouseX, int mouseY) {
+bool JanelaAudioEVideo::processarCliqueBarraVolume(int mouseX, int mouseY, bool aplicarBackend) {
     if (!capacidadesSistema.volume_control) {
         return false;
     }
     if (mouseX >= areaBarraVolume.x && mouseX <= areaBarraVolume.x + areaBarraVolume.w &&
         mouseY >= areaBarraVolume.y && mouseY <= areaBarraVolume.y + areaBarraVolume.h) {
         int novoVolume = calcularVolumeAPartirDoPonto(mouseX);
-        setVolume(novoVolume);
-        gerAudio.tocarSom("select.wav");
+        atualizarVolumeVisual(novoVolume);
+        if (aplicarBackend && aplicarVolumeAtual()) {
+            gerAudio.tocarSom("select.wav");
+        }
         return true;
     }
     return false;
@@ -1138,15 +1148,17 @@ bool JanelaAudioEVideo::processarCliqueBarraEscala(int mouseX, int mouseY) {
 /**
  * @brief Processa clique na barra de brilho.
  */
-bool JanelaAudioEVideo::processarCliqueBarraBrilho(int mouseX, int mouseY) {
+bool JanelaAudioEVideo::processarCliqueBarraBrilho(int mouseX, int mouseY, bool aplicarBackend) {
     if (!capacidadesSistema.brightness) {
         return false;
     }
     if (mouseX >= areaBarraBrilho.x && mouseX <= areaBarraBrilho.x + areaBarraBrilho.w &&
         mouseY >= areaBarraBrilho.y && mouseY <= areaBarraBrilho.y + areaBarraBrilho.h) {
         int novoBrilho = calcularBrilhoAPartirDoPonto(mouseX);
-        setBrilho(novoBrilho);
-        gerAudio.tocarSom("select.wav");
+        atualizarBrilhoVisual(novoBrilho);
+        if (aplicarBackend && aplicarBrilhoAtual()) {
+            gerAudio.tocarSom("select.wav");
+        }
         return true;
     }
     return false;
@@ -1163,7 +1175,8 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
             int mouseY = evento.button.y;
             
             // Verifica clique nas barras
-            if (processarCliqueBarraVolume(mouseX, mouseY)) {
+            volumeAntesArrasto = volumeGeral;
+            if (processarCliqueBarraVolume(mouseX, mouseY, false)) {
                 arrastandoVolume = true;
                 return true;
             }
@@ -1173,7 +1186,8 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
                 return true;
             }
 
-            if (processarCliqueBarraBrilho(mouseX, mouseY)) {
+            brilhoAntesArrasto = brilhoGeral;
+            if (processarCliqueBarraBrilho(mouseX, mouseY, false)) {
                 arrastandoBrilho = true;
                 return true;
             }
@@ -1236,9 +1250,30 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
     // Processa soltar botão do mouse (fim do arrasto)
     if (evento.type == SDL_MOUSEBUTTONUP) {
         if (evento.button.button == SDL_BUTTON_LEFT) {
+            bool aplicarVolume = arrastandoVolume;
+            bool aplicarBrilho = arrastandoBrilho;
+
             arrastandoVolume = false;
             arrastandoEscala = false;
             arrastandoBrilho = false;
+
+            if (aplicarVolume) {
+                if (aplicarVolumeAtual()) {
+                    gerAudio.tocarSom("select.wav");
+                } else {
+                    volumeGeral = volumeAntesArrasto;
+                }
+                return true;
+            }
+
+            if (aplicarBrilho) {
+                if (aplicarBrilhoAtual()) {
+                    gerAudio.tocarSom("select.wav");
+                } else {
+                    brilhoGeral = brilhoAntesArrasto;
+                }
+                return true;
+            }
         }
     }
     
@@ -1248,7 +1283,7 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
         int mouseY = evento.motion.y;
         
         if (arrastandoVolume) {
-            if (processarCliqueBarraVolume(mouseX, mouseY)) {
+            if (processarCliqueBarraVolume(mouseX, mouseY, false)) {
                 return true;
             }
         }
@@ -1260,7 +1295,7 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
         }
 
         if (arrastandoBrilho) {
-            if (processarCliqueBarraBrilho(mouseX, mouseY)) {
+            if (processarCliqueBarraBrilho(mouseX, mouseY, false)) {
                 return true;
             }
         }

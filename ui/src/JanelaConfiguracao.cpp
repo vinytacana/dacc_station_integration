@@ -349,7 +349,7 @@ void JanelaConfiguracao::fechar() {
  */
 void JanelaConfiguracao::notificarMudancaTemaEmTodasJanelas() {
     if (!renderer) {
-        std::cout << "[ERRO] Renderer é NULL! Abortando..." << std::endl;
+        SDL_Log("[ERRO] Renderer e NULL! Abortando...");
         return;
     }
     
@@ -395,8 +395,6 @@ Uint32 JanelaConfiguracao::getIDJanela() const {
  * @param indice Índice do item do menu a ser ativado (0-3).
  */
 void JanelaConfiguracao::executarAcaoMenu(int indice) {
-    std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; 
-
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
         std::lock_guard<std::mutex> lock(mutexCapacidades);

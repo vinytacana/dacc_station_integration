@@ -172,6 +172,8 @@ private:
     bool arrastandoVolume = false;          /**< Flag para controle de arrasto do volume. */
     bool arrastandoEscala = false;          /**< Flag para controle de arrasto da escala. */
     bool arrastandoBrilho = false;          /**< Flag para controle de arrasto do brilho. */
+    int volumeAntesArrasto = 80;            /**< Valor do volume antes de iniciar um arrasto. */
+    int brilhoAntesArrasto = 100;           /**< Valor do brilho antes de iniciar um arrasto. */
     station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
     
     // IMAGEM EXPLICATIVA
@@ -273,10 +275,21 @@ private:
     void diminuirVolume();
 
     /**
-     * @brief Define o volume diretamente (usado para clique/arrasto).
+     * @brief Define o volume diretamente e aplica no backend.
      * @param novoVolume Novo valor de volume (0-100).
      */
     void setVolume(int novoVolume);
+
+    /**
+     * @brief Atualiza apenas o estado visual do volume.
+     * @param novoVolume Novo valor de volume (0-100).
+     */
+    void atualizarVolumeVisual(int novoVolume);
+
+    /**
+     * @brief Aplica o volume visual atual no backend.
+     */
+    bool aplicarVolumeAtual();
 
     /**
      * @brief Incrementa o brilho.
@@ -289,10 +302,21 @@ private:
     void diminuirBrilho();
 
     /**
-     * @brief Define o brilho diretamente (usado para clique/arrasto).
+     * @brief Define o brilho diretamente e aplica no backend.
      * @param novoBrilho Novo valor de brilho (0-100).
      */
     void setBrilho(int novoBrilho);
+
+    /**
+     * @brief Atualiza apenas o estado visual do brilho.
+     * @param novoBrilho Novo valor de brilho (0-100).
+     */
+    void atualizarBrilhoVisual(int novoBrilho);
+
+    /**
+     * @brief Aplica o brilho visual atual no backend.
+     */
+    bool aplicarBrilhoAtual();
 
     /**
      * @brief Seleciona o dispositivo anterior na lista.
@@ -356,12 +380,13 @@ private:
     void confirmarSelecao();
 
     /**
-     * @brief Processa clique na barra de volume.
+     * @brief Processa interação na barra de volume.
      * @param mouseX Coordenada X do mouse.
      * @param mouseY Coordenada Y do mouse.
+     * @param aplicarBackend Indica se deve aplicar no backend imediatamente.
      * @return true se o clique foi na barra.
      */
-    bool processarCliqueBarraVolume(int mouseX, int mouseY);
+    bool processarCliqueBarraVolume(int mouseX, int mouseY, bool aplicarBackend);
 
     /**
      * @brief Processa clique na barra de escala.
@@ -372,12 +397,13 @@ private:
     bool processarCliqueBarraEscala(int mouseX, int mouseY);
 
     /**
-     * @brief Processa clique na barra de brilho.
+     * @brief Processa interação na barra de brilho.
      * @param mouseX Coordenada X do mouse.
      * @param mouseY Coordenada Y do mouse.
+     * @param aplicarBackend Indica se deve aplicar no backend imediatamente.
      * @return true se o clique foi na barra.
      */
-    bool processarCliqueBarraBrilho(int mouseX, int mouseY);
+    bool processarCliqueBarraBrilho(int mouseX, int mouseY, bool aplicarBackend);
 
     /**
      * @brief Calcula o volume baseado na posição X do mouse na barra.
