@@ -1021,10 +1021,14 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
     }
 
     if (evento.type == SDL_MOUSEWHEEL && bluetoothAtivo) {
-        scrollY -= evento.wheel.y * ConfigLayout::Y(55);
-        if (scrollY < 0) scrollY = 0;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        float wheelY = evento.wheel.preciseY != 0.0f ? evento.wheel.preciseY : static_cast<float>(evento.wheel.y);
+#else
+        float wheelY = static_cast<float>(evento.wheel.y);
+#endif
+        scrollY -= static_cast<int>(wheelY * ConfigLayout::Y(60));
         int maxScroll = std::max(0, alturaConteudoLista - ConfigLayout::Y(LISTA_H - 20));
-        if (scrollY > maxScroll) scrollY = maxScroll;
+        scrollY = std::clamp(scrollY, 0, maxScroll);
         return true;
     }
 

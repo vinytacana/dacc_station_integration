@@ -98,7 +98,7 @@ public:
     /**
      * @brief Reseta o estado da janela para valores padrão.
      */
-    void resetar();
+    void resetar(bool atualizarBackend = true);
     
     /**
      * @brief Verifica se o teclado virtual está visível.

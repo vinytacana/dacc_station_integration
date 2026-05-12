@@ -349,32 +349,14 @@ void JanelaConfiguracao::fechar() {
  */
 void JanelaConfiguracao::notificarMudancaTemaEmTodasJanelas() {
     if (!renderer) {
-        std::cout << "[ERRO] Renderer é NULL! Abortando..." << std::endl;
+        SDL_Log("[ERRO] Renderer e NULL! Abortando...");
         return;
     }
     
-    limparCacheTexto();
-    SDL_Delay(50);
-    
     liberarIconeBateria();
     carregarIconeBateria();
-    
     inicializarBotoes();
-    
     limparCacheTexto();
-
-    auto& tema = GerenciadorTemas::getInstance();
-    SDL_Color corFundo = tema.getCorFundo();
-    SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, 255);
-    SDL_RenderClear(renderer);
-    
-    desenhar();
-    SDL_RenderPresent(renderer);
-    
-    SDL_Delay(100);
-    
-    desenhar();
-    SDL_RenderPresent(renderer);
 }
 
 /**
@@ -395,8 +377,6 @@ Uint32 JanelaConfiguracao::getIDJanela() const {
  * @param indice Índice do item do menu a ser ativado (0-3).
  */
 void JanelaConfiguracao::executarAcaoMenu(int indice) {
-    std::cout << "[CONFIG] Botão pressionado: " << indice << std::endl; 
-
     SubmenuConfig submenuSelecionado = submenuPorIndice(indice);
     if (!submenuDisponivel(submenuSelecionado)) {
         std::lock_guard<std::mutex> lock(mutexCapacidades);
@@ -406,7 +386,7 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
     }
 
     if (submenuAtivo == SubmenuConfig::REDE && janelaRede) {
-        janelaRede->resetar();
+        janelaRede->resetar(false);
     }
 
     if (submenuAtivo == SubmenuConfig::AUDIO_VIDEO && janelaAudioVideo) {

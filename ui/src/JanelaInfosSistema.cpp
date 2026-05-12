@@ -16,7 +16,6 @@
 #include "ConfigLayout.hpp"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
-#include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <ctime>
@@ -321,7 +320,7 @@ std::string JanelaInfosSistema::obterArquitetura() {
  */
 void JanelaInfosSistema::carregarImagemExplicativa(SDL_Renderer* renderer) {
     if (!renderer) {
-        std::cout << "[ERRO] Renderer nulo em carregarImagemExplicativa!" << std::endl;
+        SDL_Log("[ERRO] Renderer nulo em carregarImagemExplicativa!");
         return;
     }
     
@@ -331,11 +330,8 @@ void JanelaInfosSistema::carregarImagemExplicativa(SDL_Renderer* renderer) {
     // Seleciona imagem baseada no tema
     if (tema.getTemaAtual() == TipoTema::CLARO) {
         caminhoImagem = "assets/images/light/explicacaoBotoesJanelaInfosSistemaClaro.jpg";
-
-        std::cout << "[INFO_SISTEMA] Carregando imagem CLARA: " << caminhoImagem << std::endl;
     } else {
         caminhoImagem = "assets/images/dark/explicacaoBotoesJanelaInfosSistemaEscuro.jpg";
-        std::cout << "[INFO_SISTEMA] Carregando imagem ESCURA: " << caminhoImagem << std::endl;
     }
     
     // Carrega através do gerenciador
@@ -363,7 +359,6 @@ void JanelaInfosSistema::carregarImagemExplicativa(SDL_Renderer* renderer) {
  * @see carregarImagemExplicativa()
  */
 void JanelaInfosSistema::carregarTexturas(SDL_Renderer* renderer) {
-    std::cout << "[INFO_SISTEMA] carregarTexturas() chamado" << std::endl;
     carregarImagemExplicativa(renderer);
 }
 
@@ -918,7 +913,12 @@ void JanelaInfosSistema::calcularAlturaConteudo(int alturaFinal) {
  */
 bool JanelaInfosSistema::processarEvento(SDL_Event& evento) {
     if (evento.type == SDL_MOUSEWHEEL) {
-        offsetScroll -= evento.wheel.y * VELOCIDADE_SCROLL_MOUSE;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        float wheelY = evento.wheel.preciseY != 0.0f ? evento.wheel.preciseY : static_cast<float>(evento.wheel.y);
+#else
+        float wheelY = static_cast<float>(evento.wheel.y);
+#endif
+        offsetScroll -= static_cast<int>(wheelY * VELOCIDADE_SCROLL_MOUSE);
         offsetScroll = std::clamp(offsetScroll, 0, maxScroll);
         return true;
     }
