@@ -45,6 +45,8 @@ namespace MeuProjeto {
 
 namespace {
 
+constexpr int ITENS_SCROLL_MOUSE = 3;
+
 std::vector<RedeInfo> converterRedesWifi(const std::vector<wifi_network>& redes, std::string& redeConectada) {
     std::vector<RedeInfo> redesUi;
     redesUi.reserve(redes.size());
@@ -1164,6 +1166,21 @@ bool JanelaRede::processarEvento(SDL_Event& evento) {
         if (redeCabeadaAtiva) {
             return false;
         }
+    }
+
+    if (evento.type == SDL_MOUSEWHEEL) {
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        float wheelY = evento.wheel.preciseY != 0.0f ? evento.wheel.preciseY : static_cast<float>(evento.wheel.y);
+#else
+        float wheelY = static_cast<float>(evento.wheel.y);
+#endif
+        int maxOffset = std::max(0, static_cast<int>(botoesRedes.size()) - maxRedesVisiveis);
+        int deltaItens = static_cast<int>(wheelY * ITENS_SCROLL_MOUSE);
+        if (deltaItens == 0 && wheelY != 0.0f) {
+            deltaItens = wheelY > 0.0f ? 1 : -1;
+        }
+        scrollOffset = std::clamp(scrollOffset - deltaItens, 0, maxOffset);
+        return true;
     }
         
     // Processa cliques do mouse

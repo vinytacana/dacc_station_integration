@@ -401,10 +401,18 @@ void GerenciarInputs::processarMouse(SDL_Event& evento, GerenciarScroll& estado,
      * wheel.x: Scroll horizontal (raro, trackpads/magic mouse)
      */
     if (evento.type == SDL_MOUSEWHEEL) {
-        estado.scrollY -= evento.wheel.y * 20; ///< Multiplica por 20 para velocidade adequada
-        estado.scrollX -= evento.wheel.x * 20;
+        constexpr int VELOCIDADE_SCROLL_MOUSE = 50;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        float wheelY = evento.wheel.preciseY != 0.0f ? evento.wheel.preciseY : static_cast<float>(evento.wheel.y);
+        float wheelX = evento.wheel.preciseX != 0.0f ? evento.wheel.preciseX : static_cast<float>(evento.wheel.x);
+#else
+        float wheelY = static_cast<float>(evento.wheel.y);
+        float wheelX = static_cast<float>(evento.wheel.x);
+#endif
+        estado.scrollY -= static_cast<int>(wheelY * VELOCIDADE_SCROLL_MOUSE);
+        estado.scrollX = std::max(0, estado.scrollX - static_cast<int>(wheelX * VELOCIDADE_SCROLL_MOUSE));
         /// Aplica limites após modificação
-        estado.scrollY = max(0, min(estado.scrollY, 2560 - 1280));
+        estado.scrollY = std::clamp(estado.scrollY, 0, 2560 - 1280);
     }
 
     /**

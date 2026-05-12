@@ -129,7 +129,7 @@ private:
     bool precisaRecalcularScroll = true;        /**< Flag para recalcular altura do conteúdo. */
     
     // Constantes de scroll
-    const int VELOCIDADE_SCROLL_MOUSE = 20;    /**< Pixels por tick de scroll do mouse. */
+    const int VELOCIDADE_SCROLL_MOUSE = 50;    /**< Pixels por tick de scroll do mouse. */
     const int VELOCIDADE_SCROLL_GAMEPAD = 30;  /**< Pixels por pressão de botão do gamepad. */
     const int LARGURA_BARRA_SCROLL = 12;       /**< Largura da barra de rolagem em pixels. */
     

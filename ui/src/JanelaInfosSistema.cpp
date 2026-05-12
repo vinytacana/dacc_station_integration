@@ -913,7 +913,12 @@ void JanelaInfosSistema::calcularAlturaConteudo(int alturaFinal) {
  */
 bool JanelaInfosSistema::processarEvento(SDL_Event& evento) {
     if (evento.type == SDL_MOUSEWHEEL) {
-        offsetScroll -= evento.wheel.y * VELOCIDADE_SCROLL_MOUSE;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        float wheelY = evento.wheel.preciseY != 0.0f ? evento.wheel.preciseY : static_cast<float>(evento.wheel.y);
+#else
+        float wheelY = static_cast<float>(evento.wheel.y);
+#endif
+        offsetScroll -= static_cast<int>(wheelY * VELOCIDADE_SCROLL_MOUSE);
         offsetScroll = std::clamp(offsetScroll, 0, maxScroll);
         return true;
     }
