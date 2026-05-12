@@ -1282,7 +1282,7 @@ bool JanelaRede::processarEvento(SDL_Event& evento) {
 /**
  * @brief Reseta o estado da janela para valores padrão.
  */
-void JanelaRede::resetar() {
+void JanelaRede::resetar(bool atualizarBackend) {
     indiceFocado = SDL_NumJoysticks() > 0 ? 0 : -1;
     scrollOffset = 0;
     tecladoVisivel = false;
@@ -1296,5 +1296,7 @@ void JanelaRede::resetar() {
         definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
         return;
     }
-    agendarSincronizacaoComBackend("Atualizando redes Wi-Fi...");
+    if (atualizarBackend) {
+        agendarSincronizacaoComBackend("Atualizando redes Wi-Fi...");
+    }
 }

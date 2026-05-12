@@ -353,28 +353,10 @@ void JanelaConfiguracao::notificarMudancaTemaEmTodasJanelas() {
         return;
     }
     
-    limparCacheTexto();
-    SDL_Delay(50);
-    
     liberarIconeBateria();
     carregarIconeBateria();
-    
     inicializarBotoes();
-    
     limparCacheTexto();
-
-    auto& tema = GerenciadorTemas::getInstance();
-    SDL_Color corFundo = tema.getCorFundo();
-    SDL_SetRenderDrawColor(renderer, corFundo.r, corFundo.g, corFundo.b, 255);
-    SDL_RenderClear(renderer);
-    
-    desenhar();
-    SDL_RenderPresent(renderer);
-    
-    SDL_Delay(100);
-    
-    desenhar();
-    SDL_RenderPresent(renderer);
 }
 
 /**
@@ -404,7 +386,7 @@ void JanelaConfiguracao::executarAcaoMenu(int indice) {
     }
 
     if (submenuAtivo == SubmenuConfig::REDE && janelaRede) {
-        janelaRede->resetar();
+        janelaRede->resetar(false);
     }
 
     if (submenuAtivo == SubmenuConfig::AUDIO_VIDEO && janelaAudioVideo) {
