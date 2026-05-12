@@ -124,13 +124,16 @@ private:
     
     std::vector<DispositivoAudio> dispositivos; /**< Lista de dispositivos de áudio disponíveis. */
     int indiceDispositivoAtual = 0;         /**< Índice do dispositivo atualmente selecionado. */
+    int indiceDispositivoOriginal = 0;      /**< Índice do dispositivo ativo ao abrir a tela. */
     
     // CONFIGURAÇÕES DE VÍDEO
     
     std::vector<Resolucao> resolucoes;      /**< Lista de resoluções disponíveis. */
     int indiceResolucaoAtual = 0;           /**< Índice da resolução atualmente selecionada. */
+    int indiceResolucaoOriginal = 0;        /**< Índice da resolução ativa ao abrir a tela. */
     
     float escalaJanela = 1.0f;              /**< Escala da janela (0.5x - 2.0x). */
+    float escalaOriginal = 1.0f;            /**< Escala ativa ao abrir a tela. */
     const float MIN_ESCALA = 0.5f;          /**< Escala mínima. */
     const float MAX_ESCALA = 2.0f;          /**< Escala máxima. */
     const float PASSO_ESCALA = 0.1f;        /**< Incremento/decremento da escala. */
@@ -180,6 +183,8 @@ private:
     
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
     std::string mensagemStatus;
+    std::string nomeMonitorCache = "HDMI-1";
+    std::string textoInfoMonitorCache = "Monitor: Indisponivel | Sessao: unknown";
     bool mensagemErro = false;
     
 
@@ -197,6 +202,21 @@ private:
      * @brief Inicializa a lista de resoluções disponíveis.
      */
     void inicializarResolucoes();
+
+    /**
+     * @brief Atualiza o texto de informações de monitor uma única vez fora do render.
+     */
+    void atualizarInfoMonitorCache();
+
+    /**
+     * @brief Indica se há alterações pendentes para aplicar.
+     */
+    bool aplicacaoPendente() const;
+
+    /**
+     * @brief Atualiza aparência/foco do botão Aplicar conforme estado sujo.
+     */
+    void atualizarEstadoBotaoAplicar();
 
     /**
      * @brief Renderiza o cabeçalho da seção.

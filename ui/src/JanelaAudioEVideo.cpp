@@ -14,7 +14,6 @@
 #include "ConfigLayout.hpp"
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
-#include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -71,6 +70,10 @@ SDL_Color corTextoSecundario(bool suportado, const SDL_Color& corPadrao) {
     return suportado ? corPadrao : SDL_Color{170, 170, 170, 255};
 }
 
+bool escalaIgual(float a, float b) {
+    return std::fabs(a - b) < 0.001f;
+}
+
 int calcularSegmentoSlider(int mouseX, const SDL_Rect& area, int totalSegmentos) {
     if (totalSegmentos <= 0 || area.w <= 0) {
         return 0;
@@ -103,6 +106,10 @@ JanelaAudioEVideo::JanelaAudioEVideo(const station_capabilities& capacidades)
     : capacidadesSistema(capacidades) {
     inicializarDispositivos();
     inicializarResolucoes();
+    indiceDispositivoOriginal = indiceDispositivoAtual;
+    indiceResolucaoOriginal = indiceResolucaoAtual;
+    escalaOriginal = escalaJanela;
+    atualizarInfoMonitorCache();
     inicializarBotoes();
 
     if (capacidadesSistema.volume_control) {
@@ -210,6 +217,7 @@ void JanelaAudioEVideo::inicializarResolucoes() {
     if (!capacidadesSistema.display_info) {
         resolucoes.push_back(Resolucao(1920, 1080));
         indiceResolucaoAtual = 0;
+        nomeMonitorCache = "HDMI-1";
         return;
     }
     
@@ -222,11 +230,16 @@ void JanelaAudioEVideo::inicializarResolucoes() {
         resolucoes.push_back(Resolucao(1920, 1080));
         resolucoes.push_back(Resolucao(1280, 720));
         indiceResolucaoAtual = 0;
+        nomeMonitorCache = "HDMI-1";
         return;
     }
 
     // 2. Pega o primeiro monitor conectado
     const auto& displayPrincipal = displays[0];
+    nomeMonitorCache = displayPrincipal.name.empty() ? "HDMI-1" : displayPrincipal.name;
+    if (capacidadesSistema.display_scale) {
+        escalaJanela = std::clamp(displayPrincipal.current_scale, MIN_ESCALA, MAX_ESCALA);
+    }
     
     // 3. Preenche o vetor da UI
     for (const auto& mode : displayPrincipal.modes) {
@@ -249,6 +262,45 @@ void JanelaAudioEVideo::inicializarResolucoes() {
     
     // Se o indice ficou invalido (-1), reseta
     if (indiceResolucaoAtual < 0) indiceResolucaoAtual = 0;
+}
+
+void JanelaAudioEVideo::atualizarInfoMonitorCache() {
+    std::string sessao = ::obter_tipo_sessao();
+    std::string monitor = capacidadesSistema.display_info ? nomeMonitorCache : "Indisponivel";
+    if (monitor.empty()) {
+        monitor = "Indisponivel";
+    }
+
+    std::stringstream ss;
+    ss << "Monitor: " << monitor << " | Sessao: " << (sessao.empty() ? "unknown" : sessao);
+    textoInfoMonitorCache = ss.str();
+}
+
+bool JanelaAudioEVideo::aplicacaoPendente() const {
+    bool audioMudou = capacidadesSistema.audio_select &&
+        indiceDispositivoAtual != indiceDispositivoOriginal;
+    bool resolucaoMudou = capacidadesSistema.display_resolution &&
+        indiceResolucaoAtual != indiceResolucaoOriginal;
+    bool escalaMudou = capacidadesSistema.display_scale &&
+        !escalaIgual(escalaJanela, escalaOriginal);
+
+    return audioMudou || resolucaoMudou || escalaMudou;
+}
+
+void JanelaAudioEVideo::atualizarEstadoBotaoAplicar() {
+    if (!btnAplicar) {
+        return;
+    }
+
+    auto& tema = GerenciadorTemas::getInstance();
+    if (aplicacaoPendente()) {
+        btnAplicar->setCor(tema.getCorBotaoNormal(), tema.getCorBotaoHover(), tema.getCorBotaoPressionado());
+        btnAplicar->setCorTexto(tema.getCorTextoNegrito());
+    } else {
+        btnAplicar->setCor({80, 80, 80, 140}, {80, 80, 80, 140}, {80, 80, 80, 140});
+        btnAplicar->setCorTexto({170, 170, 170, 255});
+        btnAplicar->setFocado(false);
+    }
 }
 
 /**
@@ -393,8 +445,9 @@ void JanelaAudioEVideo::desenhar(SDL_Renderer* renderer) {
     
 
     if (btnAplicar) {
+        atualizarEstadoBotaoAplicar();
         // Verifica se o foco está nele (índice 10)
-        if (indiceFocado == 10 && SDL_NumJoysticks() > 0) {
+        if (aplicacaoPendente() && indiceFocado == 10 && SDL_NumJoysticks() > 0) {
             btnAplicar->setFocado(true);
         } else {
             btnAplicar->setFocado(false);
@@ -1038,7 +1091,11 @@ void JanelaAudioEVideo::navegarParaCima() {
 void JanelaAudioEVideo::navegarParaBaixo() {
     if (indiceFocado < NUM_ELEMENTOS_FOCAVEIS - 1) {
         // Move dois índices para baixo (pula o par de botões)
-        indiceFocado = std::min(NUM_ELEMENTOS_FOCAVEIS - 1, indiceFocado + 2);
+        int proximoIndice = std::min(NUM_ELEMENTOS_FOCAVEIS - 1, indiceFocado + 2);
+        if (proximoIndice == 10 && !aplicacaoPendente()) {
+            return;
+        }
+        indiceFocado = proximoIndice;
         gerAudio.tocarSom("navegacao.wav");
     }
 }
@@ -1080,7 +1137,11 @@ void JanelaAudioEVideo::confirmarSelecao() {
         case 7: aumentarEscala(); break;
         case 8: diminuirBrilho(); break;
         case 9: aumentarBrilho(); break;
-        case 10: aplicarAlteracoes(); break;
+        case 10:
+            if (aplicacaoPendente()) {
+                aplicarAlteracoes();
+            }
+            break;
     }
 }
 
@@ -1240,8 +1301,8 @@ bool JanelaAudioEVideo::processarEvento(SDL_Event& evento) {
 
 
             //verifica clique no botao
-            if (btnAplicar && btnAplicar->contemPonto(mouseX, mouseY)) {
-                aplicarAlteracoes(); // <--- CHAMA AQUI
+            if (aplicacaoPendente() && btnAplicar && btnAplicar->contemPonto(mouseX, mouseY)) {
+                aplicarAlteracoes();
                 return true;
             }
         }
@@ -1433,10 +1494,16 @@ void JanelaAudioEVideo::resetar() {
 }
 
 void JanelaAudioEVideo::aplicarAlteracoes() {
+    if (!aplicacaoPendente()) {
+        return;
+    }
+
     definirMensagemStatus("Aplicando configuracoes...");
 
     // 1. Aplicar Áudio
-    if (capacidadesSistema.audio_select && !dispositivos.empty() && indiceDispositivoAtual >= 0) {
+    bool audioMudou = capacidadesSistema.audio_select &&
+        indiceDispositivoAtual != indiceDispositivoOriginal;
+    if (audioMudou && !dispositivos.empty() && indiceDispositivoAtual >= 0) {
         int idReal = dispositivos[indiceDispositivoAtual].id;
         if (idReal >= 0) {
             system_result audio = ::selecionar_dispositivo_audio_result(idReal);
@@ -1444,26 +1511,20 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
                 definirMensagemStatus(audio.mensagem.empty() ? "Falha ao definir audio." : audio.mensagem, true);
                 return;
             }
+            indiceDispositivoOriginal = indiceDispositivoAtual;
         }
     }
 
-    // ---------------------------------------------------------
-    // 2. PREPARAÇÃO DE VÍDEO (Detectar Monitor)
-    // ---------------------------------------------------------
-    // Precisamos saber o nome do monitor (ex: HDMI-1, eDP-1) dinamicamente
-    std::string nomeMonitor = "HDMI-1"; // Fallback padrão
-    
-    std::vector<DisplayOutput> displays;
-    if (capacidadesSistema.display_info && ::listar_displays_result(displays).ok && !displays.empty()) {
-        nomeMonitor = displays[0].name; // Pega o primeiro monitor conectado
-    } else {
-        std::cerr << "[UI] Aviso: Nenhum monitor detectado via backend. Tentando aplicar em " << nomeMonitor << "...\n";
-    }
+    std::string nomeMonitor = nomeMonitorCache.empty() ? "HDMI-1" : nomeMonitorCache;
+    bool resolucaoMudou = capacidadesSistema.display_resolution &&
+        indiceResolucaoAtual != indiceResolucaoOriginal;
+    bool escalaMudou = capacidadesSistema.display_scale &&
+        !escalaIgual(escalaJanela, escalaOriginal);
 
     // ---------------------------------------------------------
-    // 3. APLICAR RESOLUÇÃO
+    // 2. APLICAR RESOLUÇÃO
     // ---------------------------------------------------------
-    if (capacidadesSistema.display_resolution &&
+    if (resolucaoMudou &&
         !resolucoes.empty() && indiceResolucaoAtual >= 0 && indiceResolucaoAtual < (int)resolucoes.size()) {
         Resolucao alvo = resolucoes[indiceResolucaoAtual];
         
@@ -1477,13 +1538,13 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
             );
             return;
         }
+        indiceResolucaoOriginal = indiceResolucaoAtual;
     }
 
-  //---------------------------------------------------------
-    // 4. APLICAR ESCALA
     // ---------------------------------------------------------
-    // A nova função pede apenas (nome, float escala)
-    if (capacidadesSistema.display_scale) {
+    // 3. APLICAR ESCALA
+    // ---------------------------------------------------------
+    if (escalaMudou) {
         system_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
         if (!escala.ok) {
             definirMensagemStatus(
@@ -1492,10 +1553,11 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
             );
             return;
         }
+        escalaOriginal = escalaJanela;
     }
 
     // ---------------------------------------------------------
-    // 5. FEEDBACK
+    // 4. FEEDBACK
     // ---------------------------------------------------------
     definirMensagemStatus("Configuracoes aplicadas com sucesso.");
     gerAudio.tocarSom("select.wav");
@@ -1507,27 +1569,7 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
 void JanelaAudioEVideo::desenharInfoSistema(SDL_Renderer* renderer) {
     auto& tema = GerenciadorTemas::getInstance();
 
-    static Uint32 ultimoRefresh = 0;
-    static std::string sessaoCache = "unknown";
-    static std::string nomeMonitor = "Desconhecido";
-    Uint32 agora = SDL_GetTicks();
-    if (agora - ultimoRefresh > 2000 || ultimoRefresh == 0) {
-        sessaoCache = ::obter_tipo_sessao();
-        std::vector<DisplayOutput> displays;
-        if (capacidadesSistema.display_info && ::listar_displays_result(displays).ok && !displays.empty()) {
-            nomeMonitor = displays[0].name;
-        } else {
-            nomeMonitor = "Indisponivel";
-        }
-        ultimoRefresh = agora;
-    }
-
-    // Formata o texto: "Monitor: HDMI-1 | Sessão: wayland"
-    std::stringstream ss;
-    ss << "Monitor: " << nomeMonitor << " | Sessão: " << sessaoCache;
-    
-    // Desenha logo abaixo do título (ajuste Y conforme necessário)
-    desenharTexto(renderer, ss.str(), 
+    desenharTexto(renderer, textoInfoMonitorCache,
                   ConfigLayout::X(250), ConfigLayout::Y(200), // Posição
                   tema.getCorTextoNormal(), 
                   ConfigLayout::F(22)); // Fonte menor
