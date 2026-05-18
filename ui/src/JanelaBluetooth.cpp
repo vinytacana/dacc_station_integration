@@ -10,6 +10,8 @@
 #include "ConfigLayout.hpp"
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
+#include "LogManager.hpp"
+#include "SystemResultUi.hpp"
 
 #include <SDL2/SDL2_gfxPrimitives.h>
 #include <algorithm>
@@ -99,23 +101,11 @@ std::string labelTipo(TipoDispositivoBT tipo) {
 }
 
 std::string mensagemAmigavelBluetooth(const system_result& resultado, const std::string& fallback) {
-    if (resultado.ok) return resultado.mensagem;
-    if (resultado.codigo == "authentication_failed") return "Falha de autenticacao no dispositivo.";
-    if (resultado.codigo == "operation_timeout" || resultado.codigo == "bluetoothctl_timeout") return "O dispositivo demorou para responder.";
-    if (resultado.codigo == "adapter_unavailable") return "Nenhum adaptador Bluetooth disponivel.";
-    if (resultado.codigo == "adapter_blocked" || resultado.codigo == "adapter_soft_blocked" || resultado.codigo == "adapter_hard_blocked") {
-        return "Bluetooth bloqueado no sistema.";
-    }
-    if (resultado.codigo == "device_unavailable") return "Dispositivo Bluetooth indisponivel.";
-    if (resultado.codigo == "device_not_connected") return "Dispositivo nao esta conectado.";
-    return resultado.mensagem.empty() ? fallback : resultado.mensagem;
+    return mensagemResultadoUi(resultado, fallback);
 }
 
 void logErroBluetooth(const std::string& operacao, const system_result& resultado) {
-    if (resultado.ok) return;
-    std::cerr << "[BLUETOOTH][" << operacao << "] codigo=" << resultado.codigo
-              << " mensagem=" << resultado.mensagem
-              << " detalhes=" << resultado.detalhes << std::endl;
+    registrarResultadoErroUi("BLUETOOTH", operacao, resultado);
 }
 
 } // namespace
@@ -130,7 +120,7 @@ JanelaBluetooth::JanelaBluetooth(const station_capabilities& capacidades)
     } else {
         bluetoothAtivo = false;
         adaptadorDisponivel = false;
-        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Bluetooth"), true);
     }
     inicializarBotoes();
 }
@@ -151,7 +141,7 @@ void JanelaBluetooth::sincronizarComHardware() {
         bluetoothAtivo = false;
         adaptadorDisponivel = false;
         adaptadorBloqueado = false;
-        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Bluetooth"), true);
         return;
     }
 
@@ -190,9 +180,9 @@ void JanelaBluetooth::sincronizarComHardware() {
     }
 
     if (snapshot.vindo_do_cache && !snapshot.erro_codigo.empty()) {
-        std::cerr << "[BLUETOOTH][snapshot_cache] codigo=" << snapshot.erro_codigo
-                  << " mensagem=" << snapshot.erro_mensagem
-                  << " detalhes=" << snapshot.erro_detalhes << std::endl;
+        LOG_WARNING("[BLUETOOTH][snapshot_cache] codigo=" + snapshot.erro_codigo +
+                    " mensagem=" + snapshot.erro_mensagem +
+                    " detalhes=" + snapshot.erro_detalhes);
     }
 
     ajustarFocoAposMudancaListas();
@@ -722,7 +712,7 @@ void JanelaBluetooth::acionarItem(SecaoBluetooth secao, int indiceLocal, bool ac
 
 void JanelaBluetooth::toggleBluetooth() {
     if (!capacidadesSistema.bluetooth) {
-        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Bluetooth"), true);
         return;
     }
 
@@ -745,9 +735,10 @@ void JanelaBluetooth::toggleBluetooth() {
         definirMensagemStatus(
             resultado.ok
                 ? (estadoDesejado ? "Bluetooth ativado." : "Bluetooth desativado.")
-                : (resultado.mensagem.empty() ? "Falha ao alterar o estado do Bluetooth." : resultado.mensagem),
+                : mensagemAmigavelBluetooth(resultado, "Falha ao alterar o estado do Bluetooth."),
             !resultado.ok
         );
+        logErroBluetooth("toggle_estado", resultado);
         alternandoBluetooth = false;
     })) {
         alternandoBluetooth = false;
@@ -756,7 +747,7 @@ void JanelaBluetooth::toggleBluetooth() {
 
 void JanelaBluetooth::iniciarEscaneamento() {
     if (!capacidadesSistema.bluetooth) {
-        definirMensagemStatus("Bluetooth indisponivel: bluetoothctl nao detectado.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Bluetooth"), true);
         return;
     }
 
