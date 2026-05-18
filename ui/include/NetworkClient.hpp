@@ -56,8 +56,9 @@ public:
      * 
      * @param id Identificador único do jogo a ser iniciado
      * @param path Caminho completo do arquivo executável do jogo
+     * @return true se o comando foi validado e enviado ao gerenciador
      */
-    void sendStartGame(const std::string& id, const std::string& path);
+    bool sendStartGame(const std::string& id, const std::string& path);
                       
     /**
      * @brief Verifica e processa eventos recebidos do gerenciador
@@ -83,6 +84,11 @@ public:
      * @return true se há um jogo em execução, false caso contrário
      */
     bool isGameRunning() const { return isRunning_; }
+
+    /**
+     * @brief Indica se um comando de start foi enviado e ainda aguarda confirmação.
+     */
+    bool isLaunchPending() const { return launchPending_; }
     
     /**
      * @brief Obtém o identificador do jogo atualmente em execução
@@ -128,6 +134,7 @@ private:
      * false quando nenhum jogo está ativo. Inicializado como false.
      */
     bool isRunning_ = false;
+    bool launchPending_ = false;
     
     /**
      * @brief Identificador do jogo atualmente em execução
