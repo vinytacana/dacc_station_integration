@@ -15,6 +15,7 @@
 #include "GerenciadorTemas.hpp"
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
+#include "SystemResultUi.hpp"
 #include "TecladoVirtual.hpp"
 #include <exception>
 #include <iostream>
@@ -96,7 +97,7 @@ JanelaRede::JanelaRede(const station_capabilities& capacidades)
     : capacidadesSistema(capacidades) {
     inicializarBotoes();
     if (!capacidadesSistema.network) {
-        definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Rede"), true);
         return;
     }
     definirMensagemStatus("Carregando redes Wi-Fi...");
@@ -131,7 +132,8 @@ void JanelaRede::inicializarRedes() {
     std::vector<wifi_network> redes;
     system_result resultado = ::listar_wifi_result(redes);
     if (!resultado.ok && resultado.codigo != config_dacc::errors::WIFI_NO_NETWORKS) {
-        definirMensagemStatus(resultado.mensagem.empty() ? "Falha ao listar redes Wi-Fi." : resultado.mensagem, true);
+        definirMensagemStatus(mensagemResultadoUi(resultado, "Falha ao listar redes Wi-Fi."), true);
+        registrarResultadoErroUi("REDE", "listar_wifi", resultado);
         return;
     }
     redesDisponiveis = converterRedesWifi(redes, redeConectada);
@@ -139,7 +141,7 @@ void JanelaRede::inicializarRedes() {
 
 void JanelaRede::sincronizarComBackend() {
     if (!capacidadesSistema.network) {
-        definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Rede"), true);
         precisaAtualizarInterface = true;
         return;
     }
@@ -170,8 +172,9 @@ void JanelaRede::sincronizarComBackend() {
         mensagemStatus = "Conexao cabeada ativa. Scan Wi-Fi pausado.";
         mensagemErro = false;
     } else if (scanExecutado && !scanResult.ok && scanResult.codigo != config_dacc::errors::WIFI_NO_NETWORKS) {
-        mensagemStatus = scanResult.mensagem.empty() ? "Falha ao listar redes Wi-Fi." : scanResult.mensagem;
+        mensagemStatus = mensagemResultadoUi(scanResult, "Falha ao listar redes Wi-Fi.");
         mensagemErro = true;
+        registrarResultadoErroUi("REDE", "scan_wifi", scanResult);
     } else if (redesDisponiveis.empty() && wifiAtivo) {
         mensagemStatus = "Nenhuma rede Wi-Fi detectada.";
         mensagemErro = false;
@@ -742,7 +745,7 @@ void JanelaRede::desenharTelasenha(SDL_Renderer* renderer) {
  */
 void JanelaRede::toggleWifi() {
     if (!capacidadesSistema.network) {
-        definirMensagemStatus("Rede indisponivel: nmcli ausente.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Rede"), true);
         return;
     }
 
@@ -765,9 +768,10 @@ void JanelaRede::toggleWifi() {
         definirMensagemStatus(
             resultado.ok
                 ? (estadoDesejado ? "Wi-Fi ativado." : "Wi-Fi desativado.")
-                : (resultado.mensagem.empty() ? "Falha ao alterar o Wi-Fi." : resultado.mensagem),
+                : mensagemResultadoUi(resultado, "Falha ao alterar o Wi-Fi."),
             !resultado.ok
         );
+        registrarResultadoErroUi("REDE", "toggle_wifi", resultado);
     });
 }
 
@@ -871,9 +875,10 @@ void JanelaRede::confirmarSenha() {
         definirMensagemStatus(
             resultado.ok
                 ? ("Conectado a " + ssid + ".")
-                : (resultado.mensagem.empty() ? "Falha ao conectar na rede." : resultado.mensagem),
+                : mensagemResultadoUi(resultado, "Falha ao conectar na rede."),
             !resultado.ok
         );
+        registrarResultadoErroUi("REDE", "conectar_wifi_senha", resultado);
     });
 }
 
@@ -883,7 +888,7 @@ void JanelaRede::confirmarSenha() {
  */
 void JanelaRede::selecionarRede(int indice) {
     if (!capacidadesSistema.network) {
-        definirMensagemStatus("Rede indisponivel: nmcli ausente.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Rede"), true);
         return;
     }
 
@@ -912,9 +917,10 @@ void JanelaRede::selecionarRede(int indice) {
             definirMensagemStatus(
                 resultado.ok
                     ? ("Conectado a " + ssid + ".")
-                    : (resultado.mensagem.empty() ? "Falha ao conectar na rede." : resultado.mensagem),
+                    : mensagemResultadoUi(resultado, "Falha ao conectar na rede."),
                 !resultado.ok
             );
+            registrarResultadoErroUi("REDE", "conectar_wifi_aberta", resultado);
         });
     }
 }
@@ -1310,7 +1316,7 @@ void JanelaRede::resetar(bool atualizarBackend) {
     // Recarrega a imagem explicativa (pode ter mudado o tema)
     liberarImagemExplicativa();
     if (!capacidadesSistema.network) {
-        definirMensagemStatus("NetworkManager/nmcli indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Rede"), true);
         return;
     }
     if (atualizarBackend) {
