@@ -83,3 +83,15 @@ A lógica da UI está distribuída entre as pastas `include` (definições) e `s
 * **GerenciarInputs**: Captura eventos do sistema e os distribui para os componentes da UI, gerenciando o foco de navegação.
 * **Gerenciadores de Cache**: Classes como `GerenciadorImagens`, `GerenciadorFontes` e `GerenciadorTexturasTexto` garantem que os ativos da interface sejam carregados e mantidos na memória de forma otimizada para evitar "stuttering" durante a navegação.
 * **Janelas de Configuração**: `JanelaRede`, `JanelaBluetooth` e `JanelaAudioEVideo` consomem o backend `config-dacc` através de structs tipadas e `system_result`, mantendo parsing e comandos de sistema fora da camada visual. A janela de rede possui modo leve para conexão cabeada, evitando scans Wi-Fi quando Ethernet já está ativa.
+* **Mensagens de Resultado**: `SystemResultUi` centraliza a tradução de `system_result.codigo` para mensagens exibidas na UI e registra detalhes técnicos em log. Novas telas devem usar esse helper em vez de comparar strings de erro localmente.
+* **IPC com Process Manager**: `NetworkClient` valida ID/caminho antes de enviar `start`, mantém estado de lançamento pendente e só marca um jogo como rodando quando recebe `game_started`. O daemon atual ainda pode enviar apenas `game_finished`; nesse caso a UI limpa o estado pendente no encerramento ou na queda da conexão.
+
+## 5. Diagnóstico Operacional da UI
+
+Antes de uma demo ou execução em Raspberry Pi/desktop, confira:
+
+* Execute `make -C config-dacc test` para validar parsers e contratos do backend.
+* Execute `make -C ui` para garantir que a interface linka com `libdacc-config.a` e `libdacc-logs.a`.
+* Execute `./scripts/check_compatibility.sh` a partir da raiz do projeto para ver ferramentas ausentes como `nmcli`, `bluetoothctl`, `wpctl`, `xrandr`, `wlr-randr` e `brightnessctl`.
+* Se uma capacidade faltar, a UI deve desabilitar ou esconder a ação correspondente. O comportamento esperado é mensagem curta na tela e detalhe técnico no log.
+* Se o botão de jogar não inicia nada, verifique se `/tmp/gameman.sock` existe, se o Process Manager está rodando e se o caminho do jogo existe. A UI não deve assumir que o jogo iniciou só porque o comando foi enviado.
