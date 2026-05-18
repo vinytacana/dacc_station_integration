@@ -10,6 +10,7 @@
 #include "Utils.hpp"
 #include <cstring>
 #include <cerrno>
+#include <unistd.h>
 #include "LogManager.hpp"
 
 /// Caminho do socket Unix para comunicação IPC com o Process Manager
@@ -95,18 +96,30 @@ bool NetworkClient::connectToManager() {
  * @note Se não houver conexão ativa, tenta reconectar automaticamente.
  * @note O envio usa mutex internamente (UnixSocketClient) para thread-safety.
  */
-void NetworkClient::sendStartGame(const std::string& id, const std::string& path) {
+bool NetworkClient::sendStartGame(const std::string& id, const std::string& path) {
+    if (id.empty()) {
+        LOG_ERROR("Cannot start game: empty id.");
+        return false;
+    }
+
+    std::string absolutePath = MeuProjeto::caminho_absoluto_projeto(path);
+    if (absolutePath.empty() || access(absolutePath.c_str(), F_OK) != 0) {
+        LOG_ERROR("Cannot start game: executable path not found: " + absolutePath);
+        return false;
+    }
+
     /// Tenta reconectar se não houver conexão ativa
     if (!connectToManager()) {
         LOG_WARNING("Cannot start game: Not connected.");
-        return;
+        launchPending_ = false;
+        return false;
     }
 
     /// Constrói mensagem JSON com dados do jogo
     json j;
     j["action"] = "start";
     j["id"] = id;
-    j["path"] = MeuProjeto::caminho_absoluto_projeto(path);
+    j["path"] = absolutePath;
 
     /// Serializa para string e envia via socket
     std::string msg = j.dump();
@@ -115,11 +128,12 @@ void NetworkClient::sendStartGame(const std::string& id, const std::string& path
     LOG_INFO("Start command sent for: " + id);
     
     /**
-     * Optimistic Update: Atualiza estado local imediatamente sem aguardar confirmação.
-     * Melhora responsividade da UI, assumindo que o comando será executado com sucesso.
+     * Mantem um estado pendente ate o Process Manager confirmar ou encerrar o processo.
+     * O daemon atual pode nao enviar game_started; nesse caso, game_finished ainda limpa o estado.
      */
-    isRunning_ = true;
+    launchPending_ = true;
     runningGameId_ = id;
+    return true;
 }
 
 /**
@@ -158,12 +172,20 @@ void NetworkClient::checkEvents() {
                 if (evt == "game_finished" || evt == "process_exited") {
                     LOG_INFO(">>> JOGO TERMINOU! <<<");
                     isRunning_ = false;
+                    launchPending_ = false;
                     runningGameId_ = "";
                 }
                 /// Evento de confirmação de inicialização
                 else if (evt == "game_started") {
-                     isRunning_ = true;
-                     if(j.contains("id")) runningGameId_ = j["id"];
+                    isRunning_ = true;
+                    launchPending_ = false;
+                    if(j.contains("id")) runningGameId_ = j["id"];
+                }
+                else if (evt == "game_start_failed") {
+                    LOG_ERROR("Game start failed event received.");
+                    isRunning_ = false;
+                    launchPending_ = false;
+                    runningGameId_ = "";
                 }
             }
         } catch (const std::exception& e) {
@@ -173,6 +195,9 @@ void NetworkClient::checkEvents() {
     } else if (bytes_read == 0) {
         /// Socket fechado pelo servidor
         LOG_INFO("Server disconnected.");
+        isRunning_ = false;
+        launchPending_ = false;
+        runningGameId_.clear();
         client_.reset();
     } else {
         /**
@@ -182,6 +207,9 @@ void NetworkClient::checkEvents() {
          */
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             LOG_ERROR("Recv error: " + std::string(strerror(errno)));
+            isRunning_ = false;
+            launchPending_ = false;
+            runningGameId_.clear();
             client_.reset();
         }
     }
