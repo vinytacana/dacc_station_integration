@@ -14,6 +14,7 @@
 #include "ConfigLayout.hpp"
 #include "GerenciadorAudio.hpp"
 #include "GerenciadorImagens.hpp"
+#include "SystemResultUi.hpp"
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -119,7 +120,7 @@ JanelaAudioEVideo::JanelaAudioEVideo(const station_capabilities& capacidades)
             volumeGeral = volume;
         } else {
             definirMensagemStatus(
-                volumeResult.mensagem.empty() ? "Volume indisponivel." : volumeResult.mensagem,
+                mensagemResultadoUi(volumeResult, "Volume indisponivel."),
                 true
             );
         }
@@ -134,7 +135,7 @@ JanelaAudioEVideo::JanelaAudioEVideo(const station_capabilities& capacidades)
             brilhoGeral = std::clamp(brilho, 0, MAX_BRILHO);
         } else {
             definirMensagemStatus(
-                brilhoResult.mensagem.empty() ? "Brilho indisponivel." : brilhoResult.mensagem,
+                mensagemResultadoUi(brilhoResult, "Brilho indisponivel."),
                 true
             );
         }
@@ -185,9 +186,11 @@ void JanelaAudioEVideo::inicializarDispositivos() {
     // Fallback se não encontrar nada
     if (!resultado.ok || listaDoSistema.empty()) {
         dispositivos.push_back(DispositivoAudio(
-            resultado.mensagem.empty() ? "Nenhum dispositivo encontrado" : resultado.mensagem,
+            resultado.ok ? "Nenhum dispositivo encontrado"
+                         : mensagemResultadoUi(resultado, "Nenhum dispositivo encontrado"),
             -1
         ));
+        registrarResultadoErroUi("AUDIO_VIDEO", "listar_audio", resultado);
         indiceDispositivoAtual = 0;
         return;
     }
@@ -816,7 +819,7 @@ void JanelaAudioEVideo::desenharBarraProgresso(SDL_Renderer* renderer, int x, in
  */
 void JanelaAudioEVideo::aumentarVolume() {
     if (!capacidadesSistema.volume_control) {
-        definirMensagemStatus("Controle de volume indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de volume"), true);
         return;
     }
 
@@ -827,9 +830,10 @@ void JanelaAudioEVideo::aumentarVolume() {
         system_result resultado = ::aumentar_volume_result();
         if (!resultado.ok) {
             definirMensagemStatus(
-                resultado.mensagem.empty() ? "Falha ao aumentar volume." : resultado.mensagem,
+                mensagemResultadoUi(resultado, "Falha ao aumentar volume."),
                 true
             );
+            registrarResultadoErroUi("AUDIO_VIDEO", "aumentar_volume", resultado);
             return;
         }
     }
@@ -840,7 +844,7 @@ void JanelaAudioEVideo::aumentarVolume() {
  */
 void JanelaAudioEVideo::diminuirVolume() {
     if (!capacidadesSistema.volume_control) {
-        definirMensagemStatus("Controle de volume indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de volume"), true);
         return;
     }
 
@@ -850,9 +854,10 @@ void JanelaAudioEVideo::diminuirVolume() {
         system_result resultado = ::diminuir_volume_result();
         if (!resultado.ok) {
             definirMensagemStatus(
-                resultado.mensagem.empty() ? "Falha ao diminuir volume." : resultado.mensagem,
+                mensagemResultadoUi(resultado, "Falha ao diminuir volume."),
                 true
             );
+            registrarResultadoErroUi("AUDIO_VIDEO", "diminuir_volume", resultado);
             return;
         }
     }
@@ -875,16 +880,17 @@ void JanelaAudioEVideo::atualizarVolumeVisual(int novoVolume) {
 
 bool JanelaAudioEVideo::aplicarVolumeAtual() {
     if (!capacidadesSistema.volume_control) {
-        definirMensagemStatus("Controle de volume indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de volume"), true);
         return false;
     }
 
     system_result resultado = ::definir_volume_result(volumeGeral);
     if (!resultado.ok) {
         definirMensagemStatus(
-            resultado.mensagem.empty() ? "Falha ao definir volume." : resultado.mensagem,
+            mensagemResultadoUi(resultado, "Falha ao definir volume."),
             true
         );
+        registrarResultadoErroUi("AUDIO_VIDEO", "definir_volume", resultado);
         return false;
     }
     return true;
@@ -895,7 +901,7 @@ bool JanelaAudioEVideo::aplicarVolumeAtual() {
  */
 void JanelaAudioEVideo::aumentarBrilho() {
     if (!capacidadesSistema.brightness) {
-        definirMensagemStatus("Controle de brilho indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de brilho"), true);
         return;
     }
 
@@ -910,7 +916,7 @@ void JanelaAudioEVideo::aumentarBrilho() {
  */
 void JanelaAudioEVideo::diminuirBrilho() {
     if (!capacidadesSistema.brightness) {
-        definirMensagemStatus("Controle de brilho indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de brilho"), true);
         return;
     }
 
@@ -937,16 +943,17 @@ void JanelaAudioEVideo::atualizarBrilhoVisual(int novoBrilho) {
 
 bool JanelaAudioEVideo::aplicarBrilhoAtual() {
     if (!capacidadesSistema.brightness) {
-        definirMensagemStatus("Controle de brilho indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de brilho"), true);
         return false;
     }
 
     system_result resultado = ::definir_brilho_result(brilhoGeral);
     if (!resultado.ok) {
         definirMensagemStatus(
-            resultado.mensagem.empty() ? "Falha ao definir brilho." : resultado.mensagem,
+            mensagemResultadoUi(resultado, "Falha ao definir brilho."),
             true
         );
+        registrarResultadoErroUi("AUDIO_VIDEO", "definir_brilho", resultado);
         return false;
     }
     return true;
@@ -957,7 +964,7 @@ bool JanelaAudioEVideo::aplicarBrilhoAtual() {
  */
 void JanelaAudioEVideo::dispositivoAnterior() {
     if (!capacidadesSistema.audio_select) {
-        definirMensagemStatus("Selecao de dispositivo de audio indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Selecao de dispositivo de audio"), true);
         return;
     }
     if (dispositivos.empty()) return;
@@ -975,7 +982,7 @@ void JanelaAudioEVideo::dispositivoAnterior() {
  */
 void JanelaAudioEVideo::dispositivoProximo() {
     if (!capacidadesSistema.audio_select) {
-        definirMensagemStatus("Selecao de dispositivo de audio indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Selecao de dispositivo de audio"), true);
         return;
     }
     if (dispositivos.empty()) return;
@@ -992,7 +999,7 @@ void JanelaAudioEVideo::dispositivoProximo() {
  */
 void JanelaAudioEVideo::resolucaoAnterior() {
     if (!capacidadesSistema.display_resolution) {
-        definirMensagemStatus("Controle de resolucao indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de resolucao"), true);
         return;
     }
     if (indiceResolucaoAtual > 0) {
@@ -1008,7 +1015,7 @@ void JanelaAudioEVideo::resolucaoAnterior() {
  */
 void JanelaAudioEVideo::resolucaoProxima() {
     if (!capacidadesSistema.display_resolution) {
-        definirMensagemStatus("Controle de resolucao indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de resolucao"), true);
         return;
     }
     if (indiceResolucaoAtual < (int)resolucoes.size() - 1) {
@@ -1024,7 +1031,7 @@ void JanelaAudioEVideo::resolucaoProxima() {
  */
 void JanelaAudioEVideo::aumentarEscala() {
     if (!capacidadesSistema.display_scale) {
-        definirMensagemStatus("Controle de escala indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de escala"), true);
         return;
     }
     if (escalaJanela < MAX_ESCALA) {
@@ -1038,7 +1045,7 @@ void JanelaAudioEVideo::aumentarEscala() {
  */
 void JanelaAudioEVideo::diminuirEscala() {
     if (!capacidadesSistema.display_scale) {
-        definirMensagemStatus("Controle de escala indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de escala"), true);
         return;
     }
     if (escalaJanela > MIN_ESCALA) {
@@ -1052,7 +1059,7 @@ void JanelaAudioEVideo::diminuirEscala() {
  */
 void JanelaAudioEVideo::setEscala(float novaEscala) {
     if (!capacidadesSistema.display_scale) {
-        definirMensagemStatus("Controle de escala indisponivel.", true);
+        definirMensagemStatus(mensagemRecursoIndisponivelUi("Controle de escala"), true);
         return;
     }
     escalaJanela = std::clamp(novaEscala, MIN_ESCALA, MAX_ESCALA);
@@ -1508,7 +1515,8 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         if (idReal >= 0) {
             system_result audio = ::selecionar_dispositivo_audio_result(idReal);
             if (!audio.ok) {
-                definirMensagemStatus(audio.mensagem.empty() ? "Falha ao definir audio." : audio.mensagem, true);
+                definirMensagemStatus(mensagemResultadoUi(audio, "Falha ao definir audio."), true);
+                registrarResultadoErroUi("AUDIO_VIDEO", "selecionar_audio", audio);
                 return;
             }
             indiceDispositivoOriginal = indiceDispositivoAtual;
@@ -1533,9 +1541,10 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         system_result resolucao = ::alterarResolucao_result(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
         if (!resolucao.ok) {
             definirMensagemStatus(
-                resolucao.mensagem.empty() ? "Falha ao definir resolucao." : resolucao.mensagem,
+                mensagemResultadoUi(resolucao, "Falha ao definir resolucao."),
                 true
             );
+            registrarResultadoErroUi("AUDIO_VIDEO", "alterar_resolucao", resolucao);
             return;
         }
         indiceResolucaoOriginal = indiceResolucaoAtual;
@@ -1548,9 +1557,10 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         system_result escala = ::alterarEscala_result(nomeMonitor, escalaJanela);
         if (!escala.ok) {
             definirMensagemStatus(
-                escala.mensagem.empty() ? "Falha ao definir escala." : escala.mensagem,
+                mensagemResultadoUi(escala, "Falha ao definir escala."),
                 true
             );
+            registrarResultadoErroUi("AUDIO_VIDEO", "alterar_escala", escala);
             return;
         }
         escalaOriginal = escalaJanela;
