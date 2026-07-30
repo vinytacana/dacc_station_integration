@@ -75,16 +75,6 @@ bool escalaIgual(float a, float b) {
     return std::fabs(a - b) < 0.001f;
 }
 
-int calcularSegmentoSlider(int mouseX, const SDL_Rect& area, int totalSegmentos) {
-    if (totalSegmentos <= 0 || area.w <= 0) {
-        return 0;
-    }
-
-    int posicao = std::clamp(mouseX - area.x, 0, area.w - 1);
-    int segmento = (posicao * totalSegmentos) / area.w + 1;
-    return std::clamp(segmento, 0, totalSegmentos);
-}
-
 } // namespace
 
 /**
@@ -142,11 +132,6 @@ JanelaAudioEVideo::JanelaAudioEVideo(const station_capabilities& capacidades)
     } else {
         brilhoGeral = 0;
     }
-    
-    // Inicializa áreas de interação das barras
-    areaBarraVolume = {0, 0, 0, 0};
-    areaBarraEscala = {0, 0, 0, 0};
-    areaBarraBrilho = {0, 0, 0, 0};
 }
 
 /**
@@ -513,24 +498,20 @@ void JanelaAudioEVideo::desenharControleVolume(SDL_Renderer* renderer) {
     btnVolumeDecremento->desenhar(renderer);
     btnVolumeIncremento->desenhar(renderer);
     
-    // Calcula quantas barras estão preenchidas
-    int barrasPreenchidas = (volumeGeral * NUM_BARRAS_VOLUME) / MAX_VOLUME;
-    
-    // Define área da barra para interação com mouse
-    int barraX = ConfigLayout::X(LAYOUT_BARRA_X);
-    int barraY = ConfigLayout::Y(controleY(0));
-    int barraLargura = ConfigLayout::X(LAYOUT_BARRA_LARGURA);
-    int barraAltura = ConfigLayout::Y(LAYOUT_BOTAO_ALTURA);
-    
-    areaBarraVolume = {barraX, barraY, barraLargura, barraAltura};
-    
-    // Desenha a barra de volume
-    SDL_Color corPreenchida = capacidadesSistema.volume_control ? tema.getCorDestaque() : SDL_Color{120, 120, 120, 160};
-    SDL_Color corVazia = capacidadesSistema.volume_control ? tema.getCorBotaoNormal() : SDL_Color{70, 70, 70, 130};
-    
-    desenharBarraProgresso(renderer, barraX, barraY, barraLargura, barraAltura,
-                          NUM_BARRAS_VOLUME, barrasPreenchidas, 
-                          corPreenchida, corVazia);
+    SDL_Rect areaSlider{
+        ConfigLayout::X(LAYOUT_BARRA_X),
+        ConfigLayout::Y(controleY(0)),
+        ConfigLayout::X(LAYOUT_BARRA_LARGURA),
+        ConfigLayout::Y(LAYOUT_BOTAO_ALTURA)
+    };
+    controleSliderVolume.desenhar(
+        renderer,
+        areaSlider,
+        volumeGeral,
+        capacidadesSistema.volume_control,
+        tema.getCorDestaque(),
+        tema.getCorBotaoNormal()
+    );
     
     // Texto do percentual
     std::stringstream ss;
@@ -652,38 +633,32 @@ void JanelaAudioEVideo::desenharControleEscala(SDL_Renderer* renderer) {
     btnEscalaDecremento->desenhar(renderer);
     btnEscalaIncremento->desenhar(renderer);
     
-    // Calcula quantas barras estão preenchidas
-    // Escala vai de 0.5 a 2.0, então normalizamos para 0-15 barras
-    float escalaRelativa = (escalaJanela - MIN_ESCALA) / (MAX_ESCALA - MIN_ESCALA);
-    int barrasPreenchidas = static_cast<int>(escalaRelativa * NUM_BARRAS_ESCALA);
-    
-    // Define área da barra para interação com mouse
-    int barraX = ConfigLayout::X(LAYOUT_BARRA_X);
-    int barraY = ConfigLayout::Y(controleY(3));
-    int barraLargura = ConfigLayout::X(LAYOUT_BARRA_LARGURA);
-    int barraAltura = ConfigLayout::Y(LAYOUT_BOTAO_ALTURA);
-    
-    areaBarraEscala = {barraX, barraY, barraLargura, barraAltura};
-    
-    // Desenha a barra de escala
-    SDL_Color corPreenchida = capacidadesSistema.display_scale ? tema.getCorDestaque() : SDL_Color{120, 120, 120, 160};
-    SDL_Color corVazia = capacidadesSistema.display_scale ? tema.getCorBotaoNormal() : SDL_Color{70, 70, 70, 130};
-    
-    desenharBarraProgresso(renderer, barraX, barraY, barraLargura, barraAltura,
-                          NUM_BARRAS_ESCALA, barrasPreenchidas, 
-                          corPreenchida, corVazia);
+    SDL_Rect areaSlider{
+        ConfigLayout::X(LAYOUT_BARRA_X),
+        ConfigLayout::Y(controleY(4)),
+        ConfigLayout::X(LAYOUT_BARRA_LARGURA),
+        ConfigLayout::Y(LAYOUT_BOTAO_ALTURA)
+    };
+    controleSliderEscala.desenhar(
+        renderer,
+        areaSlider,
+        escalaJanela,
+        capacidadesSistema.display_scale,
+        tema.getCorDestaque(),
+        tema.getCorBotaoNormal()
+    );
     
     // Texto da escala
     std::stringstream ss;
     ss << std::fixed << std::setprecision(1) << escalaJanela << "x";
     desenharTexto(renderer, ss.str(),
-                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(3) + 10),
+                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(4) + 10),
                   corTextoSecundario(capacidadesSistema.display_scale, tema.getCorTextoNegrito()),
                   ConfigLayout::F(28));
 
     if (!capacidadesSistema.display_scale) {
         desenharTexto(renderer, "Escala indisponivel nesta sessao",
-                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(3) + 60),
+                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(4) + 50),
                       SDL_Color{170, 170, 170, 255}, ConfigLayout::F(20));
     }
 }
@@ -714,32 +689,31 @@ void JanelaAudioEVideo::desenharControleBrilho(SDL_Renderer* renderer) {
     btnBrilhoDecremento->desenhar(renderer);
     btnBrilhoIncremento->desenhar(renderer);
 
-    int barrasPreenchidas = (brilhoGeral * NUM_BARRAS_BRILHO) / MAX_BRILHO;
-
-    int barraX = ConfigLayout::X(LAYOUT_BARRA_X);
-    int barraY = ConfigLayout::Y(controleY(4));
-    int barraLargura = ConfigLayout::X(LAYOUT_BARRA_LARGURA);
-    int barraAltura = ConfigLayout::Y(LAYOUT_BOTAO_ALTURA);
-
-    areaBarraBrilho = {barraX, barraY, barraLargura, barraAltura};
-
-    SDL_Color corPreenchida = capacidadesSistema.brightness ? tema.getCorDestaque() : SDL_Color{120, 120, 120, 160};
-    SDL_Color corVazia = capacidadesSistema.brightness ? tema.getCorBotaoNormal() : SDL_Color{70, 70, 70, 130};
-
-    desenharBarraProgresso(renderer, barraX, barraY, barraLargura, barraAltura,
-                          NUM_BARRAS_BRILHO, barrasPreenchidas,
-                          corPreenchida, corVazia);
+    SDL_Rect areaSlider{
+        ConfigLayout::X(LAYOUT_BARRA_X),
+        ConfigLayout::Y(controleY(5)),
+        ConfigLayout::X(LAYOUT_BARRA_LARGURA),
+        ConfigLayout::Y(LAYOUT_BOTAO_ALTURA)
+    };
+    controleSliderBrilho.desenhar(
+        renderer,
+        areaSlider,
+        brilhoGeral,
+        capacidadesSistema.brightness,
+        tema.getCorDestaque(),
+        tema.getCorBotaoNormal()
+    );
 
     std::stringstream ss;
     ss << brilhoGeral << "%";
     desenharTexto(renderer, ss.str(),
-                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(4) + 10),
+                  ConfigLayout::X(LAYOUT_VALOR_X), ConfigLayout::Y(controleY(5) + 10),
                   corTextoSecundario(capacidadesSistema.brightness, tema.getCorTextoNegrito()),
                   ConfigLayout::F(26));
 
     if (!capacidadesSistema.brightness) {
         desenharTexto(renderer, "Brilho indisponivel neste ambiente",
-                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(4) + 60),
+                      ConfigLayout::X(LAYOUT_BARRA_X), ConfigLayout::Y(controleY(5) + 50),
                       SDL_Color{170, 170, 170, 255}, ConfigLayout::F(18));
     }
 }
@@ -788,30 +762,6 @@ void JanelaAudioEVideo::desenharImagemExplicativa(SDL_Renderer* renderer) {
     
     // 4. Renderiza
     SDL_RenderCopy(renderer, texturaExplicacao, nullptr, &destExplicacao);
-}
-
-/**
- * @brief Desenha uma barra de progresso visual com segmentos.
- */
-void JanelaAudioEVideo::desenharBarraProgresso(SDL_Renderer* renderer, int x, int y, 
-                                               int larguraTotal, int altura, int numBarras, 
-                                               int barrasPreenchidas, SDL_Color corPreenchida, 
-                                               SDL_Color corVazia) {
-    const int espacamento = 4; // Espaço entre as barrinhas
-    int larguraBarra = (larguraTotal - (espacamento * (numBarras - 1))) / numBarras;
-    
-    for (int i = 0; i < numBarras; i++) {
-        int posX = x + i * (larguraBarra + espacamento);
-        
-        SDL_Rect barra = {posX, y, larguraBarra, altura};
-        
-        // Escolhe a cor baseado no preenchimento
-        SDL_Color cor = (i < barrasPreenchidas) ? corPreenchida : corVazia;
-        
-        // Desenha a barra com bordas arredondadas (simulado com retângulos)
-        SDL_SetRenderDrawColor(renderer, cor.r, cor.g, cor.b, cor.a);
-        SDL_RenderFillRect(renderer, &barra);
-    }
 }
 
 /**
@@ -1153,40 +1103,14 @@ void JanelaAudioEVideo::confirmarSelecao() {
 }
 
 /**
- * @brief Calcula o volume baseado na posição X do mouse.
- */
-int JanelaAudioEVideo::calcularVolumeAPartirDoPonto(int mouseX) {
-    int segmento = calcularSegmentoSlider(mouseX, areaBarraVolume, NUM_BARRAS_VOLUME);
-    return segmento * (MAX_VOLUME / NUM_BARRAS_VOLUME);
-}
-
-/**
- * @brief Calcula a escala baseada na posição X do mouse.
- */
-float JanelaAudioEVideo::calcularEscalaAPartirDoPonto(int mouseX) {
-    int segmento = calcularSegmentoSlider(mouseX, areaBarraEscala, NUM_BARRAS_ESCALA);
-    float passoVisual = (MAX_ESCALA - MIN_ESCALA) / NUM_BARRAS_ESCALA;
-    return MIN_ESCALA + (segmento * passoVisual);
-}
-
-/**
- * @brief Calcula o brilho baseado na posição X do mouse.
- */
-int JanelaAudioEVideo::calcularBrilhoAPartirDoPonto(int mouseX) {
-    int segmento = calcularSegmentoSlider(mouseX, areaBarraBrilho, NUM_BARRAS_BRILHO);
-    return segmento * (MAX_BRILHO / NUM_BARRAS_BRILHO);
-}
-
-/**
  * @brief Processa clique na barra de volume.
  */
 bool JanelaAudioEVideo::processarCliqueBarraVolume(int mouseX, int mouseY, bool aplicarBackend) {
     if (!capacidadesSistema.volume_control) {
         return false;
     }
-    if (mouseX >= areaBarraVolume.x && mouseX <= areaBarraVolume.x + areaBarraVolume.w &&
-        mouseY >= areaBarraVolume.y && mouseY <= areaBarraVolume.y + areaBarraVolume.h) {
-        int novoVolume = calcularVolumeAPartirDoPonto(mouseX);
+    if (controleSliderVolume.contemPonto(mouseX, mouseY)) {
+        int novoVolume = static_cast<int>(std::lround(controleSliderVolume.calcularValor(mouseX)));
         atualizarVolumeVisual(novoVolume);
         if (aplicarBackend && aplicarVolumeAtual()) {
             gerAudio.tocarSom("select.wav");
@@ -1203,9 +1127,8 @@ bool JanelaAudioEVideo::processarCliqueBarraEscala(int mouseX, int mouseY) {
     if (!capacidadesSistema.display_scale) {
         return false;
     }
-    if (mouseX >= areaBarraEscala.x && mouseX <= areaBarraEscala.x + areaBarraEscala.w &&
-        mouseY >= areaBarraEscala.y && mouseY <= areaBarraEscala.y + areaBarraEscala.h) {
-        float novaEscala = calcularEscalaAPartirDoPonto(mouseX);
+    if (controleSliderEscala.contemPonto(mouseX, mouseY)) {
+        float novaEscala = static_cast<float>(controleSliderEscala.calcularValor(mouseX));
         setEscala(novaEscala);
         gerAudio.tocarSom("select.wav");
         return true;
@@ -1220,9 +1143,8 @@ bool JanelaAudioEVideo::processarCliqueBarraBrilho(int mouseX, int mouseY, bool 
     if (!capacidadesSistema.brightness) {
         return false;
     }
-    if (mouseX >= areaBarraBrilho.x && mouseX <= areaBarraBrilho.x + areaBarraBrilho.w &&
-        mouseY >= areaBarraBrilho.y && mouseY <= areaBarraBrilho.y + areaBarraBrilho.h) {
-        int novoBrilho = calcularBrilhoAPartirDoPonto(mouseX);
+    if (controleSliderBrilho.contemPonto(mouseX, mouseY)) {
+        int novoBrilho = static_cast<int>(std::lround(controleSliderBrilho.calcularValor(mouseX)));
         atualizarBrilhoVisual(novoBrilho);
         if (aplicarBackend && aplicarBrilhoAtual()) {
             gerAudio.tocarSom("select.wav");
