@@ -49,6 +49,7 @@ void testar_xrandr_basico() {
     exigir(displays[0].name == "HDMI-1", "deve preservar nome xrandr");
     exigir(displays[0].backend_id == "HDMI-1", "deve preencher backend_id xrandr");
     exigir(displays[0].backend == display_backend::xrandr, "deve marcar backend xrandr");
+    exigir(displays[0].primary, "deve identificar a saida primaria do xrandr");
     exigir(displays[0].modes.size() == 2, "deve parsear modos xrandr");
     exigir(displays[0].current_mode.width == 1920, "deve detectar modo atual xrandr");
 }

@@ -73,6 +73,7 @@ struct Resolucao {
  * de áudio e vídeo, incluindo:
  * - Controle de volume geral (0-100%) com barra visual progressiva
  * - Seleção de dispositivo de saída de áudio
+ * - Seleção do monitor onde o DACC Station será exibido
  * - Seleção de resolução de tela
  * - Controle de escala da janela (0.5x - 2.0x) com barra visual
  * - Navegação via controle ou mouse
@@ -87,7 +88,10 @@ public:
     /**
      * @brief Constrói a janela usando capacidades já detectadas pelo menu principal.
      */
-    explicit JanelaAudioEVideo(const station_capabilities& capacidades);
+    explicit JanelaAudioEVideo(
+        const station_capabilities& capacidades,
+        SDL_Window* janelaPrincipal = nullptr
+    );
 
     /**
      * @brief Destrutor da classe JanelaAudioEVideo.
@@ -130,7 +134,11 @@ private:
     int indiceDispositivoOriginal = 0;      /**< Índice do dispositivo ativo ao abrir a tela. */
     
     // CONFIGURAÇÕES DE VÍDEO
-    
+
+    std::vector<DisplayOutput> monitores;    /**< Monitores conectados detectados pelo backend. */
+    int indiceMonitorAtual = 0;             /**< Monitor selecionado na interface. */
+    int indiceMonitorOriginal = 0;          /**< Monitor ativo ao abrir/aplicar a tela. */
+
     std::vector<Resolucao> resolucoes;      /**< Lista de resoluções disponíveis. */
     int indiceResolucaoAtual = 0;           /**< Índice da resolução atualmente selecionada. */
     int indiceResolucaoOriginal = 0;        /**< Índice da resolução ativa ao abrir a tela. */
@@ -150,6 +158,9 @@ private:
     
     std::unique_ptr<Botao> btnDispositivoAnterior;  /**< Botão para dispositivo anterior. */
     std::unique_ptr<Botao> btnDispositivoProximo;   /**< Botão para próximo dispositivo. */
+
+    std::unique_ptr<Botao> btnMonitorAnterior;   /**< Botão para monitor anterior. */
+    std::unique_ptr<Botao> btnMonitorProximo;    /**< Botão para próximo monitor. */
     
     std::unique_ptr<Botao> btnResolucaoAnterior;    /**< Botão para resolução anterior. */
     std::unique_ptr<Botao> btnResolucaoProxima;     /**< Botão para próxima resolução. */
@@ -163,7 +174,8 @@ private:
     // CONTROLE DE NAVEGAÇÃO
     
     int indiceFocado = -1;                  /**< Índice do elemento atualmente focado. */
-    const int NUM_ELEMENTOS_FOCAVEIS = 11;  /**< Total de elementos navegáveis. */
+    static constexpr int NUM_ELEMENTOS_FOCAVEIS = 13;
+    static constexpr int INDICE_FOCO_APLICAR = 12;
     
     // Controle de Input de Periféricos
     Uint32 ultimoInputAnalogico = 0;        /**< Timestamp do último input analógico. */
@@ -176,12 +188,13 @@ private:
     int volumeAntesArrasto = 80;            /**< Valor do volume antes de iniciar um arrasto. */
     int brilhoAntesArrasto = 100;           /**< Valor do brilho antes de iniciar um arrasto. */
     station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
+    SDL_Window* janelaPrincipal = nullptr;   /**< Janela principal, não possuída por este componente. */
     
     // IMAGEM EXPLICATIVA
     
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
     std::string mensagemStatus;
-    std::string nomeMonitorCache = "HDMI-1";
+    std::string nomeMonitorCache;
     std::string textoInfoMonitorCache = "Monitor: Indisponivel | Sessao: unknown";
     bool mensagemErro = false;
     
@@ -195,6 +208,11 @@ private:
      * @brief Inicializa a lista de dispositivos de áudio disponíveis.
      */
     void inicializarDispositivos();
+
+    /**
+     * @brief Carrega os monitores conectados e identifica o monitor primário.
+     */
+    void inicializarMonitores();
 
     /**
      * @brief Inicializa a lista de resoluções disponíveis.
@@ -233,6 +251,12 @@ private:
      * @param renderer Renderizador SDL.
      */
     void desenharSeletorDispositivo(SDL_Renderer* renderer);
+
+    /**
+     * @brief Renderiza o seletor do monitor de destino.
+     * @param renderer Renderizador SDL.
+     */
+    void desenharSeletorMonitor(SDL_Renderer* renderer);
 
     /**
      * @brief Renderiza o seletor de resolução.
@@ -330,6 +354,16 @@ private:
     void dispositivoProximo();
 
     /**
+     * @brief Seleciona o monitor anterior na lista.
+     */
+    void monitorAnterior();
+
+    /**
+     * @brief Seleciona o próximo monitor na lista.
+     */
+    void monitorProximo();
+
+    /**
      * @brief Seleciona a resolução anterior na lista.
      */
     void resolucaoAnterior();
@@ -407,25 +441,24 @@ private:
     bool processarCliqueBarraBrilho(int mouseX, int mouseY, bool aplicarBackend);
 
     /**
-     * @brief Calcula o volume baseado na posição X do mouse na barra.
-     * @param mouseX Coordenada X do mouse.
-     * @return Valor de volume calculado (0-100).
+     * @brief Retorna o monitor selecionado ou nullptr quando não há um alvo válido.
      */
-    int calcularVolumeAPartirDoPonto(int mouseX);
+    const DisplayOutput* monitorSelecionado() const;
 
     /**
-     * @brief Calcula a escala baseada na posição X do mouse na barra.
-     * @param mouseX Coordenada X do mouse.
-     * @return Valor de escala calculado (0.5-2.0).
+     * @brief Indica se há suporte e mais de um monitor para alternância.
      */
-    float calcularEscalaAPartirDoPonto(int mouseX);
+    bool selecaoMonitorDisponivel() const;
 
     /**
-     * @brief Calcula o brilho baseado na posição X do mouse na barra.
-     * @param mouseX Coordenada X do mouse.
-     * @return Valor de brilho calculado (0-100).
+     * @brief Recarrega resolução e escala para o monitor atualmente selecionado.
      */
-    int calcularBrilhoAPartirDoPonto(int mouseX);
+    void atualizarOpcoesMonitorSelecionado();
+
+    /**
+     * @brief Move a janela principal para o display SDL correspondente.
+     */
+    system_result moverJanelaPrincipalParaMonitor(const DisplayOutput& monitor) const;
 
     void aplicarAlteracoes();
 

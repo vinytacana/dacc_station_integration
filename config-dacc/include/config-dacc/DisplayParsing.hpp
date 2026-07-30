@@ -63,6 +63,7 @@ inline std::vector<DisplayOutput> parse_xrandr_verbose(const std::string& output
             line_ss >> disp.name;
             disp.backend_id = disp.name;
             disp.connected = true;
+            disp.primary = linha.find(" primary ") != std::string::npos;
             disp.current_scale = 1.0f;
             disp.backend = display_backend::xrandr;
             displays.push_back(disp);

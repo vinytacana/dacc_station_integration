@@ -28,6 +28,7 @@ int main() {
     imprimir_bool("network", caps.network);
     imprimir_bool("bluetooth", caps.bluetooth);
     imprimir_bool("display_info", caps.display_info);
+    imprimir_bool("display_select", caps.display_select);
     imprimir_bool("display_resolution", caps.display_resolution);
     imprimir_bool("display_scale", caps.display_scale);
     imprimir_bool("brightness", caps.brightness);

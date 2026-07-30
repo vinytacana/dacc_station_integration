@@ -34,6 +34,9 @@ std::string mensagemResultadoUi(const system_result& resultado, const std::strin
     if (codigoIgual(resultado, err::DISPLAY_OUTPUT_NOT_FOUND)) return "Monitor nao encontrado.";
     if (codigoIgual(resultado, err::DISPLAY_MODE_UNSUPPORTED)) return "Resolucao nao suportada pelo monitor.";
     if (codigoIgual(resultado, err::DISPLAY_SESSION_UNKNOWN)) return "Sessao grafica nao suportada.";
+    if (codigoIgual(resultado, err::DISPLAY_SELECTION_UNSUPPORTED)) return "Selecao de monitor indisponivel nesta sessao.";
+    if (codigoIgual(resultado, err::DISPLAY_SELECTION_FAILED)) return "Falha ao selecionar monitor.";
+    if (codigoIgual(resultado, err::DISPLAY_WINDOW_MOVE_FAILED)) return "Falha ao mover a janela para o monitor.";
     if (codigoIgual(resultado, err::DISPLAY_SCALE_FAILED)) return "Falha ao alterar escala.";
     if (codigoIgual(resultado, err::DISPLAY_RESOLUTION_FAILED)) return "Falha ao alterar resolucao.";
     if (codigoIgual(resultado, err::BRIGHTNESS_NOT_SUPPORTED)) return "Controle de brilho indisponivel.";

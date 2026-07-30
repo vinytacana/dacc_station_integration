@@ -32,7 +32,8 @@ extern GerenciadorImagens gerImg;       ///< Instância global do gerenciador de
  * 
  * @details Inicializa a janela de configurações e cria uma instância da janela de rede.
  */
-JanelaConfiguracao::JanelaConfiguracao() {}
+JanelaConfiguracao::JanelaConfiguracao(SDL_Window* janelaPrincipal)
+    : janelaPrincipal(janelaPrincipal) {}
 
 /**
  * @brief Destrutor da classe JanelaConfiguracao.
@@ -797,7 +798,10 @@ void JanelaConfiguracao::desenharSubmenuAudioVideo() {
     desenharBarraStatus();
     
     if (!janelaAudioVideo) {
-        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(obterSnapshotCapacidades());
+        janelaAudioVideo = std::make_unique<JanelaAudioEVideo>(
+            obterSnapshotCapacidades(),
+            janelaPrincipal
+        );
     }
     
     janelaAudioVideo->desenhar(renderer);

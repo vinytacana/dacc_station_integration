@@ -444,6 +444,7 @@ struct DisplayOutput {
     std::string name;
     std::string backend_id;
     bool connected;
+    bool primary;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
@@ -493,6 +494,16 @@ Retornos comuns:
 - `ok`: lista preenchida.
 - `display_subsystem_missing`: `xrandr` e `wlr-randr` ausentes.
 - `display_no_outputs`: ferramentas existem, mas nenhum display foi encontrado ou parseado.
+
+### `system_result selecionar_display_result(const DisplayOutput& display)`
+
+Seleciona uma saida conectada usando seu `backend_id` estavel.
+
+- X11/`xrandr`: marca a saida com `--primary`.
+- Wayland/wlroots: garante que a saida esteja ligada com `wlr-randr --on`;
+  o posicionamento da janela continua sob responsabilidade da UI/compositor.
+- Retorna `display_output_not_found`, `display_selection_unsupported` ou
+  `display_selection_failed` sem executar strings de shell.
 
 ### `void listar_resolucao()`
 

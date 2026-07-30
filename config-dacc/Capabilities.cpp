@@ -110,6 +110,7 @@ station_capabilities obter_capacidades_sistema() {
     const bool tem_display_wlrrandr = displays_suportam_backend(displays, display_backend::wlrrandr);
     caps.display_resolution = (caps.session_type == "x11" && tem_display_xrandr) ||
                               (caps.session_type == "wayland" && tem_display_wlrrandr);
+    caps.display_select = caps.display_resolution;
     caps.display_scale = caps.display_resolution ||
                          (caps.session_type == "wayland" &&
                           caps.desktop.find("gnome") != std::string::npos &&
@@ -130,6 +131,7 @@ station_capabilities obter_capacidades_sistema() {
     adicionar_missing(caps.missing, caps.network, "network");
     adicionar_missing(caps.missing, caps.bluetooth, "bluetooth");
     adicionar_missing(caps.missing, caps.display_info, "display_info");
+    adicionar_missing(caps.missing, caps.display_select, "display_select");
     adicionar_missing(caps.missing, caps.display_resolution, "display_resolution");
     adicionar_missing(caps.missing, caps.display_scale, "display_scale");
     adicionar_missing(caps.missing, caps.brightness, "brightness");
