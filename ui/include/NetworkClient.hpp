@@ -124,6 +124,7 @@ private:
      * Utiliza smart pointer (unique_ptr) para gerenciamento automático de memória.
      */
     std::unique_ptr<UnixSocketClient> client_;
+    std::string receiveBuffer_;
     
     // Game State
     
@@ -143,6 +144,16 @@ private:
      * String vazia quando nenhum jogo está rodando.
      */
     std::string runningGameId_;
+
+    /**
+     * @brief Processa uma mensagem JSON completa, sem o delimitador de framing.
+     */
+    void processMessage(const std::string& message);
+
+    /**
+     * @brief Limpa a conexão e o estado associado após desconexão ou erro.
+     */
+    void resetConnectionState();
 
     // Prevent copying
     

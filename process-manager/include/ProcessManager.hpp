@@ -33,6 +33,7 @@ private:
 
     std::unordered_map<pid_t, TimePoint> running_processes_;
     std::set<int> connected_clients_;
+    std::unordered_map<int, std::string> client_input_buffers_;
     std::mutex processes_mutex_;
 
     std::promise<void> ready_promise;
@@ -51,6 +52,8 @@ private:
     void setupServerSocket();
     void handleNewConnection();
     void handleClientMessage(int client_fd);
+    void processClientMessage(const std::string& message);
+    void disconnectClient(int client_fd);
 
 public:
     explicit ProcessManager(std::shared_ptr<spdlog::logger> logger);
