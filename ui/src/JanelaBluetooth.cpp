@@ -241,6 +241,9 @@ void JanelaBluetooth::carregarTexturas(SDL_Renderer* renderer) {
 void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
     if (!renderer) return;
 
+    const bool bluetoothAtivoLocal = bluetoothAtivo.load();
+    const bool adaptadorDisponivelLocal = adaptadorDisponivel.load();
+
     carregarTexturas(renderer);
     auto& tema = GerenciadorTemas::getInstance();
 
@@ -254,10 +257,10 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
     if (!capacidadesSistema.bluetooth) {
         desenharPainelVazio(renderer, ConfigLayout::X(250), ConfigLayout::Y(360),
                             ConfigLayout::X(1000), "Bluetooth indisponivel: bluetoothctl nao detectado.");
-    } else if (!adaptadorDisponivel) {
+    } else if (!adaptadorDisponivelLocal) {
         desenharPainelVazio(renderer, ConfigLayout::X(250), ConfigLayout::Y(360),
                             ConfigLayout::X(1000), "Nenhum adaptador Bluetooth detectado no sistema.");
-    } else if (bluetoothAtivo) {
+    } else if (bluetoothAtivoLocal) {
         desenharBotaoEscanear(renderer);
         desenharListaDispositivos(renderer);
     } else {
@@ -271,12 +274,18 @@ void JanelaBluetooth::desenhar(SDL_Renderer* renderer) {
 void JanelaBluetooth::desenharToggleBluetooth(SDL_Renderer* renderer) {
     if (!btnToggleBluetooth) return;
 
+    int indiceFocadoLocal = -1;
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        indiceFocadoLocal = indiceFocado;
+    }
+
     if (!capacidadesSistema.bluetooth) {
         btnToggleBluetooth->setTexto("Bluetooth: indisponivel");
     } else {
         btnToggleBluetooth->setTexto(bluetoothAtivo ? "Bluetooth: ON" : "Bluetooth: OFF");
     }
-    btnToggleBluetooth->setFocado(indiceFocado == -1);
+    btnToggleBluetooth->setFocado(indiceFocadoLocal == -1);
     btnToggleBluetooth->desenhar(renderer);
 }
 
@@ -298,14 +307,20 @@ void JanelaBluetooth::desenharListaDispositivos(SDL_Renderer* renderer) {
     std::vector<DispositivoBluetooth> desconhecidos;
     std::vector<DispositivoBluetooth> pareados;
     std::vector<DispositivoBluetooth> escaneados;
+    std::vector<ItemBluetoothFocavel> itensFocaveisRender;
+    int indiceFocadoRender = -1;
+    int scrollRender = 0;
 
     {
         std::lock_guard<std::mutex> lock(mtx_dispositivos);
         desconhecidos = dispositivosDesconhecidosConectados;
         pareados = dispositivosPareados;
         escaneados = dispositivosEscaneados;
-        itensFocaveis.clear();
+        indiceFocadoRender = indiceFocado;
+        scrollRender = scrollY;
     }
+
+    itensFocaveisRender.reserve(desconhecidos.size() + pareados.size() + escaneados.size());
 
     SDL_Rect clip{
         ConfigLayout::X(LISTA_X - 20),
@@ -315,33 +330,42 @@ void JanelaBluetooth::desenharListaDispositivos(SDL_Renderer* renderer) {
     };
     SDL_RenderSetClipRect(renderer, &clip);
 
-    int yAtual = ConfigLayout::Y(LISTA_Y) - scrollY;
+    int yAtual = ConfigLayout::Y(LISTA_Y) - scrollRender;
     yAtual = desenharSecao(renderer, "Desconhecidos Conectados", SecaoBluetooth::DESCONHECIDO_CONECTADO,
-                           desconhecidos, yAtual, "Nenhum dispositivo conectado sem pareamento.");
+                           desconhecidos, yAtual, "Nenhum dispositivo conectado sem pareamento.",
+                           itensFocaveisRender, indiceFocadoRender);
     yAtual = desenharSecao(renderer, "Pareados", SecaoBluetooth::PAREADO,
-                           pareados, yAtual, "Nenhum dispositivo pareado salvo.");
+                           pareados, yAtual, "Nenhum dispositivo pareado salvo.",
+                           itensFocaveisRender, indiceFocadoRender);
     yAtual = desenharSecao(renderer, escaneando ? "Escaneados (buscando...)" : "Escaneados",
                            SecaoBluetooth::ESCANEADO, escaneados, yAtual,
-                           escaneando ? "Buscando dispositivos proximos..." : "Nenhum dispositivo novo escaneado.");
+                           escaneando ? "Buscando dispositivos proximos..." : "Nenhum dispositivo novo escaneado.",
+                           itensFocaveisRender, indiceFocadoRender);
 
     SDL_RenderSetClipRect(renderer, nullptr);
 
+    const int alturaConteudoRender = (yAtual + scrollRender) - ConfigLayout::Y(LISTA_Y);
+    const int maxScrollRender = std::max(
+        0,
+        alturaConteudoRender - ConfigLayout::Y(LISTA_H - 20)
+    );
+    scrollRender = std::clamp(scrollRender, 0, maxScrollRender);
+
     {
         std::lock_guard<std::mutex> lock(mtx_dispositivos);
-        alturaConteudoLista = (yAtual + scrollY) - ConfigLayout::Y(LISTA_Y);
-        int maxScroll = std::max(0, alturaConteudoLista - ConfigLayout::Y(LISTA_H - 20));
-        if (scrollY > maxScroll) scrollY = maxScroll;
+        alturaConteudoLista = alturaConteudoRender;
+        itensFocaveis = std::move(itensFocaveisRender);
+        scrollY = std::clamp(scrollY, 0, maxScrollRender);
     }
 
     auto& tema = GerenciadorTemas::getInstance();
-    if (scrollY > 0) {
+    if (scrollRender > 0) {
         desenharTexto(renderer, "▲",
                       ConfigLayout::X(LISTA_X + LISTA_W - 25), ConfigLayout::Y(LISTA_Y - 22),
                       tema.getCorTextoNormal(), ConfigLayout::F(18));
     }
 
-    int maxScroll = std::max(0, alturaConteudoLista - ConfigLayout::Y(LISTA_H - 20));
-    if (scrollY < maxScroll) {
+    if (scrollRender < maxScrollRender) {
         desenharTexto(renderer, "▼",
                       ConfigLayout::X(LISTA_X + LISTA_W - 25), ConfigLayout::Y(LISTA_Y + LISTA_H - 20),
                       tema.getCorTextoNormal(), ConfigLayout::F(18));
@@ -354,7 +378,9 @@ int JanelaBluetooth::desenharSecao(
     SecaoBluetooth secao,
     const std::vector<DispositivoBluetooth>& dispositivos,
     int yAtual,
-    const std::string& mensagemVazia
+    const std::string& mensagemVazia,
+    std::vector<ItemBluetoothFocavel>& itensFocaveisRender,
+    int indiceFocadoRender
 ) {
     auto& tema = GerenciadorTemas::getInstance();
     int x = ConfigLayout::X(LISTA_X);
@@ -381,12 +407,8 @@ int JanelaBluetooth::desenharSecao(
         int cardY = yAtual;
         SDL_Rect area{x + ConfigLayout::X(30), cardY, w - ConfigLayout::X(60), ConfigLayout::Y(CARD_H)};
 
-        {
-            std::lock_guard<std::mutex> lock(mtx_dispositivos);
-            itensFocaveis.push_back(ItemBluetoothFocavel{secao, static_cast<int>(i), area});
-        }
-
-        bool focado = indiceFocado == static_cast<int>(itensFocaveis.size()) - 1;
+        itensFocaveisRender.push_back(ItemBluetoothFocavel{secao, static_cast<int>(i), area});
+        bool focado = indiceFocadoRender == static_cast<int>(itensFocaveisRender.size()) - 1;
         if (cardY + ConfigLayout::Y(CARD_H) >= limiteSuperior && cardY <= limiteInferior) {
             desenharDispositivo(renderer, dispositivos[i], area.x, area.y, focado, secao);
         }
@@ -560,6 +582,10 @@ void JanelaBluetooth::ajustarFocoAposMudancaListas() {
 
 void JanelaBluetooth::ajustarScrollAoFoco() {
     std::lock_guard<std::mutex> lock(mtx_dispositivos);
+    ajustarScrollAoFocoBloqueado();
+}
+
+void JanelaBluetooth::ajustarScrollAoFocoBloqueado() {
     if (indiceFocado < 0 || indiceFocado >= static_cast<int>(itensFocaveis.size())) {
         return;
     }
@@ -579,6 +605,7 @@ void JanelaBluetooth::ajustarScrollAoFoco() {
 }
 
 void JanelaBluetooth::filtrarEscaneadosBloqueado() {
+    std::lock_guard<std::mutex> lock(mtx_dispositivos);
     std::unordered_set<std::string> macsBloqueados;
     for (const auto& d : dispositivosDesconhecidosConectados) {
         macsBloqueados.insert(normalizarMac(d.endereco));
@@ -911,24 +938,48 @@ void JanelaBluetooth::parearDispositivo(int indice) {
 }
 
 void JanelaBluetooth::navegarParaCima() {
-    if (indiceFocado > -1) {
-        --indiceFocado;
-        ajustarScrollAoFoco();
+    bool focoMudou = false;
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        if (indiceFocado > -1) {
+            --indiceFocado;
+            ajustarScrollAoFocoBloqueado();
+            focoMudou = true;
+        }
+    }
+    if (focoMudou) {
         gerAudio.tocarSom("navegacao.wav");
     }
 }
 
 void JanelaBluetooth::navegarParaBaixo() {
-    int total = calcularTotalElementosFocaveis();
-    if (indiceFocado < total - 1) {
-        ++indiceFocado;
-        ajustarScrollAoFoco();
+    bool focoMudou = false;
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        int total = static_cast<int>(
+            dispositivosDesconhecidosConectados.size() +
+            dispositivosPareados.size() +
+            dispositivosEscaneados.size()
+        );
+        if (indiceFocado < total - 1) {
+            ++indiceFocado;
+            ajustarScrollAoFocoBloqueado();
+            focoMudou = true;
+        }
+    }
+    if (focoMudou) {
         gerAudio.tocarSom("navegacao.wav");
     }
 }
 
 void JanelaBluetooth::confirmarSelecao() {
-    if (!bluetoothAtivo || indiceFocado == -1) {
+    bool focoNoToggle = false;
+    {
+        std::lock_guard<std::mutex> lock(mtx_dispositivos);
+        focoNoToggle = indiceFocado == -1;
+    }
+
+    if (!bluetoothAtivo || focoNoToggle) {
         toggleBluetooth();
         gerAudio.tocarSom("select.wav");
         return;
@@ -1017,9 +1068,12 @@ bool JanelaBluetooth::processarEvento(SDL_Event& evento) {
 #else
         float wheelY = static_cast<float>(evento.wheel.y);
 #endif
-        scrollY -= static_cast<int>(wheelY * ConfigLayout::Y(60));
-        int maxScroll = std::max(0, alturaConteudoLista - ConfigLayout::Y(LISTA_H - 20));
-        scrollY = std::clamp(scrollY, 0, maxScroll);
+        {
+            std::lock_guard<std::mutex> lock(mtx_dispositivos);
+            scrollY -= static_cast<int>(wheelY * ConfigLayout::Y(60));
+            int maxScroll = std::max(0, alturaConteudoLista - ConfigLayout::Y(LISTA_H - 20));
+            scrollY = std::clamp(scrollY, 0, maxScroll);
+        }
         return true;
     }
 
