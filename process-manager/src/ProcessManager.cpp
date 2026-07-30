@@ -19,6 +19,12 @@
 
 using json = nlohmann::json;
 
+namespace {
+
+constexpr std::size_t MAX_IPC_MESSAGE_SIZE = 64 * 1024;
+
+} // namespace
+
 ProcessManager::ProcessManager(std::shared_ptr<spdlog::logger> logger) : logger_{std::move(logger)} {
 
     // a data type to represent multiple signals
@@ -84,6 +90,12 @@ ProcessManager::~ProcessManager() {
     if (event_loop_thread_.joinable()) {
         event_loop_thread_.join();
     }
+
+    for (int client_fd : connected_clients_) {
+        close(client_fd);
+    }
+    connected_clients_.clear();
+    client_input_buffers_.clear();
 
     if (epoll_fd_ != -1) {
         close(epoll_fd_);
@@ -158,9 +170,23 @@ void ProcessManager::handleChildSignal() {
             response["pid"] = child_pid;
             response["status"] = status;
             
-            std::string msg = response.dump();
+            std::string msg = response.dump() + '\n';
             for (int client_fd : connected_clients_) {
-                send(client_fd, msg.c_str(), msg.length(), MSG_NOSIGNAL);
+                ssize_t bytes_sent = send(client_fd, msg.c_str(), msg.length(), MSG_NOSIGNAL);
+                if (bytes_sent < 0 && logger_) {
+                    logger_->warn(
+                        "Failed to notify client FD={}: {}",
+                        client_fd,
+                        strerror(errno)
+                    );
+                } else if (bytes_sent != static_cast<ssize_t>(msg.length()) && logger_) {
+                    logger_->warn(
+                        "Partial notification sent to client FD={} ({}/{})",
+                        client_fd,
+                        bytes_sent,
+                        msg.length()
+                    );
+                }
             }
 
             running_processes_.erase(it);
@@ -339,30 +365,72 @@ std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinitio
         }
         
         connected_clients_.insert(client_fd);
+        client_input_buffers_.emplace(client_fd, std::string{});
         if (logger_) logger_->info("New client connection accepted (FD: {})", client_fd);
     }
     
     void ProcessManager::handleClientMessage(int client_fd) {
-        char buffer[1024];
-        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
-    
-        if (bytes_read <= 0) {
+        char buffer[4096];
+
+        while (true) {
+            ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
+
+            if (bytes_read > 0) {
+                std::string& input_buffer = client_input_buffers_[client_fd];
+                input_buffer.append(buffer, static_cast<std::size_t>(bytes_read));
+
+                std::size_t delimiter_position = std::string::npos;
+                while ((delimiter_position = input_buffer.find('\n')) != std::string::npos) {
+                    std::string message = input_buffer.substr(0, delimiter_position);
+                    input_buffer.erase(0, delimiter_position + 1);
+
+                    if (!message.empty() && message.back() == '\r') {
+                        message.pop_back();
+                    }
+                    if (!message.empty()) {
+                        processClientMessage(message);
+                    }
+                }
+
+                if (input_buffer.size() > MAX_IPC_MESSAGE_SIZE) {
+                    if (logger_) {
+                        logger_->error(
+                            "IPC message exceeded {} bytes (FD: {})",
+                            MAX_IPC_MESSAGE_SIZE,
+                            client_fd
+                        );
+                    }
+                    disconnectClient(client_fd);
+                    return;
+                }
+
+                continue;
+            }
+
             if (bytes_read == 0) {
                 if (logger_) logger_->info("Client disconnected (FD: {})", client_fd);
-            } else {
-                if (logger_) logger_->error("read failed (FD: {}): {}", client_fd, strerror(errno));
+                disconnectClient(client_fd);
+                return;
             }
-            epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr);
-            connected_clients_.erase(client_fd);
-            close(client_fd);
+
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return;
+            }
+
+            if (logger_) logger_->error("recv failed (FD: {}): {}", client_fd, strerror(errno));
+            disconnectClient(client_fd);
             return;
         }
-    
-        buffer[bytes_read] = '\0';
-        if (logger_) logger_->info("Received message from client: {}", buffer);
-    
+    }
+
+    void ProcessManager::processClientMessage(const std::string& message) {
+        if (logger_) logger_->info("Received message from client: {}", message);
+
         try {
-            auto j = json::parse(buffer);
+            auto j = json::parse(message);
             if (j.contains("action") && j["action"] == "start") {
                 std::string id = j.value("id", "unknown");
                 std::string path = j.value("path", "");
@@ -384,7 +452,18 @@ std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinitio
 
                 startApplication(app);
             }
-        } catch (const json::parse_error& e) {
-            if (logger_) logger_->error("JSON parse error: {}", e.what());
+        } catch (const json::exception& e) {
+            if (logger_) logger_->error("Invalid IPC JSON message: {}", e.what());
         }
+    }
+
+    void ProcessManager::disconnectClient(int client_fd) {
+        if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr) == -1 &&
+            errno != ENOENT && logger_) {
+            logger_->warn("Failed to remove client FD={} from epoll: {}", client_fd, strerror(errno));
+        }
+
+        connected_clients_.erase(client_fd);
+        client_input_buffers_.erase(client_fd);
+        close(client_fd);
     }

@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
     GerenciarInputs inputs;      ///< Processador de eventos de periféricos
     inputs.inicializarControle(); ///< Abre conexão com gamepad detectado
     
-    JanelaConfiguracao janelaConfig; ///< Janela modal de configurações/opções
+    JanelaConfiguracao janelaConfig(janela); ///< Janela modal de configurações/opções
 
     /**
      * Configuração inicial do carrossel de destaques (Hero Banners).

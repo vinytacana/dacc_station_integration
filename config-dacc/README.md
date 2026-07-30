@@ -149,6 +149,24 @@ Quando uma capacidade faltar, retorne `system_result` com codigo estavel, como `
 
 Os codigos padronizados ficam centralizados em `include/config-dacc/ErrorCodes.hpp`, no namespace `config_dacc::errors`. Ao adicionar novos retornos `_result`, prefira reutilizar essas constantes em vez de repetir strings diretamente nos controladores.
 
+## Diagnostico Operacional
+
+Use este modulo como fonte de verdade para suporte a hardware e ferramentas do sistema:
+
+- `make -C config-dacc test`: valida parsers sem depender de hardware real.
+- `make -C config-dacc capabilities-smoke && ./config-dacc/tests/bin/capabilities_smoke`: imprime um snapshot das capacidades detectadas no ambiente atual.
+- `./scripts/check_compatibility.sh`: executado pela raiz do projeto, complementa o diagnostico com permissoes, grupos e sockets.
+
+Interpretacao esperada:
+
+- Falta de `nmcli` deve virar `network_manager_missing`, nao travamento da UI.
+- Falta de `wpctl`, `pactl` ou `amixer` deve virar `audio_subsystem_missing` ou erro especifico de volume/listagem.
+- Falta de `xrandr`/`wlr-randr` deve virar `display_subsystem_missing`, `display_session_unknown` ou `feature_unavailable`, conforme a operacao.
+- Falta de `brightnessctl` e de `/sys/class/backlight` deve virar `brightness_not_supported`.
+- Falta de `bluetoothctl` deve virar `bluetoothctl_missing`.
+
+Ao adicionar novas capacidades, mantenha tres camadas separadas: deteccao no backend, codigo estavel em `ErrorCodes.hpp` e mensagem amigavel na UI.
+
 ## Modulo Sistema e Execucao
 
 Implementacao: `ConfigCommand.cpp` e `SystemControl.cpp`.
@@ -426,6 +444,7 @@ struct DisplayOutput {
     std::string name;
     std::string backend_id;
     bool connected;
+    bool primary;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
     float current_scale;
@@ -475,6 +494,16 @@ Retornos comuns:
 - `ok`: lista preenchida.
 - `display_subsystem_missing`: `xrandr` e `wlr-randr` ausentes.
 - `display_no_outputs`: ferramentas existem, mas nenhum display foi encontrado ou parseado.
+
+### `system_result selecionar_display_result(const DisplayOutput& display)`
+
+Seleciona uma saida conectada usando seu `backend_id` estavel.
+
+- X11/`xrandr`: marca a saida com `--primary`.
+- Wayland/wlroots: garante que a saida esteja ligada com `wlr-randr --on`;
+  o posicionamento da janela continua sob responsabilidade da UI/compositor.
+- Retorna `display_output_not_found`, `display_selection_unsupported` ou
+  `display_selection_failed` sem executar strings de shell.
 
 ### `void listar_resolucao()`
 

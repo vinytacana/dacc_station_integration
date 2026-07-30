@@ -105,10 +105,10 @@ struct device_audio {
 };
 
 struct DisplayMode {
-    int width;
-    int height;
-    float refresh_rate;
-    bool is_current;
+    int width = 0;
+    int height = 0;
+    float refresh_rate = 0.0f;
+    bool is_current = false;
 };
 
 enum class display_backend {
@@ -124,10 +124,11 @@ enum class brightness_backend {
 struct DisplayOutput {
     std::string name;
     std::string backend_id;
-    bool connected;
+    bool connected = false;
+    bool primary = false;
     std::vector<DisplayMode> modes;
     DisplayMode current_mode;
-    float current_scale;
+    float current_scale = 1.0f;
     display_backend backend = display_backend::xrandr;
 };
 
@@ -138,6 +139,7 @@ struct station_capabilities {
     bool network = false;
     bool bluetooth = false;
     bool display_info = false;
+    bool display_select = false;
     bool display_resolution = false;
     bool display_scale = false;
     bool brightness = false;
@@ -183,6 +185,7 @@ std::string obter_tipo_sessao();
 void verificarSessao();
 std::vector<DisplayOutput> obter_info_displays();
 system_result listar_displays_result(std::vector<DisplayOutput>& displays);
+system_result selecionar_display_result(const DisplayOutput& display);
 void listar_resolucao();
 bool alterarResolucao(const std::string &saida, int width, int height, float rate);
 system_result alterarResolucao_result(const std::string &saida, int width, int height, float rate);

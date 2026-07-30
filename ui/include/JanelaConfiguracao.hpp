@@ -58,7 +58,7 @@ public:
      * @brief Construtor da classe JanelaConfiguracao.
      * Inicializa os ponteiros como nulos e define o estado inicial como fechada.
      */
-    JanelaConfiguracao();
+    explicit JanelaConfiguracao(SDL_Window* janelaPrincipal = nullptr);
 
     /**
      * @brief Destrutor da classe JanelaConfiguracao.
@@ -113,6 +113,7 @@ public:
     Uint32 getIDJanela() const;
 
 private:
+    SDL_Window* janelaPrincipal = nullptr; /**< Janela principal do launcher, não possuída. */
     SDL_Window* janela = nullptr;    /**< Ponteiro para a janela SDL dedicada. */
     SDL_Renderer* renderer = nullptr; /**< Renderizador exclusivo para esta janela. */
     bool aberta = false;             /**< Flag de controle de estado de exibição. */

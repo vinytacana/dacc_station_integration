@@ -336,6 +336,89 @@ system_result listar_displays_result(std::vector<DisplayOutput>& displays) {
     return result;
 }
 
+system_result selecionar_display_result(const DisplayOutput& display) {
+    const std::string backend_id = display.backend_id.empty()
+        ? display.name
+        : display.backend_id;
+    if (backend_id.empty()) {
+        return config_result::error(
+            err::DISPLAY_OUTPUT_NOT_FOUND,
+            "Saida de video invalida.",
+            "backend_id vazio."
+        );
+    }
+
+    std::vector<DisplayOutput> displays;
+    system_result listagem = listar_displays_result(displays);
+    if (!listagem.ok) {
+        return listagem;
+    }
+
+    auto encontrado = std::find_if(
+        displays.begin(),
+        displays.end(),
+        [&backend_id](const DisplayOutput& item) {
+            const std::string item_id = item.backend_id.empty() ? item.name : item.backend_id;
+            return item_id == backend_id;
+        }
+    );
+    if (encontrado == displays.end() || !encontrado->connected) {
+        return config_result::error(
+            err::DISPLAY_OUTPUT_NOT_FOUND,
+            "Monitor nao encontrado ou desconectado.",
+            "output=" + backend_id
+        );
+    }
+
+    const std::string sessao = obter_tipo_sessao();
+    std::vector<std::string> args;
+    std::string detalhes_backend;
+
+    if (sessao == "x11" && encontrado->backend == display_backend::xrandr) {
+        if (!comando_existe("xrandr")) {
+            return config_result::error(
+                err::DISPLAY_SELECTION_UNSUPPORTED,
+                "Selecao de monitor indisponivel.",
+                "xrandr ausente."
+            );
+        }
+        args = {"xrandr", "--output", backend_id, "--primary"};
+        detalhes_backend = "backend=xrandr; output=" + backend_id;
+    } else if (sessao == "wayland" && encontrado->backend == display_backend::wlrrandr) {
+        if (!comando_existe("wlr-randr")) {
+            return config_result::error(
+                err::DISPLAY_SELECTION_UNSUPPORTED,
+                "Selecao de monitor indisponivel.",
+                "wlr-randr ausente."
+            );
+        }
+
+        // wlroots nao possui o conceito portavel de saida primaria.
+        // Mantemos o alvo ligado; a UI direciona a janela SDL para essa saida.
+        args = {"wlr-randr", "--output", backend_id, "--on"};
+        detalhes_backend = "backend=wlr-randr; output=" + backend_id;
+    } else {
+        return config_result::error(
+            err::DISPLAY_SELECTION_UNSUPPORTED,
+            "Selecao de monitor indisponivel nesta sessao.",
+            "session=" + sessao + "; output=" + backend_id
+        );
+    }
+
+    command_result command = exec_command_args_result(args);
+    system_result resultado = traduzir_display_result(
+        command,
+        err::DISPLAY_SELECTION_FAILED,
+        "Falha ao selecionar monitor."
+    );
+    if (resultado.ok) {
+        resultado.mensagem = "Monitor selecionado.";
+        resultado.detalhes = detalhes_backend;
+        invalidar_cache_display();
+    }
+    return resultado;
+}
+
 void listar_resolucao() {
     std::cout << "Lista de saidas e resolucoes suportadas: \n";
     std::vector<std::string> args;

@@ -1,35 +1,34 @@
 #include <iostream>
 #include <exception>
-#include <mutex>
-#include <atomic>
 #include <csignal>
 #include <memory>
 #include <fstream>
-#include <thread>
-#include <condition_variable>
+#include <cerrno>
+#include <cstring>
+#include <stdexcept>
+#include <poll.h>
 
 #include "ProcessManager.hpp"
 #include "LogManager.hpp" 
 #include "json.hpp"
 
-std::atomic_bool shutdown_flag{false};
-std::mutex shutdown_mutex;
-std::condition_variable shutdown_cv;
+volatile sig_atomic_t shutdown_requested = 0;
 
-void signal_handler(int signal){
-    if(signal == SIGINT || signal == SIGTERM){
-        std::cout << "\nShutdown signal received. Exiting..." << std::endl;
-        {
-            std::lock_guard<std::mutex> lock(shutdown_mutex);
-            shutdown_flag = true;
-        }
-        shutdown_cv.notify_all();
-    }
+void signal_handler(int) {
+    shutdown_requested = 1;
 }
 
-int main(){
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
+int main() {
+    struct sigaction action {};
+    action.sa_handler = signal_handler;
+    sigemptyset(&action.sa_mask);
+
+    if (sigaction(SIGINT, &action, nullptr) == -1 ||
+        sigaction(SIGTERM, &action, nullptr) == -1) {
+        std::cerr << "Failed to configure shutdown signal handlers: "
+                  << std::strerror(errno) << std::endl;
+        return 1;
+    }
 
     try {
         std::string socket_path = "/tmp/dacc-station.sock"; 
@@ -66,9 +65,17 @@ int main(){
         ProcessManager pm(logger);
 
         std::cout << "\n>>> Process Manager is active. Press Ctrl+C to exit." << std::endl;
-        
-        std::unique_lock<std::mutex> lock(shutdown_mutex);
-        shutdown_cv.wait(lock, []{ return shutdown_flag.load(); });
+
+        while (!shutdown_requested) {
+            int poll_result = poll(nullptr, 0, 250);
+            if (poll_result == -1 && errno != EINTR) {
+                throw std::runtime_error(
+                    "Failed while waiting for shutdown: " + std::string(std::strerror(errno))
+                );
+            }
+        }
+
+        logger->info("Shutdown signal received. Exiting...");
     
     } catch (const std::exception& e) {
         std::cerr << "A critical error occurred: " << e.what() << std::endl;

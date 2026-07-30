@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 #include "Botao.hpp"
+#include "ControleSlider.hpp"
 #include "GerenciadorImagens.hpp"
 #include "config-dacc/functions.hpp"
 
@@ -72,6 +73,7 @@ struct Resolucao {
  * de áudio e vídeo, incluindo:
  * - Controle de volume geral (0-100%) com barra visual progressiva
  * - Seleção de dispositivo de saída de áudio
+ * - Seleção do monitor onde o DACC Station será exibido
  * - Seleção de resolução de tela
  * - Controle de escala da janela (0.5x - 2.0x) com barra visual
  * - Navegação via controle ou mouse
@@ -86,7 +88,10 @@ public:
     /**
      * @brief Constrói a janela usando capacidades já detectadas pelo menu principal.
      */
-    explicit JanelaAudioEVideo(const station_capabilities& capacidades);
+    explicit JanelaAudioEVideo(
+        const station_capabilities& capacidades,
+        SDL_Window* janelaPrincipal = nullptr
+    );
 
     /**
      * @brief Destrutor da classe JanelaAudioEVideo.
@@ -115,29 +120,36 @@ private:
     // CONFIGURAÇÕES DE ÁUDIO
     
     int volumeGeral = 80;                   /**< Volume geral (0-100). */
-    const int MAX_VOLUME = 100;             /**< Volume máximo. */
-    const int NUM_BARRAS_VOLUME = 20;       /**< Número de barras para representar o volume. */
+    static constexpr int MAX_VOLUME = 100;  /**< Volume máximo. */
+    static constexpr int NUM_BARRAS_VOLUME = 20;
+    ControleSlider controleSliderVolume{0.0, MAX_VOLUME, NUM_BARRAS_VOLUME};
 
     int brilhoGeral = 100;                  /**< Brilho geral (0-100). */
-    const int MAX_BRILHO = 100;             /**< Brilho máximo. */
-    const int NUM_BARRAS_BRILHO = 20;       /**< Número de barras para representar o brilho. */
+    static constexpr int MAX_BRILHO = 100;  /**< Brilho máximo. */
+    static constexpr int NUM_BARRAS_BRILHO = 20;
+    ControleSlider controleSliderBrilho{0.0, MAX_BRILHO, NUM_BARRAS_BRILHO};
     
     std::vector<DispositivoAudio> dispositivos; /**< Lista de dispositivos de áudio disponíveis. */
     int indiceDispositivoAtual = 0;         /**< Índice do dispositivo atualmente selecionado. */
     int indiceDispositivoOriginal = 0;      /**< Índice do dispositivo ativo ao abrir a tela. */
     
     // CONFIGURAÇÕES DE VÍDEO
-    
+
+    std::vector<DisplayOutput> monitores;    /**< Monitores conectados detectados pelo backend. */
+    int indiceMonitorAtual = 0;             /**< Monitor selecionado na interface. */
+    int indiceMonitorOriginal = 0;          /**< Monitor ativo ao abrir/aplicar a tela. */
+
     std::vector<Resolucao> resolucoes;      /**< Lista de resoluções disponíveis. */
     int indiceResolucaoAtual = 0;           /**< Índice da resolução atualmente selecionada. */
     int indiceResolucaoOriginal = 0;        /**< Índice da resolução ativa ao abrir a tela. */
     
     float escalaJanela = 1.0f;              /**< Escala da janela (0.5x - 2.0x). */
     float escalaOriginal = 1.0f;            /**< Escala ativa ao abrir a tela. */
-    const float MIN_ESCALA = 0.5f;          /**< Escala mínima. */
-    const float MAX_ESCALA = 2.0f;          /**< Escala máxima. */
-    const float PASSO_ESCALA = 0.1f;        /**< Incremento/decremento da escala. */
-    const int NUM_BARRAS_ESCALA = 15;       /**< Número de barras para representar a escala. */
+    static constexpr float MIN_ESCALA = 0.5f;   /**< Escala mínima. */
+    static constexpr float MAX_ESCALA = 2.0f;   /**< Escala máxima. */
+    static constexpr float PASSO_ESCALA = 0.1f; /**< Incremento/decremento da escala. */
+    static constexpr int NUM_BARRAS_ESCALA = 15;
+    ControleSlider controleSliderEscala{MIN_ESCALA, MAX_ESCALA, NUM_BARRAS_ESCALA};
     
     // BOTÕES DE NAVEGAÇÃO
     
@@ -146,6 +158,9 @@ private:
     
     std::unique_ptr<Botao> btnDispositivoAnterior;  /**< Botão para dispositivo anterior. */
     std::unique_ptr<Botao> btnDispositivoProximo;   /**< Botão para próximo dispositivo. */
+
+    std::unique_ptr<Botao> btnMonitorAnterior;   /**< Botão para monitor anterior. */
+    std::unique_ptr<Botao> btnMonitorProximo;    /**< Botão para próximo monitor. */
     
     std::unique_ptr<Botao> btnResolucaoAnterior;    /**< Botão para resolução anterior. */
     std::unique_ptr<Botao> btnResolucaoProxima;     /**< Botão para próxima resolução. */
@@ -159,18 +174,13 @@ private:
     // CONTROLE DE NAVEGAÇÃO
     
     int indiceFocado = -1;                  /**< Índice do elemento atualmente focado. */
-    const int NUM_ELEMENTOS_FOCAVEIS = 11;  /**< Total de elementos navegáveis. */
+    static constexpr int NUM_ELEMENTOS_FOCAVEIS = 13;
+    static constexpr int INDICE_FOCO_APLICAR = 12;
     
     // Controle de Input de Periféricos
     Uint32 ultimoInputAnalogico = 0;        /**< Timestamp do último input analógico. */
     const Uint32 INTERVALO_ANALOGICO = 200; /**< Intervalo mínimo entre inputs (ms). */
     const int DEADZONE = 16000;             /**< Limiar de sensibilidade do analógico. */
-    
-    // ÁREAS DE INTERAÇÃO PARA MOUSE
-    
-    SDL_Rect areaBarraVolume;               /**< Área clicável da barra de volume. */
-    SDL_Rect areaBarraEscala;               /**< Área clicável da barra de escala. */
-    SDL_Rect areaBarraBrilho;               /**< Área clicável da barra de brilho. */
     
     bool arrastandoVolume = false;          /**< Flag para controle de arrasto do volume. */
     bool arrastandoEscala = false;          /**< Flag para controle de arrasto da escala. */
@@ -178,12 +188,13 @@ private:
     int volumeAntesArrasto = 80;            /**< Valor do volume antes de iniciar um arrasto. */
     int brilhoAntesArrasto = 100;           /**< Valor do brilho antes de iniciar um arrasto. */
     station_capabilities capacidadesSistema; /**< Recursos disponíveis no backend config-dacc. */
+    SDL_Window* janelaPrincipal = nullptr;   /**< Janela principal, não possuída por este componente. */
     
     // IMAGEM EXPLICATIVA
     
     SDL_Texture* texturaExplicacao = nullptr; /**< Textura da imagem explicativa de rodapé. */
     std::string mensagemStatus;
-    std::string nomeMonitorCache = "HDMI-1";
+    std::string nomeMonitorCache;
     std::string textoInfoMonitorCache = "Monitor: Indisponivel | Sessao: unknown";
     bool mensagemErro = false;
     
@@ -197,6 +208,11 @@ private:
      * @brief Inicializa a lista de dispositivos de áudio disponíveis.
      */
     void inicializarDispositivos();
+
+    /**
+     * @brief Carrega os monitores conectados e identifica o monitor primário.
+     */
+    void inicializarMonitores();
 
     /**
      * @brief Inicializa a lista de resoluções disponíveis.
@@ -237,6 +253,12 @@ private:
     void desenharSeletorDispositivo(SDL_Renderer* renderer);
 
     /**
+     * @brief Renderiza o seletor do monitor de destino.
+     * @param renderer Renderizador SDL.
+     */
+    void desenharSeletorMonitor(SDL_Renderer* renderer);
+
+    /**
      * @brief Renderiza o seletor de resolução.
      * @param renderer Renderizador SDL.
      */
@@ -266,23 +288,6 @@ private:
     void desenharImagemExplicativa(SDL_Renderer* renderer);
     void desenharStatusOperacional(SDL_Renderer* renderer);
     void definirMensagemStatus(const std::string& mensagem, bool erro = false);
-
-    /**
-     * @brief Desenha uma barra de progresso visual.
-     * @param renderer Renderizador SDL.
-     * @param x Posição X.
-     * @param y Posição Y.
-     * @param larguraTotal Largura total da área da barra.
-     * @param altura Altura da barra.
-     * @param numBarras Número de segmentos da barra.
-     * @param barrasPreenchidas Quantos segmentos estão preenchidos.
-     * @param corPreenchida Cor dos segmentos preenchidos.
-     * @param corVazia Cor dos segmentos vazios.
-     */
-    void desenharBarraProgresso(SDL_Renderer* renderer, int x, int y, 
-                                int larguraTotal, int altura, int numBarras, 
-                                int barrasPreenchidas, SDL_Color corPreenchida, 
-                                SDL_Color corVazia);
 
     /**
      * @brief Incrementa o volume.
@@ -347,6 +352,16 @@ private:
      * @brief Seleciona o próximo dispositivo na lista.
      */
     void dispositivoProximo();
+
+    /**
+     * @brief Seleciona o monitor anterior na lista.
+     */
+    void monitorAnterior();
+
+    /**
+     * @brief Seleciona o próximo monitor na lista.
+     */
+    void monitorProximo();
 
     /**
      * @brief Seleciona a resolução anterior na lista.
@@ -426,25 +441,24 @@ private:
     bool processarCliqueBarraBrilho(int mouseX, int mouseY, bool aplicarBackend);
 
     /**
-     * @brief Calcula o volume baseado na posição X do mouse na barra.
-     * @param mouseX Coordenada X do mouse.
-     * @return Valor de volume calculado (0-100).
+     * @brief Retorna o monitor selecionado ou nullptr quando não há um alvo válido.
      */
-    int calcularVolumeAPartirDoPonto(int mouseX);
+    const DisplayOutput* monitorSelecionado() const;
 
     /**
-     * @brief Calcula a escala baseada na posição X do mouse na barra.
-     * @param mouseX Coordenada X do mouse.
-     * @return Valor de escala calculado (0.5-2.0).
+     * @brief Indica se há suporte e mais de um monitor para alternância.
      */
-    float calcularEscalaAPartirDoPonto(int mouseX);
+    bool selecaoMonitorDisponivel() const;
 
     /**
-     * @brief Calcula o brilho baseado na posição X do mouse na barra.
-     * @param mouseX Coordenada X do mouse.
-     * @return Valor de brilho calculado (0-100).
+     * @brief Recarrega resolução e escala para o monitor atualmente selecionado.
      */
-    int calcularBrilhoAPartirDoPonto(int mouseX);
+    void atualizarOpcoesMonitorSelecionado();
+
+    /**
+     * @brief Move a janela principal para o display SDL correspondente.
+     */
+    system_result moverJanelaPrincipalParaMonitor(const DisplayOutput& monitor) const;
 
     void aplicarAlteracoes();
 

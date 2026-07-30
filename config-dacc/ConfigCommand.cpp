@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <array>
+#include <poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <vector>
@@ -28,6 +29,146 @@ std::string descrever_status_processo(int status) {
         return "Comando interrompido por sinal " + std::to_string(WSTOPSIG(status)) + ".";
     }
     return "Comando terminou com status inesperado.";
+}
+
+bool criar_pipes_comando(int stdout_pipe[2], int stderr_pipe[2], std::string& erro) {
+    if (pipe(stdout_pipe) != 0) {
+        erro = "pipe(stdout) falhou: " + std::string(std::strerror(errno));
+        return false;
+    }
+    if (pipe(stderr_pipe) != 0) {
+        erro = "pipe(stderr) falhou: " + std::string(std::strerror(errno));
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        return false;
+    }
+    return true;
+}
+
+void fechar_descritor_poll(struct pollfd& descritor, int& abertos) {
+    if (descritor.fd < 0) {
+        return;
+    }
+    close(descritor.fd);
+    descritor.fd = -1;
+    descritor.events = 0;
+    --abertos;
+}
+
+bool coletar_saidas_comando(
+    int stdout_fd,
+    int stderr_fd,
+    std::string& stdout_output,
+    std::string& stderr_output,
+    std::string& erro
+) {
+    std::array<struct pollfd, 2> descritores{{
+        {stdout_fd, POLLIN | POLLHUP, 0},
+        {stderr_fd, POLLIN | POLLHUP, 0}
+    }};
+    std::array<std::string*, 2> destinos{{&stdout_output, &stderr_output}};
+    std::array<char, 4096> buffer{};
+    int abertos = static_cast<int>(descritores.size());
+
+    while (abertos > 0) {
+        int pr;
+        do {
+            pr = poll(descritores.data(), descritores.size(), -1);
+        } while (pr < 0 && errno == EINTR);
+
+        if (pr < 0) {
+            erro = "poll() falhou ao ler saidas: " + std::string(std::strerror(errno));
+            for (auto& descritor : descritores) {
+                fechar_descritor_poll(descritor, abertos);
+            }
+            return false;
+        }
+
+        for (size_t i = 0; i < descritores.size(); ++i) {
+            auto& descritor = descritores[i];
+            if (descritor.fd < 0 || descritor.revents == 0) {
+                continue;
+            }
+
+            if ((descritor.revents & POLLNVAL) != 0) {
+                if (erro.empty()) {
+                    erro = "Descritor invalido ao ler saidas do comando.";
+                }
+                fechar_descritor_poll(descritor, abertos);
+                continue;
+            }
+
+            if ((descritor.revents & (POLLIN | POLLHUP | POLLERR)) == 0) {
+                continue;
+            }
+
+            ssize_t n;
+            do {
+                n = read(descritor.fd, buffer.data(), buffer.size());
+            } while (n < 0 && errno == EINTR);
+
+            if (n > 0) {
+                destinos[i]->append(buffer.data(), static_cast<size_t>(n));
+                continue;
+            }
+            if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                continue;
+            }
+            if (n < 0 && erro.empty()) {
+                erro = "read() falhou ao ler saidas: " + std::string(std::strerror(errno));
+            }
+            fechar_descritor_poll(descritor, abertos);
+        }
+    }
+
+    return erro.empty();
+}
+
+std::string combinar_saidas(
+    const std::string& stdout_output,
+    const std::string& stderr_output
+) {
+    if (stdout_output.empty()) {
+        return stderr_output;
+    }
+    if (stderr_output.empty()) {
+        return stdout_output;
+    }
+
+    std::string combinado = stdout_output;
+    if (combinado.back() != '\n') {
+        combinado.push_back('\n');
+    }
+    combinado += stderr_output;
+    return combinado;
+}
+
+void preencher_status_comando(
+    command_result& result,
+    int status,
+    bool saidas_ok,
+    const std::string& erro_saidas
+) {
+    if (WIFEXITED(status)) {
+        result.exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result.exit_code = 128 + WTERMSIG(status);
+    } else {
+        result.exit_code = status;
+    }
+
+    result.ok = saidas_ok && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    result.mensagem = combinar_saidas(result.stdout_output, result.stderr_output);
+
+    if (!saidas_ok) {
+        if (!result.mensagem.empty() && result.mensagem.back() != '\n') {
+            result.mensagem.push_back('\n');
+        }
+        result.mensagem += erro_saidas;
+    }
+    if (!result.ok && result.mensagem.empty()) {
+        result.mensagem = descrever_status_processo(status);
+    }
 }
 
 } // namespace
@@ -64,48 +205,46 @@ command_result exec_command_result(const std::string& cmd) {
         return result;
     }
 
-    int pipefd[2];
-    if (pipe(pipefd) != 0) {
-        result.mensagem = "pipe() falhou: " + std::string(std::strerror(errno));
+    int stdout_pipe[2];
+    int stderr_pipe[2];
+    if (!criar_pipes_comando(stdout_pipe, stderr_pipe, result.mensagem)) {
         return result;
     }
 
     pid_t pid = fork();
     if (pid < 0) {
-        close(pipefd[0]);
-        close(pipefd[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[0]);
+        close(stderr_pipe[1]);
         result.mensagem = "fork() falhou: " + std::string(std::strerror(errno));
         return result;
     }
 
     if (pid == 0) {
-        close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
-        close(pipefd[1]);
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        if (dup2(stdout_pipe[1], STDOUT_FILENO) < 0 ||
+            dup2(stderr_pipe[1], STDERR_FILENO) < 0) {
+            _exit(127);
+        }
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
 
         execlp("sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
         _exit(127);
     }
 
-    close(pipefd[1]);
-    std::array<char, 256> buffer{};
-    std::string output;
-    while (true) {
-        ssize_t n = read(pipefd[0], buffer.data(), buffer.size());
-        if (n > 0) {
-            output.append(buffer.data(), static_cast<size_t>(n));
-            continue;
-        }
-        if (n == 0) {
-            break;
-        }
-        if (errno == EINTR) {
-            continue;
-        }
-        break;
-    }
-    close(pipefd[0]);
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    std::string erro_saidas;
+    bool saidas_ok = coletar_saidas_comando(
+        stdout_pipe[0],
+        stderr_pipe[0],
+        result.stdout_output,
+        result.stderr_output,
+        erro_saidas
+    );
 
     int status = -1;
     if (waitpid(pid, &status, 0) < 0) {
@@ -113,21 +252,7 @@ command_result exec_command_result(const std::string& cmd) {
         return result;
     }
 
-    if (WIFEXITED(status)) {
-        result.exit_code = WEXITSTATUS(status);
-    } else if (WIFSIGNALED(status)) {
-        result.exit_code = 128 + WTERMSIG(status);
-    } else {
-        result.exit_code = status;
-    }
-
-    result.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    result.stdout_output = output;
-    result.stderr_output = output;
-    result.mensagem = output;
-    if (!result.ok && result.mensagem.empty()) {
-        result.mensagem = descrever_status_processo(status);
-    }
+    preencher_status_comando(result, status, saidas_ok, erro_saidas);
 
     return result;
 }
@@ -139,25 +264,31 @@ command_result exec_command_args_result(const std::vector<std::string>& args) {
         return result;
     }
 
-    int pipefd[2];
-    if (pipe(pipefd) != 0) {
-        result.mensagem = "pipe() falhou: " + std::string(std::strerror(errno));
+    int stdout_pipe[2];
+    int stderr_pipe[2];
+    if (!criar_pipes_comando(stdout_pipe, stderr_pipe, result.mensagem)) {
         return result;
     }
 
     pid_t pid = fork();
     if (pid < 0) {
-        close(pipefd[0]);
-        close(pipefd[1]);
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[0]);
+        close(stderr_pipe[1]);
         result.mensagem = "fork() falhou: " + std::string(std::strerror(errno));
         return result;
     }
 
     if (pid == 0) {
-        close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
-        close(pipefd[1]);
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        if (dup2(stdout_pipe[1], STDOUT_FILENO) < 0 ||
+            dup2(stderr_pipe[1], STDERR_FILENO) < 0) {
+            _exit(127);
+        }
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
 
         std::vector<char*> argv;
         argv.reserve(args.size() + 1);
@@ -170,24 +301,16 @@ command_result exec_command_args_result(const std::vector<std::string>& args) {
         _exit(127);
     }
 
-    close(pipefd[1]);
-    std::array<char, 256> buffer{};
-    std::string output;
-    while (true) {
-        ssize_t n = read(pipefd[0], buffer.data(), buffer.size());
-        if (n > 0) {
-            output.append(buffer.data(), static_cast<size_t>(n));
-            continue;
-        }
-        if (n == 0) {
-            break;
-        }
-        if (errno == EINTR) {
-            continue;
-        }
-        break;
-    }
-    close(pipefd[0]);
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    std::string erro_saidas;
+    bool saidas_ok = coletar_saidas_comando(
+        stdout_pipe[0],
+        stderr_pipe[0],
+        result.stdout_output,
+        result.stderr_output,
+        erro_saidas
+    );
 
     int status = -1;
     if (waitpid(pid, &status, 0) < 0) {
@@ -195,21 +318,7 @@ command_result exec_command_args_result(const std::vector<std::string>& args) {
         return result;
     }
 
-    if (WIFEXITED(status)) {
-        result.exit_code = WEXITSTATUS(status);
-    } else if (WIFSIGNALED(status)) {
-        result.exit_code = 128 + WTERMSIG(status);
-    } else {
-        result.exit_code = status;
-    }
-
-    result.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    result.stdout_output = output;
-    result.stderr_output = output;
-    result.mensagem = output;
-    if (!result.ok && result.mensagem.empty()) {
-        result.mensagem = descrever_status_processo(status);
-    }
+    preencher_status_comando(result, status, saidas_ok, erro_saidas);
     return result;
 }
 

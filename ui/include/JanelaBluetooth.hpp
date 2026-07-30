@@ -147,7 +147,7 @@ private:
     std::atomic<bool> escaneando{false};    /**< Se está em processo de escaneamento. */
     std::atomic<bool> alternandoBluetooth{false}; /**< Evita spam de toggle enquanto a troca de estado ocorre. */
     std::atomic<bool> operacaoEmAndamento{false}; /**< Evita disparar multiplas operacoes bloqueantes em paralelo. */
-    std::mutex mtx_dispositivos;            /**< Mutex para proteção das listas de dispositivos. */
+    std::mutex mtx_dispositivos;            /**< Protege listas, mensagens, foco, scroll e mapa de áreas clicáveis. */
     std::thread scanThread;                 /**< Thread dedicada ao escaneamento. */
     std::thread workerThread;               /**< Thread para parear/conectar/toggle sem travar a UI. */
     std::atomic<bool> encerrando{false};    /**< Sinaliza destruição da janela. */
@@ -229,7 +229,9 @@ private:
     void desenharListaDispositivos(SDL_Renderer* renderer);
     int desenharSecao(SDL_Renderer* renderer, const std::string& titulo, SecaoBluetooth secao,
                       const std::vector<DispositivoBluetooth>& dispositivos, int yAtual,
-                      const std::string& mensagemVazia);
+                      const std::string& mensagemVazia,
+                      std::vector<ItemBluetoothFocavel>& itensFocaveisRender,
+                      int indiceFocadoRender);
 
     /**
      * @brief Renderiza um único dispositivo da lista.
@@ -257,6 +259,7 @@ private:
     void desenharStatusOperacional(SDL_Renderer* renderer);
     void ajustarFocoAposMudancaListas();
     void ajustarScrollAoFoco();
+    void ajustarScrollAoFocoBloqueado(); /**< Requer mtx_dispositivos já adquirido. */
     void filtrarEscaneadosBloqueado();
     void desenharPainelVazio(SDL_Renderer* renderer, int x, int y, int w, const std::string& mensagem);
     bool localizarDispositivoPorPonto(int x, int y, SecaoBluetooth& secao, int& indiceLocal);
