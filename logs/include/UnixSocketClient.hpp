@@ -1,7 +1,10 @@
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <mutex>
+
+#include "ipc/FramedSocket.hpp"
 
 class UnixSocketClient {
 public:
@@ -11,7 +14,10 @@ public:
     UnixSocketClient(const UnixSocketClient&) = delete;
     UnixSocketClient& operator=(const UnixSocketClient&) = delete;
 
-    void send(const std::string& data);
+    ipc::SendResult send(
+        const std::string& data,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds::zero()
+    );
     
     // New methods for generalized client usage (e.g. UI)
     void setNonBlocking(bool enable);

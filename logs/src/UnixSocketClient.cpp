@@ -1,5 +1,4 @@
 #include "UnixSocketClient.hpp"
-#include "LogManager.hpp"
 #include "UnixSocketUtils.hpp"
 
 #include <unistd.h> 
@@ -13,7 +12,6 @@ UnixSocketClient::UnixSocketClient(const std::string& path){
     fd_  = socket(AF_UNIX, SOCK_STREAM, 0);
 
     if (fd_ < 0) { 
-        LOG_ERROR("socket()"); 
         throw std::runtime_error("UnixSocketClient: socket failed");
     }
 
@@ -34,15 +32,16 @@ UnixSocketClient::~UnixSocketClient(){
     if (fd_ >= 0) close(fd_);
 }
 
-void UnixSocketClient::send(const std::string& data) {
-    if (fd_ < 0) return;
+ipc::SendResult UnixSocketClient::send(
+    const std::string& data,
+    std::chrono::milliseconds timeout
+) {
+    if (fd_ < 0) {
+        return {ipc::SendStatus::Disconnected, 0, EBADF};
+    }
 
     std::lock_guard<std::mutex> lock(mtx_);
-    ssize_t n = write(fd_, data.c_str(), data.size());
-
-    if (n < 0) {
-        LOG_ERROR("UnixSocketClient::send write()");        
-    }
+    return ipc::sendMessage(fd_, data, timeout);
 }
 
 void UnixSocketClient::setNonBlocking(bool enable) {
@@ -63,4 +62,3 @@ ssize_t UnixSocketClient::receive(void* buffer, size_t size) {
 bool UnixSocketClient::isConnected() const {
     return fd_ >= 0;
 }
-

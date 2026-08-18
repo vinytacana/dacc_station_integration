@@ -4,8 +4,8 @@ CXX := g++
 # -Iinclude: Local headers
 # -Ithird-party: External libraries (json.hpp)
 # -I../logs/include: Logging system headers
-CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -Ithird-party -I../logs/include -I../logs/third-party/spdlog/include
-LDFLAGS := -pthread -L../logs -ldacc-logs
+CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -Ithird-party -I../ipc/include -I../logs/include -I../logs/third-party/spdlog/include
+LDFLAGS := -pthread -L../logs -ldacc-logs -L../ipc -ldacc-ipc
 
 # Directories
 BIN_DIR := ../bin
@@ -14,6 +14,8 @@ SRC_DIR := src
 
 # Targets
 TARGET_PM := $(BIN_DIR)/process-manager
+IPC_LIB := ../ipc/libdacc-ipc.a
+LOGS_LIB := ../logs/libdacc-logs.a
 
 # Sources for Process Manager
 PM_SRCS := \
@@ -30,10 +32,16 @@ VPATH := $(SRC_DIR)
 
 .PHONY: all clean
 
-all: $(TARGET_PM)
+all: $(IPC_LIB) $(LOGS_LIB) $(TARGET_PM)
+
+$(IPC_LIB): ../ipc/src/FramedSocket.cpp ../ipc/include/ipc/FramedSocket.hpp
+	$(MAKE) -C ../ipc
+
+$(LOGS_LIB): ../logs/src/LogManager.cpp ../logs/src/UnixSocketClient.cpp $(IPC_LIB)
+	$(MAKE) -C ../logs
 
 # Link Process Manager
-$(TARGET_PM): $(PM_OBJS)
+$(TARGET_PM): $(PM_OBJS) $(LOGS_LIB) $(IPC_LIB)
 	@echo "==> Linking: $@"
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(PM_OBJS) -o $@ $(LDFLAGS)
