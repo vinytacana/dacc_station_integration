@@ -8,10 +8,10 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <cstdint>
 #include <thread>
 #include <atomic>
 #include <unordered_map>
-#include <set>
 #include <string>
 #include <future> 
 #include <memory>
@@ -19,22 +19,41 @@
 
 #include <spdlog/spdlog.h>
 
-#define MAX_EVENTS 10
-#define SOCKET_PATH "/tmp/gameman.sock"
+#include "ipc/FramedSocket.hpp"
 
+#define MAX_EVENTS 10
 class ApplicationDefinition;
 
 using TimePoint = std::chrono::steady_clock::time_point;
 
+struct ProcessStartResult {
+    pid_t pid{-1};
+    int error_code{0};
+
+    bool ok() const noexcept { return pid > 0 && error_code == 0; }
+};
+
+struct ClientConnection {
+    int fd{-1};
+    std::uint64_t generation{0};
+};
+
+struct RunningProcess {
+    TimePoint start_time;
+    std::string request_id;
+    std::string game_id;
+    ClientConnection client;
+};
+
 class ProcessManager{
 private:
-    pid_t createProcess();
     std::shared_ptr<spdlog::logger> logger_;   
 
-    std::unordered_map<pid_t, TimePoint> running_processes_;
-    std::set<int> connected_clients_;
-    std::unordered_map<int, std::string> client_input_buffers_;
+    std::unordered_map<pid_t, RunningProcess> running_processes_;
+    std::unordered_map<int, std::uint64_t> connected_clients_;
+    std::unordered_map<int, ipc::FrameReader> client_frame_readers_;
     std::mutex processes_mutex_;
+    std::uint64_t connection_seq_{0};
 
     std::promise<void> ready_promise;
     std::thread event_loop_thread_;
@@ -43,6 +62,7 @@ private:
     int epoll_fd_;
     int signal_fd_;
     int server_socket_fd_;
+    std::string socket_path_;
 
     void eventLoop();
     void handleChildSignal();
@@ -52,13 +72,21 @@ private:
     void setupServerSocket();
     void handleNewConnection();
     void handleClientMessage(int client_fd);
-    void processClientMessage(const std::string& message);
+    bool processClientMessage(
+        const ClientConnection& client,
+        const std::string& message
+    );
+    ipc::SendStatus sendClientMessage(int client_fd, const std::string& message);
     void disconnectClient(int client_fd);
+    void terminateStartedProcess(pid_t child_pid);
 
 public:
-    explicit ProcessManager(std::shared_ptr<spdlog::logger> logger);
+    explicit ProcessManager(
+        std::shared_ptr<spdlog::logger> logger,
+        std::string socket_path = "/tmp/gameman.sock"
+    );
     ~ProcessManager(); 
-    pid_t startApplication(ApplicationDefinition& app);
+    ProcessStartResult startApplication(ApplicationDefinition& app);
     bool isAppValid(const ApplicationDefinition& app) const;
 
 };
