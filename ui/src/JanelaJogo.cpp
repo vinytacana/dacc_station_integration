@@ -287,7 +287,11 @@ void JanelaJogo::executarJogo() {
         ? caminho_absoluto_projeto(codigoJogo)
         : caminho_absoluto_projeto("games/" + codigoJogo + ".sh"); 
 
-    NetworkClient::getInstance().sendStartGame(codigoJogo, path);
+    NetworkClient& network = NetworkClient::getInstance();
+    if (!network.sendStartGame(codigoJogo, path)) {
+        std::cerr << "[LAUNCHER] Falha ao enviar inicio do jogo: "
+                  << network.getLastLaunchError() << std::endl;
+    }
 
     
 }

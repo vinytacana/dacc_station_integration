@@ -1,9 +1,11 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <unordered_map>
 #include "json.hpp"
 #include "UnixSocketClient.hpp"
 
@@ -21,6 +23,10 @@ using json = nlohmann::json;
  * O NetworkClient mantém o controle do estado atual dos jogos (em execução ou parado)
  * e fornece uma interface simplificada para interação com o sistema de gerenciamento
  * de jogos externo.
+ *
+ * Contrato de threading: todos os métodos públicos, incluindo sendStartGame() e
+ * checkEvents(), devem ser chamados exclusivamente pela thread principal da UI/SDL.
+ * A classe não oferece sincronização para acesso concorrente ao estado interno.
  */
 class NetworkClient {
 public:
@@ -100,6 +106,8 @@ public:
      */
     std::string getRunningGameId() const { return runningGameId_; }
 
+    const std::string& getLastLaunchError() const { return lastLaunchError_; }
+
 private:
     /**
      * @brief Construtor privado (padrão Singleton)
@@ -124,7 +132,7 @@ private:
      * Utiliza smart pointer (unique_ptr) para gerenciamento automático de memória.
      */
     std::unique_ptr<UnixSocketClient> client_;
-    std::string receiveBuffer_;
+    ipc::FrameReader frameReader_;
     
     // Game State
     
@@ -144,11 +152,18 @@ private:
      * String vazia quando nenhum jogo está rodando.
      */
     std::string runningGameId_;
+    std::string currentRequestId_;
+    std::string lastLaunchError_;
+    std::uint64_t requestSequence_{0};
+    std::unordered_map<std::string, std::string> pendingRequests_;
+    std::unordered_map<std::string, std::string> activeRequests_;
 
     /**
      * @brief Processa uma mensagem JSON completa, sem o delimitador de framing.
      */
     void processMessage(const std::string& message);
+    std::string createRequestId();
+    void recomputeDerivedState();
 
     /**
      * @brief Limpa a conexão e o estado associado após desconexão ou erro.
