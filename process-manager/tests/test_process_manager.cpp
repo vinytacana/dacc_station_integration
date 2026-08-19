@@ -199,6 +199,32 @@ std::size_t contarOcorrencias(const std::string& texto, const std::string& trech
     return total;
 }
 
+void configurarFalhaAposEscritaParcial(const std::string& event_name) {
+    test_support::PartialSendPlan partial_plan;
+    partial_plan.payload_fragment = "\"event\":\"" + event_name + "\"";
+    partial_plan.max_bytes_per_call = 8;
+    partial_plan.successful_partial_sends_before_error = 1;
+    partial_plan.error_code = EIO;
+    test_support::configurePartialSends(partial_plan);
+}
+
+json exigirFalhaParcialInterceptada(const std::string& event_name) {
+    exigir(
+        test_support::successfulPartialSendCount() == 1,
+        event_name + " deve escrever exatamente um fragmento antes da falha"
+    );
+    exigir(
+        test_support::matchingSendFailureCount() == 1,
+        event_name + " deve falhar exatamente uma vez apos a escrita parcial"
+    );
+    const json failed_event = json::parse(test_support::lastFailedSendPayload());
+    exigir(
+        failed_event.value("event", "") == event_name,
+        "double deve preservar o evento completo que originou o frame truncado"
+    );
+    return failed_event;
+}
+
 void exigirCorrelacao(
     const json& event,
     const std::string& request_id,
@@ -560,6 +586,142 @@ void testarFalhaAoEntregarGameFinished() {
     close(replacement_fd);
 }
 
+void testarEscritaParcialDeGameStarted() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string slow_script = temp.path() + "/slow-exec.sh";
+    const std::string marker = temp.path() + "/slow-exec-marker";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
+    criarScript(slow_script, "sleep 0.5\n: > \"" + marker + "\"\nexit 0\n");
+
+    std::ostringstream logs;
+    ProcessManager manager(criarLogger(logs), socket_path);
+    const int owner_fd = conectar(socket_path);
+    configurarFalhaAposEscritaParcial("game_started");
+    enviarStart(owner_fd, "request-partial-start", "slow-exec", slow_script);
+    exigirSocketFechado(owner_fd, 3s);
+
+    const json failed_event = exigirFalhaParcialInterceptada("game_started");
+    exigirCorrelacao(failed_event, "request-partial-start", "slow-exec");
+    const pid_t failed_pid = failed_event.value("pid", -1);
+    exigir(failed_pid > 0, "game_started parcial deve identificar o PID");
+
+    errno = 0;
+    exigir(
+        kill(failed_pid, 0) == -1 && errno == ESRCH,
+        "processo com game_started parcial deve estar sinalizado e colhido"
+    );
+    exigir(
+        access(marker.c_str(), F_OK) != 0,
+        "processo com game_started parcial nao deve concluir o script"
+    );
+
+    const std::string termination_log =
+        "Terminating PID=" + std::to_string(failed_pid) +
+        " because game_started could not be delivered";
+    const std::string reap_log =
+        "Reaped terminated process PID=" + std::to_string(failed_pid);
+    exigir(
+        contarOcorrencias(logs.str(), termination_log) == 1,
+        "game_started parcial deve sinalizar o processo exatamente uma vez"
+    );
+    exigir(
+        contarOcorrencias(logs.str(), reap_log) == 1,
+        "game_started parcial deve colher o processo exatamente uma vez"
+    );
+    exigir(
+        logs.str().find("owner client disconnected") == std::string::npos,
+        "desconexao nao deve repetir teardown apos game_started parcial"
+    );
+
+    close(owner_fd);
+    test_support::resetSendTestDouble();
+    const int replacement_fd = conectar(socket_path);
+    ipc::FrameReader replacement_reader;
+    exigirExecucao(
+        replacement_fd,
+        replacement_reader,
+        "request-after-partial-start",
+        "exit-zero",
+        exit_zero,
+        0
+    );
+    close(replacement_fd);
+}
+
+void testarEscritaParcialDeGameStartFailed() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string missing = temp.path() + "/missing-executable";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
+
+    ProcessManager manager(nullptr, socket_path);
+    const int owner_fd = conectar(socket_path);
+    configurarFalhaAposEscritaParcial("game_start_failed");
+    enviarStart(owner_fd, "request-partial-failure", "missing", missing);
+    exigirSocketFechado(owner_fd, 3s);
+
+    const json failed_event = exigirFalhaParcialInterceptada("game_start_failed");
+    exigirCorrelacao(failed_event, "request-partial-failure", "missing");
+
+    close(owner_fd);
+    test_support::resetSendTestDouble();
+    const int replacement_fd = conectar(socket_path);
+    ipc::FrameReader replacement_reader;
+    exigirExecucao(
+        replacement_fd,
+        replacement_reader,
+        "request-partial-failure",
+        "exit-zero",
+        exit_zero,
+        0
+    );
+    close(replacement_fd);
+}
+
+void testarEscritaParcialDeGameFinished() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
+
+    ProcessManager manager(nullptr, socket_path);
+    const int owner_fd = conectar(socket_path);
+    ipc::FrameReader owner_reader;
+    configurarFalhaAposEscritaParcial("game_finished");
+    enviarStart(owner_fd, "request-partial-finish", "exit-zero", exit_zero);
+
+    const json started = receberEvento(owner_fd, owner_reader, 3s);
+    exigir(
+        started.value("event", "") == "game_started",
+        "game_started deve chegar antes do game_finished parcial"
+    );
+    exigirCorrelacao(started, "request-partial-finish", "exit-zero");
+    exigirSocketFechado(owner_fd, 3s);
+
+    const json failed_event = exigirFalhaParcialInterceptada("game_finished");
+    exigirCorrelacao(failed_event, "request-partial-finish", "exit-zero");
+
+    close(owner_fd);
+    test_support::resetSendTestDouble();
+    const int replacement_fd = conectar(socket_path);
+    ipc::FrameReader replacement_reader;
+    exigirExecucao(
+        replacement_fd,
+        replacement_reader,
+        "request-after-partial-finish",
+        "exit-zero",
+        exit_zero,
+        0
+    );
+    close(replacement_fd);
+}
+
 void testarGeracaoEmFdReutilizado() {
     test_support::resetSendTestDouble();
     TempDirectory temp;
@@ -615,6 +777,9 @@ int main() {
     testarFalhaAoEntregarGameStarted();
     testarFalhaAoEntregarGameStartFailed();
     testarFalhaAoEntregarGameFinished();
+    testarEscritaParcialDeGameStarted();
+    testarEscritaParcialDeGameStartFailed();
+    testarEscritaParcialDeGameFinished();
     testarGeracaoEmFdReutilizado();
     std::cout << "Process Manager integration tests passed." << std::endl;
     return 0;
