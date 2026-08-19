@@ -10,6 +10,8 @@
 namespace ipc {
 
 inline constexpr std::size_t kMaxFrameBytes = 64 * 1024;
+using MonotonicTimePoint = std::chrono::steady_clock::time_point;
+using MonotonicNow = MonotonicTimePoint (*)() noexcept;
 
 enum class SendStatus {
     Ok,
@@ -33,6 +35,13 @@ SendResult sendMessage(
     int fd,
     std::string_view payload,
     std::chrono::milliseconds timeout
+);
+
+SendResult sendMessage(
+    int fd,
+    std::string_view payload,
+    std::chrono::milliseconds timeout,
+    MonotonicNow now
 );
 
 class FrameReader {

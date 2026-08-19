@@ -19,13 +19,17 @@ SendResult failedSend(SendStatus status, std::size_t bytes_sent, int error_code)
     return {status, bytes_sent, error_code};
 }
 
-int remainingPollTimeout(std::chrono::steady_clock::time_point deadline) {
-    const auto now = std::chrono::steady_clock::now();
-    if (now >= deadline) {
+MonotonicTimePoint steadyNow() noexcept {
+    return std::chrono::steady_clock::now();
+}
+
+int remainingPollTimeout(MonotonicTimePoint deadline, MonotonicNow now) {
+    const MonotonicTimePoint current_time = now();
+    if (current_time >= deadline) {
         return 0;
     }
 
-    const auto remaining = deadline - now;
+    const auto remaining = deadline - current_time;
     auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
     if (milliseconds < remaining) {
         ++milliseconds;
@@ -43,8 +47,20 @@ SendResult sendMessage(
     std::string_view payload,
     std::chrono::milliseconds timeout
 ) {
+    return sendMessage(fd, payload, timeout, steadyNow);
+}
+
+SendResult sendMessage(
+    int fd,
+    std::string_view payload,
+    std::chrono::milliseconds timeout,
+    MonotonicNow now
+) {
     if (fd < 0) {
         return {SendStatus::Error, 0, EBADF};
+    }
+    if (now == nullptr) {
+        return {SendStatus::Error, 0, EINVAL};
     }
 
     const bool has_delimiter = !payload.empty() && payload.back() == '\n';
@@ -61,10 +77,16 @@ SendResult sendMessage(
     if (timeout < std::chrono::milliseconds::zero()) {
         timeout = std::chrono::milliseconds::zero();
     }
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    const MonotonicTimePoint deadline = now() + timeout;
     std::size_t sent = 0;
+    bool attempted_send = false;
 
     while (sent < framed_payload.size()) {
+        if (attempted_send && now() >= deadline) {
+            return failedSend(SendStatus::Timeout, sent, EAGAIN);
+        }
+        attempted_send = true;
+
         const ssize_t count = ::send(
             fd,
             framed_payload.data() + sent,
@@ -82,7 +104,7 @@ SendResult sendMessage(
 
         const int send_error = errno;
         if (send_error == EINTR) {
-            if (std::chrono::steady_clock::now() >= deadline) {
+            if (now() >= deadline) {
                 return failedSend(SendStatus::Timeout, sent, EINTR);
             }
             continue;
@@ -97,7 +119,7 @@ SendResult sendMessage(
         pollfd descriptor{fd, POLLOUT, 0};
         int poll_result = -1;
         while (poll_result < 0) {
-            const int poll_timeout = remainingPollTimeout(deadline);
+            const int poll_timeout = remainingPollTimeout(deadline, now);
             if (poll_timeout == 0) {
                 return failedSend(SendStatus::Timeout, sent, EAGAIN);
             }

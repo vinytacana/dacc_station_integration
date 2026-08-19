@@ -20,6 +20,7 @@ TEST_BIN := tests/bin/test_process_manager
 TEST_SIGMASK_HELPER := tests/bin/sigmask_helper
 TEST_EXECVP_DOUBLE := tests/execvp_test_double.cpp
 TEST_SEND_DOUBLE := ../tests/support/send_test_double.cpp
+TEST_SEND_DOUBLE_HEADER := ../tests/support/send_test_double.hpp
 IPC_LIB := ../ipc/libdacc-ipc.a
 LOGS_LIB := ../logs/libdacc-logs.a
 
@@ -62,7 +63,7 @@ $(TEST_SIGMASK_HELPER): tests/sigmask_helper.c
 	@mkdir -p $(@D)
 	$(CC) -std=c11 -Wall -Wextra -g $< -o $@
 
-$(TEST_BIN): tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(TEST_SEND_DOUBLE) $(SRC_DIR)/ProcessManager.cpp include/ProcessManager.hpp $(TEST_SIGMASK_HELPER) $(IPC_LIB) $(LOGS_LIB)
+$(TEST_BIN): tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(TEST_SEND_DOUBLE) $(TEST_SEND_DOUBLE_HEADER) $(SRC_DIR)/ProcessManager.cpp include/ProcessManager.hpp $(TEST_SIGMASK_HELPER) $(IPC_LIB) $(LOGS_LIB)
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXXFLAGS) tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(TEST_SEND_DOUBLE) $(SRC_DIR)/ProcessManager.cpp -o $@ $(LDFLAGS) -Wl,--wrap=execvp -Wl,--wrap=send
 

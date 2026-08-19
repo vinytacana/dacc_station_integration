@@ -1,8 +1,11 @@
 #include "ipc/FramedSocket.hpp"
+#include "send_test_double.hpp"
 
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -14,6 +17,26 @@
 namespace {
 
 using namespace std::chrono_literals;
+
+std::atomic<std::int64_t> fake_clock_nanoseconds{0};
+
+ipc::MonotonicTimePoint fakeNow() noexcept {
+    return ipc::MonotonicTimePoint{
+        std::chrono::nanoseconds{fake_clock_nanoseconds.load(std::memory_order_relaxed)}
+    };
+}
+
+void advanceFakeClock() noexcept {
+    fake_clock_nanoseconds.fetch_add(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(1ms).count(),
+        std::memory_order_relaxed
+    );
+}
+
+void resetSendEnvironment() {
+    test_support::resetSendTestDouble();
+    fake_clock_nanoseconds.store(0, std::memory_order_relaxed);
+}
 
 void exigir(bool condicao, const std::string& mensagem) {
     if (!condicao) {
@@ -59,6 +82,7 @@ std::string receberExato(int fd, std::size_t tamanho) {
 }
 
 void testarMensagemUnica() {
+    resetSendEnvironment();
     SocketPair sockets;
     const ipc::SendResult result = ipc::sendMessage(sockets.fd[0], "unica", 100ms);
     exigir(
@@ -77,7 +101,29 @@ void testarMensagemUnica() {
     exigir(!reader.next(), "nao deve existir frame adicional");
 }
 
+void testarPrimeiraTentativaComTimeoutZero() {
+    resetSendEnvironment();
+    SocketPair sockets;
+    const ipc::SendResult result = ipc::sendMessage(
+        sockets.fd[0],
+        "imediata",
+        0ms,
+        fakeNow
+    );
+
+    exigir(
+        result.status == ipc::SendStatus::Ok,
+        "timeout zero deve preservar a primeira tentativa nao bloqueante"
+    );
+    exigir(result.bytes_sent == 9, "primeira tentativa deve enviar payload e delimitador");
+    exigir(
+        receberExato(sockets.fd[1], result.bytes_sent) == "imediata\n",
+        "primeira tentativa com timeout zero deve chegar completa"
+    );
+}
+
 void testarMensagensConcatenadas() {
+    resetSendEnvironment();
     SocketPair sockets;
     const std::string concatenadas = "primeira\nsegunda\nterceira\n";
     exigir(
@@ -95,6 +141,7 @@ void testarMensagensConcatenadas() {
 }
 
 void testarMensagemFragmentadaPorByte() {
+    resetSendEnvironment();
     SocketPair sockets;
     const std::string mensagem = "fragmentada\n";
     ipc::FrameReader reader;
@@ -116,6 +163,7 @@ void testarMensagemFragmentadaPorByte() {
 }
 
 void testarLimiteDeMensagem() {
+    resetSendEnvironment();
     SocketPair sockets;
     const std::string grande(ipc::kMaxFrameBytes + 1, 'x');
     const ipc::SendResult result = ipc::sendMessage(sockets.fd[0], grande, 100ms);
@@ -129,6 +177,7 @@ void testarLimiteDeMensagem() {
 }
 
 void testarPeerFechado() {
+    resetSendEnvironment();
     SocketPair sockets;
     sockets.closePeer();
     const ipc::SendResult result = ipc::sendMessage(sockets.fd[0], "sem-peer", 100ms);
@@ -147,6 +196,7 @@ void reduzirBufferDeEnvio(int fd) {
 }
 
 void testarEnvioParcialAteConcluir() {
+    resetSendEnvironment();
     SocketPair sockets;
     reduzirBufferDeEnvio(sockets.fd[0]);
     const std::string payload(ipc::kMaxFrameBytes, 'p');
@@ -166,33 +216,63 @@ void testarEnvioParcialAteConcluir() {
     exigir(recebido.back() == '\n', "payload parcial deve terminar com delimitador");
 }
 
-void testarPrazoAposEnvioParcial() {
+void testarPrazoDuranteProgressoParcial() {
+    resetSendEnvironment();
     SocketPair sockets;
-    reduzirBufferDeEnvio(sockets.fd[0]);
-    const std::string payload(ipc::kMaxFrameBytes, 't');
-    const auto inicio = std::chrono::steady_clock::now();
-    const ipc::SendResult result = ipc::sendMessage(sockets.fd[0], payload, 50ms);
-    const auto duracao = std::chrono::steady_clock::now() - inicio;
+    const std::string payload = "progresso-controlado";
+    test_support::PartialSendPlan partial_plan;
+    partial_plan.payload_fragment = payload;
+    partial_plan.max_bytes_per_call = 1;
+    partial_plan.after_partial_send = advanceFakeClock;
+    partial_plan.socket_fd = sockets.fd[0];
+    test_support::configurePartialSends(partial_plan);
 
-    exigir(result.bytes_sent > 0, "teste deve forcar ao menos um envio parcial");
+    const ipc::SendResult result = ipc::sendMessage(
+        sockets.fd[0],
+        payload,
+        3ms,
+        fakeNow
+    );
+
     exigir(
         result.status == ipc::SendStatus::Desynced,
-        "prazo expirado apos envio parcial deve invalidar o stream"
+        "deadline durante progresso parcial deve invalidar o stream"
     );
-    exigir(result.bytes_sent < payload.size() + 1, "timeout deve preservar contagem parcial");
-    exigir(duracao >= 40ms && duracao < 500ms, "timeout deve respeitar prazo monotonicamente");
+    exigir(result.bytes_sent == 3, "deadline falso deve permitir exatamente tres bytes");
+    exigir(
+        test_support::successfulPartialSendCount() == 3,
+        "double deve executar exatamente tres envios parciais"
+    );
+    exigir(
+        fakeNow().time_since_epoch() == 3ms,
+        "double deve avancar apenas o relogio injetado"
+    );
+
+    std::array<char, 8> received{};
+    const ssize_t count = recv(
+        sockets.fd[1],
+        received.data(),
+        received.size(),
+        MSG_DONTWAIT
+    );
+    exigir(count == 3, "peer deve receber somente os bytes anteriores ao deadline");
+    exigir(
+        std::string(received.data(), static_cast<std::size_t>(count)) == payload.substr(0, 3),
+        "bytes parciais devem preservar o prefixo do frame"
+    );
 }
 
 } // namespace
 
 int main() {
     testarMensagemUnica();
+    testarPrimeiraTentativaComTimeoutZero();
     testarMensagensConcatenadas();
     testarMensagemFragmentadaPorByte();
     testarLimiteDeMensagem();
     testarPeerFechado();
     testarEnvioParcialAteConcluir();
-    testarPrazoAposEnvioParcial();
+    testarPrazoDuranteProgressoParcial();
     std::cout << "Framed socket tests passed." << std::endl;
     return 0;
 }

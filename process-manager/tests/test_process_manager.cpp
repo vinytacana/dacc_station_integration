@@ -248,6 +248,7 @@ void exigirExecucao(
 }
 
 void testarExecucoesDeterministicas() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string exit_one = temp.path() + "/exit-one.sh";
@@ -305,6 +306,7 @@ void testarExecucoesDeterministicas() {
 }
 
 void testarPrazoDaConfirmacaoDeExec() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string stopped_before_exec = temp.path() + "/stop-before-exec.sh";
@@ -338,6 +340,7 @@ void testarPrazoDaConfirmacaoDeExec() {
 }
 
 void testarEncerramentoAoDesconectar() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string orphan_script = temp.path() + "/orphan-marker.sh";
@@ -388,6 +391,7 @@ void testarEncerramentoAoDesconectar() {
 }
 
 void testarFalhaAoEntregarGameStarted() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string slow_script = temp.path() + "/slow-exec.sh";
@@ -445,8 +449,6 @@ void testarFalhaAoEntregarGameStarted() {
         );
 
         close(owner_fd);
-        test_support::resetSendTestDouble();
-
         const int replacement_fd = conectar(socket_path);
         ipc::FrameReader replacement_reader;
         exigirExecucao(
@@ -471,6 +473,7 @@ void testarFalhaAoEntregarGameStarted() {
 }
 
 void testarFalhaAoEntregarGameStartFailed() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string missing = temp.path() + "/missing-executable";
@@ -499,8 +502,6 @@ void testarFalhaAoEntregarGameStartFailed() {
     );
     exigirCorrelacao(failed_event, "request-undelivered-failure", "missing");
     close(owner_fd);
-    test_support::resetSendTestDouble();
-
     const int replacement_fd = conectar(socket_path);
     ipc::FrameReader replacement_reader;
     exigirExecucao(
@@ -515,6 +516,7 @@ void testarFalhaAoEntregarGameStartFailed() {
 }
 
 void testarFalhaAoEntregarGameFinished() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string socket_path = temp.path() + "/daemon.sock";
@@ -545,8 +547,6 @@ void testarFalhaAoEntregarGameFinished() {
     );
     exigirCorrelacao(failed_event, "request-undelivered-finish", "exit-zero");
     close(owner_fd);
-    test_support::resetSendTestDouble();
-
     const int replacement_fd = conectar(socket_path);
     ipc::FrameReader replacement_reader;
     exigirExecucao(
@@ -561,6 +561,7 @@ void testarFalhaAoEntregarGameFinished() {
 }
 
 void testarGeracaoEmFdReutilizado() {
+    test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string socket_path = temp.path() + "/daemon.sock";
     std::ostringstream logs;
@@ -608,7 +609,6 @@ void testarGeracaoEmFdReutilizado() {
 } // namespace
 
 int main() {
-    test_support::resetSendTestDouble();
     testarExecucoesDeterministicas();
     testarPrazoDaConfirmacaoDeExec();
     testarEncerramentoAoDesconectar();
