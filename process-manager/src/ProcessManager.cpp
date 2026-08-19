@@ -7,25 +7,107 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <poll.h>
 
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <cerrno> 
+#include <optional>
 #include <vector>
 #include <stdexcept>
 #include <thread>
+#include <chrono>
 
 #include "json.hpp"
 
 using json = nlohmann::json;
 
+// handleChildSignal, handleClientMessage, processClientMessage, and disconnectClient run on the event-loop thread; processes_mutex_ only guards external access.
 namespace {
 
-constexpr std::size_t MAX_IPC_MESSAGE_SIZE = 64 * 1024;
+constexpr auto kClientSendTimeout = std::chrono::milliseconds(250);
+constexpr auto kChildTerminationTimeout = std::chrono::milliseconds(250);
+// This synchronous wait occupies the event-loop thread, which is acceptable for
+// the current one-game model; watching the pipe asynchronously with epoll is deferred.
+constexpr auto kExecConfirmationTimeout = std::chrono::milliseconds(2000);
+
+int remainingPollTimeout(std::chrono::steady_clock::time_point deadline) {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline) {
+        return 0;
+    }
+
+    const auto remaining = deadline - now;
+    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
+    if (milliseconds < remaining) {
+        ++milliseconds;
+    }
+    if (milliseconds.count() > INT_MAX) {
+        return INT_MAX;
+    }
+    return static_cast<int>(milliseconds.count());
+}
+
+int normalizedExitStatus(int status) {
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    if (WIFSIGNALED(status)) {
+        return 128 + WTERMSIG(status);
+    }
+    return status;
+}
+
+bool requiresDisconnect(ipc::SendStatus status) {
+    return status != ipc::SendStatus::Ok;
+}
+
+[[noreturn]] void reportChildFailure(int error_fd, int error_code) {
+    const char* bytes = reinterpret_cast<const char*>(&error_code);
+    std::size_t written = 0;
+    while (written < sizeof(error_code)) {
+        const ssize_t count = write(
+            error_fd,
+            bytes + written,
+            sizeof(error_code) - written
+        );
+        if (count > 0) {
+            written += static_cast<std::size_t>(count);
+        } else if (count < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+    _exit(127);
+}
+
+void prepareChildSignals(int error_fd) {
+    struct sigaction default_action{};
+    default_action.sa_handler = SIG_DFL;
+    sigemptyset(&default_action.sa_mask);
+
+    if (sigaction(SIGCHLD, &default_action, nullptr) != 0 ||
+        sigaction(SIGINT, &default_action, nullptr) != 0 ||
+        sigaction(SIGTERM, &default_action, nullptr) != 0 ||
+        sigaction(SIGPIPE, &default_action, nullptr) != 0) {
+        reportChildFailure(error_fd, errno);
+    }
+
+    sigset_t empty_mask;
+    sigemptyset(&empty_mask);
+    if (sigprocmask(SIG_SETMASK, &empty_mask, nullptr) != 0) {
+        reportChildFailure(error_fd, errno);
+    }
+}
 
 } // namespace
 
-ProcessManager::ProcessManager(std::shared_ptr<spdlog::logger> logger) : logger_{std::move(logger)} {
+ProcessManager::ProcessManager(
+    std::shared_ptr<spdlog::logger> logger,
+    std::string socket_path
+) : logger_{std::move(logger)}, socket_path_{std::move(socket_path)} {
 
     // a data type to represent multiple signals
     // "signal_mask" is showing wich signals are blocked
@@ -91,11 +173,11 @@ ProcessManager::~ProcessManager() {
         event_loop_thread_.join();
     }
 
-    for (int client_fd : connected_clients_) {
-        close(client_fd);
+    for (const auto& client : connected_clients_) {
+        close(client.first);
     }
     connected_clients_.clear();
-    client_input_buffers_.clear();
+    client_frame_readers_.clear();
 
     if (epoll_fd_ != -1) {
         close(epoll_fd_);
@@ -105,7 +187,7 @@ ProcessManager::~ProcessManager() {
     }
     if (server_socket_fd_ != -1) {
         close(server_socket_fd_);
-        unlink(SOCKET_PATH);
+        unlink(socket_path_.c_str());
     }
     if (logger_) logger_->info("ProcessManager shut down cleanly.");
 }
@@ -143,7 +225,7 @@ void ProcessManager::eventLoop() {
 
 void ProcessManager::handleChildSignal() {
     signalfd_siginfo ssi;
-        while (read(signal_fd_, &ssi, sizeof(ssi)) == sizeof(ssi)) {
+    while (read(signal_fd_, &ssi, sizeof(ssi)) == sizeof(ssi)) {
         // continue lendo ate que não haja mais nada
     }
     
@@ -152,63 +234,55 @@ void ProcessManager::handleChildSignal() {
     while ((child_pid = waitpid(-1, &status, WNOHANG)) > 0) {
         auto end_time = std::chrono::steady_clock::now();
         
-        std::lock_guard<std::mutex> lock(processes_mutex_);
-        auto it = running_processes_.find(child_pid);
-        
-        if (it != running_processes_.end()) {
-            auto start_time = it->second;
-            auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
+        std::optional<RunningProcess> process;
+        {
+            std::lock_guard<std::mutex> lock(processes_mutex_);
+            auto it = running_processes_.find(child_pid);
+            if (it != running_processes_.end()) {
+                process = std::move(it->second);
+                running_processes_.erase(it);
+            }
+        }
+
+        if (process) {
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+                end_time - process->start_time
+            );
             
             if (logger_) {
                 logger_->info("Process PID={} finished.", child_pid);
                 logger_->info("Total execution time: {} seconds.", duration.count());
             }
             
-            // Notify connected clients
             json response;
             response["event"] = "game_finished";
+            response["request_id"] = process->request_id;
+            response["game_id"] = process->game_id;
             response["pid"] = child_pid;
-            response["status"] = status;
-            
-            std::string msg = response.dump() + '\n';
-            for (int client_fd : connected_clients_) {
-                ssize_t bytes_sent = send(client_fd, msg.c_str(), msg.length(), MSG_NOSIGNAL);
-                if (bytes_sent < 0 && logger_) {
-                    logger_->warn(
-                        "Failed to notify client FD={}: {}",
-                        client_fd,
-                        strerror(errno)
-                    );
-                } else if (bytes_sent != static_cast<ssize_t>(msg.length()) && logger_) {
-                    logger_->warn(
-                        "Partial notification sent to client FD={} ({}/{})",
-                        client_fd,
-                        bytes_sent,
-                        msg.length()
-                    );
-                }
-            }
+            response["exit_status"] = normalizedExitStatus(status);
 
-            running_processes_.erase(it);
-        }
-        else{
+            const auto client = connected_clients_.find(process->client.fd);
+            if (client != connected_clients_.end() &&
+                client->second == process->client.generation) {
+                const ipc::SendStatus send_status = sendClientMessage(
+                    process->client.fd,
+                    response.dump()
+                );
+                if (send_status != ipc::SendStatus::Ok && logger_) {
+                    logger_->warn("game_finished was not delivered for PID={}", child_pid);
+                }
+                if (requiresDisconnect(send_status)) {
+                    disconnectClient(process->client.fd);
+                }
+            } else if (logger_) {
+                logger_->info(
+                    "Discarding game_finished for PID={}, owner client is not connected",
+                    child_pid
+                );
+            }
+        } else {
             if (logger_) logger_->warn("Reaped untracked child process PID={}", child_pid);
         }
-    }
-}
-
-pid_t ProcessManager::createProcess(){
-    pid_t child_process;
-    child_process = fork();
-    switch (child_process)
-    {
-    case -1:
-        throw std::runtime_error("fork() failed: " + std::string(strerror(errno)));
-    case 0:
-        return child_process; // returning 0   CHILD
-    default:
-        return child_process; // returning > 0 PARENT
-        break;
     }
 }
 
@@ -224,48 +298,177 @@ bool ProcessManager::isAppValid(const ApplicationDefinition& app) const {
 }
     
 
-pid_t ProcessManager::startApplication(ApplicationDefinition& app){
-    if(not isAppValid(app)) return -1;    
-    
-    pid_t child_pid;
-    try{   
-        child_pid = createProcess();
-    }catch(const std::runtime_error& e)
-    {
-        if (logger_) logger_->error(e.what());
-        return -1;
+ProcessStartResult ProcessManager::startApplication(ApplicationDefinition& app) {
+    if (!isAppValid(app)) {
+        return {-1, EINVAL};
     }
-    
-    if (child_pid == 0){
-        std::vector<std::string> argsVector = buildCommand(app);
 
-        // Convert std::vector<std::string> to char* const*
-        std::vector<char*> execArgs;
-        for (const auto& arg : argsVector) {
-            execArgs.push_back(const_cast<char*>(arg.c_str()));
+    std::vector<std::string> args_vector = buildCommand(app);
+    std::vector<char*> exec_args;
+    exec_args.reserve(args_vector.size() + 1);
+    for (auto& arg : args_vector) {
+        exec_args.push_back(arg.data());
+    }
+    exec_args.push_back(nullptr);
+
+    int exec_error_pipe[2];
+    if (pipe2(exec_error_pipe, O_CLOEXEC | O_NONBLOCK) != 0) {
+        const int pipe_error = errno;
+        if (logger_) logger_->error("pipe2() failed: {}", strerror(pipe_error));
+        return {-1, pipe_error};
+    }
+
+    const pid_t child_pid = fork();
+    if (child_pid < 0) {
+        const int fork_error = errno;
+        close(exec_error_pipe[0]);
+        close(exec_error_pipe[1]);
+        if (logger_) logger_->error("fork() failed: {}", strerror(fork_error));
+        return {-1, fork_error};
+    }
+
+    if (child_pid == 0) {
+        close(exec_error_pipe[0]);
+        prepareChildSignals(exec_error_pipe[1]);
+        execvp(exec_args[0], exec_args.data());
+        reportChildFailure(exec_error_pipe[1], errno);
+    }
+
+    close(exec_error_pipe[1]);
+    int exec_error = 0;
+    char* error_bytes = reinterpret_cast<char*>(&exec_error);
+    std::size_t received = 0;
+    bool pipe_read_failed = false;
+    bool confirmation_timed_out = false;
+    bool pipe_eof = false;
+    const auto confirmation_deadline =
+        std::chrono::steady_clock::now() + kExecConfirmationTimeout;
+
+    while (received < sizeof(exec_error)) {
+        const int poll_timeout = remainingPollTimeout(confirmation_deadline);
+        if (poll_timeout == 0) {
+            confirmation_timed_out = true;
+            break;
         }
-        execArgs.push_back(nullptr); 
 
-        execvp(execArgs[0], execArgs.data());
-        
-        std::cerr << "CRITICAL: execvp failed for " << app.getPath() << ": " << strerror(errno) << std::endl;
-        _exit(EXIT_FAILURE);
-        return -1; 
+        pollfd descriptor{exec_error_pipe[0], POLLIN, 0};
+        const int poll_result = poll(&descriptor, 1, poll_timeout);
+        if (poll_result < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            exec_error = errno;
+            pipe_read_failed = true;
+            break;
+        }
+        if (poll_result == 0) {
+            confirmation_timed_out = true;
+            break;
+        }
+        if ((descriptor.revents & POLLNVAL) != 0) {
+            exec_error = EBADF;
+            pipe_read_failed = true;
+            break;
+        }
+
+        if ((descriptor.revents & (POLLIN | POLLHUP)) != 0) {
+            const ssize_t count = read(
+                exec_error_pipe[0],
+                error_bytes + received,
+                sizeof(exec_error) - received
+            );
+            if (count > 0) {
+                received += static_cast<std::size_t>(count);
+                continue;
+            }
+            if (count == 0) {
+                pipe_eof = true;
+                break;
+            }
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            exec_error = errno;
+            pipe_read_failed = true;
+            break;
+        }
+
+        if ((descriptor.revents & POLLERR) != 0) {
+            exec_error = EIO;
+            pipe_read_failed = true;
+            break;
+        }
     }
 
-    // parent process
-    auto start_time = std::chrono::steady_clock::now();
-    {
-        std::lock_guard<std::mutex> lock(processes_mutex_);
-        running_processes_[child_pid] = start_time;
+    if (confirmation_timed_out) {
+        if (logger_) {
+            logger_->error("Timed out waiting for exec confirmation for {}", app.getPath());
+        }
+        kill(child_pid, SIGKILL);
+        int child_status = 0;
+        while (waitpid(child_pid, &child_status, 0) < 0 && errno == EINTR) {
+        }
+        close(exec_error_pipe[0]);
+        return {-1, ETIMEDOUT};
+    }
+    close(exec_error_pipe[0]);
+
+    if (received > 0 || pipe_read_failed || !pipe_eof) {
+        if (received != sizeof(exec_error) && !pipe_read_failed) {
+            exec_error = EIO;
+        }
+        if (pipe_read_failed) {
+            kill(child_pid, SIGKILL);
+        }
+        int child_status = 0;
+        while (waitpid(child_pid, &child_status, 0) < 0 && errno == EINTR) {
+        }
+        if (logger_) {
+            logger_->error("execvp failed for {}: {}", app.getPath(), strerror(exec_error));
+        }
+        return {-1, exec_error};
     }
 
     if (logger_) {
         logger_->info("App {} started successfully", app.getId());
         logger_->info("PID={}", child_pid);
     }
-        
-    return child_pid;
+
+    return {child_pid, 0};
+}
+
+void ProcessManager::terminateStartedProcess(pid_t child_pid) {
+    if (kill(child_pid, SIGTERM) != 0 && errno != ESRCH && logger_) {
+        logger_->warn("SIGTERM failed for undelivered PID={}: {}", child_pid, strerror(errno));
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + kChildTerminationTimeout;
+    int status = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
+        const pid_t wait_result = waitpid(child_pid, &status, WNOHANG);
+        if (wait_result == child_pid) {
+            if (logger_) logger_->info("Reaped terminated process PID={}", child_pid);
+            return;
+        }
+        if (wait_result < 0 && errno == ECHILD) {
+            return;
+        }
+        if (wait_result < 0 && errno != EINTR) {
+            break;
+        }
+        poll(nullptr, 0, 10);
+    }
+
+    if (kill(child_pid, SIGKILL) != 0 && errno != ESRCH && logger_) {
+        logger_->warn("SIGKILL failed for undelivered PID={}: {}", child_pid, strerror(errno));
+    }
+    pid_t wait_result = -1;
+    do {
+        wait_result = waitpid(child_pid, &status, 0);
+    } while (wait_result < 0 && errno == EINTR);
+    if (wait_result == child_pid && logger_) {
+        logger_->info("Reaped terminated process PID={}", child_pid);
+    }
 }
 
 std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinition& app) {
@@ -323,9 +526,13 @@ std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinitio
         struct sockaddr_un addr;
         memset(&addr, 0, sizeof(addr));
         addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
+        if (socket_path_.empty() || socket_path_.size() >= sizeof(addr.sun_path)) {
+            close(server_socket_fd_);
+            throw std::runtime_error("Invalid Process Manager socket path");
+        }
+        strncpy(addr.sun_path, socket_path_.c_str(), sizeof(addr.sun_path) - 1);
     
-        unlink(SOCKET_PATH); 
+        unlink(socket_path_.c_str());
     
         if (bind(server_socket_fd_, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
             close(server_socket_fd_);
@@ -345,125 +552,278 @@ std::vector<std::string> ProcessManager::buildCommand(const ApplicationDefinitio
             throw std::runtime_error("Failed to add server socket to epoll: " + std::string(strerror(errno)));
         }
     
-        if (logger_) logger_->info("Server socket setup successfully at {}", SOCKET_PATH);
+        if (logger_) logger_->info("Server socket setup successfully at {}", socket_path_);
     }
     
-    void ProcessManager::handleNewConnection() {
-        int client_fd = accept4(server_socket_fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
-        if (client_fd == -1) {
-            if (logger_) logger_->error("accept4 failed: {}", strerror(errno));
-            return;
-        }
-    
-        epoll_event ev{};
-        ev.events = EPOLLIN;
-        ev.data.fd = client_fd;
-        if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) == -1) {
-            if (logger_) logger_->error("Failed to add client socket to epoll: {}", strerror(errno));
-            close(client_fd);
-            return;
-        }
-        
-        connected_clients_.insert(client_fd);
-        client_input_buffers_.emplace(client_fd, std::string{});
-        if (logger_) logger_->info("New client connection accepted (FD: {})", client_fd);
-    }
-    
-    void ProcessManager::handleClientMessage(int client_fd) {
-        char buffer[4096];
-
-        while (true) {
-            ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
-
-            if (bytes_read > 0) {
-                std::string& input_buffer = client_input_buffers_[client_fd];
-                input_buffer.append(buffer, static_cast<std::size_t>(bytes_read));
-
-                std::size_t delimiter_position = std::string::npos;
-                while ((delimiter_position = input_buffer.find('\n')) != std::string::npos) {
-                    std::string message = input_buffer.substr(0, delimiter_position);
-                    input_buffer.erase(0, delimiter_position + 1);
-
-                    if (!message.empty() && message.back() == '\r') {
-                        message.pop_back();
-                    }
-                    if (!message.empty()) {
-                        processClientMessage(message);
-                    }
-                }
-
-                if (input_buffer.size() > MAX_IPC_MESSAGE_SIZE) {
-                    if (logger_) {
-                        logger_->error(
-                            "IPC message exceeded {} bytes (FD: {})",
-                            MAX_IPC_MESSAGE_SIZE,
-                            client_fd
-                        );
-                    }
-                    disconnectClient(client_fd);
-                    return;
-                }
-
-                continue;
-            }
-
-            if (bytes_read == 0) {
-                if (logger_) logger_->info("Client disconnected (FD: {})", client_fd);
-                disconnectClient(client_fd);
-                return;
-            }
-
-            if (errno == EINTR) {
-                continue;
-            }
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return;
-            }
-
-            if (logger_) logger_->error("recv failed (FD: {}): {}", client_fd, strerror(errno));
-            disconnectClient(client_fd);
-            return;
-        }
+void ProcessManager::handleNewConnection() {
+    const int client_fd = accept4(
+        server_socket_fd_,
+        nullptr,
+        nullptr,
+        SOCK_NONBLOCK | SOCK_CLOEXEC
+    );
+    if (client_fd == -1) {
+        if (logger_) logger_->error("accept4 failed: {}", strerror(errno));
+        return;
     }
 
-    void ProcessManager::processClientMessage(const std::string& message) {
-        if (logger_) logger_->info("Received message from client: {}", message);
-
-        try {
-            auto j = json::parse(message);
-            if (j.contains("action") && j["action"] == "start") {
-                std::string id = j.value("id", "unknown");
-                std::string path = j.value("path", "");
-                
-                if (path.empty()) {
-                    if (logger_) logger_->error("Error: Start action received but path is empty");
-                    return;
-                }
-    
-                ApplicationDefinition app(id, path.c_str(), "game");
-
-                if (j.contains("graphics")) {
-                    auto g = j["graphics"];
-                    app.useGamescope = g.value("use_gamescope", false);
-                    app.renderWidth = g.value("width", 1280);
-                    app.renderHeight = g.value("height", 720);
-                    app.refreshRate = g.value("fps", 60);
-                }
-
-                startApplication(app);
-            }
-        } catch (const json::exception& e) {
-            if (logger_) logger_->error("Invalid IPC JSON message: {}", e.what());
-        }
-    }
-
-    void ProcessManager::disconnectClient(int client_fd) {
-        if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr) == -1 &&
-            errno != ENOENT && logger_) {
-            logger_->warn("Failed to remove client FD={} from epoll: {}", client_fd, strerror(errno));
-        }
-
-        connected_clients_.erase(client_fd);
-        client_input_buffers_.erase(client_fd);
+    epoll_event ev{};
+    ev.events = EPOLLIN;
+    ev.data.fd = client_fd;
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev) == -1) {
+        if (logger_) logger_->error("Failed to add client socket to epoll: {}", strerror(errno));
         close(client_fd);
+        return;
     }
+
+    const std::uint64_t generation = ++connection_seq_;
+    connected_clients_.emplace(client_fd, generation);
+    client_frame_readers_.emplace(client_fd, ipc::FrameReader{});
+    if (logger_) {
+        logger_->info(
+            "New client connection accepted (FD: {}, generation: {})",
+            client_fd,
+            generation
+        );
+    }
+}
+
+void ProcessManager::handleClientMessage(int client_fd) {
+    const auto client_it = connected_clients_.find(client_fd);
+    if (client_it == connected_clients_.end()) {
+        return;
+    }
+    const ClientConnection client{client_fd, client_it->second};
+    bool should_disconnect = false;
+    char buffer[4096];
+
+    while (!should_disconnect) {
+        const ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
+
+        if (bytes_read > 0) {
+            auto reader_it = client_frame_readers_.find(client_fd);
+            if (reader_it == client_frame_readers_.end()) {
+                should_disconnect = true;
+                break;
+            }
+
+            ipc::FrameReader& frame_reader = reader_it->second;
+            frame_reader.feed(buffer, static_cast<std::size_t>(bytes_read));
+            while (auto message = frame_reader.next()) {
+                if (!message->empty() && !processClientMessage(client, *message)) {
+                    should_disconnect = true;
+                    break;
+                }
+            }
+
+            if (!should_disconnect && frame_reader.overflowed()) {
+                if (logger_) {
+                    logger_->error(
+                        "IPC message exceeded {} bytes (FD: {})",
+                        ipc::kMaxFrameBytes,
+                        client_fd
+                    );
+                }
+                should_disconnect = true;
+            }
+            continue;
+        }
+
+        if (bytes_read == 0) {
+            if (logger_) logger_->info("Client disconnected (FD: {})", client_fd);
+            should_disconnect = true;
+            break;
+        }
+
+        if (errno == EINTR) {
+            continue;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            break;
+        }
+
+        if (logger_) logger_->error("recv failed (FD: {}): {}", client_fd, strerror(errno));
+        should_disconnect = true;
+    }
+
+    if (should_disconnect) {
+        disconnectClient(client_fd);
+    }
+}
+
+ipc::SendStatus ProcessManager::sendClientMessage(
+    int client_fd,
+    const std::string& message
+) {
+    const ipc::SendResult send_result = ipc::sendMessage(
+        client_fd,
+        message,
+        kClientSendTimeout
+    );
+    if (send_result.status != ipc::SendStatus::Ok && logger_) {
+        logger_->warn(
+            "Failed to send IPC message to FD={} (status={}, bytes={}, errno={})",
+            client_fd,
+            static_cast<int>(send_result.status),
+            send_result.bytes_sent,
+            send_result.err
+        );
+    }
+    return send_result.status;
+}
+
+bool ProcessManager::processClientMessage(
+    const ClientConnection& client,
+    const std::string& message
+) {
+    if (logger_) logger_->info("Received message from client: {}", message);
+
+    json request;
+    try {
+        request = json::parse(message);
+    } catch (const json::exception& e) {
+        if (logger_) logger_->error("Invalid IPC JSON message: {}", e.what());
+        return true;
+    }
+
+    if (!request.is_object() ||
+        !request.contains("request_id") ||
+        !request["request_id"].is_string() ||
+        request["request_id"].get<std::string>().empty()) {
+        if (logger_) logger_->warn("Discarding IPC command without request_id");
+        return true;
+    }
+
+    const std::string request_id = request["request_id"].get<std::string>();
+    if (!request.contains("action") ||
+        !request["action"].is_string() ||
+        request["action"].get<std::string>() != "start") {
+        if (logger_) logger_->warn("Ignoring unsupported IPC action for request_id={}", request_id);
+        return true;
+    }
+
+    const std::string game_id =
+        request.contains("game_id") && request["game_id"].is_string()
+            ? request["game_id"].get<std::string>()
+            : std::string{};
+    const std::string path =
+        request.contains("path") && request["path"].is_string()
+            ? request["path"].get<std::string>()
+            : std::string{};
+
+    auto send_failure = [&](int error_code, const std::string& error_message) {
+        const json response{
+            {"event", "game_start_failed"},
+            {"request_id", request_id},
+            {"game_id", game_id},
+            {"error_code", error_code},
+            {"message", error_message}
+        };
+        return sendClientMessage(client.fd, response.dump());
+    };
+
+    if (game_id.empty() || path.empty()) {
+        if (logger_) {
+            logger_->error("Invalid start request for request_id={}", request_id);
+        }
+        return !requiresDisconnect(send_failure(EINVAL, "game_id and path are required"));
+    }
+
+    ApplicationDefinition app(game_id, path.c_str(), "game");
+    try {
+        if (request.contains("graphics")) {
+            const auto& graphics = request["graphics"];
+            app.useGamescope = graphics.value("use_gamescope", false);
+            app.renderWidth = graphics.value("width", 1280);
+            app.renderHeight = graphics.value("height", 720);
+            app.refreshRate = graphics.value("fps", 60);
+        }
+    } catch (const json::exception& e) {
+        if (logger_) logger_->error("Invalid graphics config: {}", e.what());
+        return !requiresDisconnect(send_failure(EINVAL, "Invalid start request"));
+    }
+
+    const ProcessStartResult start_result = startApplication(app);
+    if (!start_result.ok()) {
+        return !requiresDisconnect(send_failure(
+            start_result.error_code,
+            std::string(strerror(start_result.error_code))
+        ));
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(processes_mutex_);
+        running_processes_[start_result.pid] = RunningProcess{
+            std::chrono::steady_clock::now(),
+            request_id,
+            game_id,
+            client
+        };
+    }
+
+    const json response{
+        {"event", "game_started"},
+        {"request_id", request_id},
+        {"game_id", game_id},
+        {"pid", start_result.pid}
+    };
+    const ipc::SendStatus send_status = sendClientMessage(client.fd, response.dump());
+    if (send_status == ipc::SendStatus::Ok) {
+        return true;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(processes_mutex_);
+        running_processes_.erase(start_result.pid);
+    }
+    if (logger_) {
+        logger_->error(
+            "Terminating PID={} because game_started could not be delivered",
+            start_result.pid
+        );
+    }
+    terminateStartedProcess(start_result.pid);
+    return !requiresDisconnect(send_status);
+}
+
+void ProcessManager::disconnectClient(int client_fd) {
+    const auto client = connected_clients_.find(client_fd);
+    if (client == connected_clients_.end()) {
+        return;
+    }
+    const std::uint64_t generation = client->second;
+
+    if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, nullptr) == -1 &&
+        errno != ENOENT && logger_) {
+        logger_->warn("Failed to remove client FD={} from epoll: {}", client_fd, strerror(errno));
+    }
+
+    std::vector<pid_t> orphaned_processes;
+    {
+        std::lock_guard<std::mutex> lock(processes_mutex_);
+        for (auto process = running_processes_.begin();
+             process != running_processes_.end();) {
+            const ClientConnection& owner = process->second.client;
+            if (owner.fd == client_fd && owner.generation == generation) {
+                orphaned_processes.push_back(process->first);
+                process = running_processes_.erase(process);
+            } else {
+                ++process;
+            }
+        }
+    }
+
+    connected_clients_.erase(client);
+    client_frame_readers_.erase(client_fd);
+    close(client_fd);
+
+    for (pid_t child_pid : orphaned_processes) {
+        if (logger_) {
+            logger_->warn(
+                "Terminating PID={}, owner client disconnected",
+                child_pid
+            );
+        }
+        terminateStartedProcess(child_pid);
+    }
+}

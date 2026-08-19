@@ -8,6 +8,7 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -g \
            -Iinclude \
            -I../config-dacc \
            -I../config-dacc/include \
+           -I../ipc/include \
            -I../logs/include \
            -I../process-manager/third-party \
            -isystem ../logs/third-party/spdlog/include \
@@ -16,6 +17,7 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -g \
 # Bibliotecas (Onde achar os .a e quais linkar)
 LDFLAGS = ../config-dacc/libdacc-config.a \
           ../logs/libdacc-logs.a \
+          ../ipc/libdacc-ipc.a \
           -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer
 
 SRC_DIR = src
@@ -29,7 +31,7 @@ DEPS = $(OBJS:.o=.d)
 
 all: directories $(BIN)
 
-$(BIN): $(OBJS)
+$(BIN): $(OBJS) ../config-dacc/libdacc-config.a ../logs/libdacc-logs.a ../ipc/libdacc-ipc.a
 	@echo "Linkando dacc-ui..."
 	$(CXX) $(OBJS) -o $@ $(LDFLAGS)
 

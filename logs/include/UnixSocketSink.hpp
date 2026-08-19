@@ -2,6 +2,7 @@
 
 #include "spdlog/sinks/base_sink.h"
 #include "spdlog/details/null_mutex.h"
+#include <chrono>
 #include <mutex>
 #include <memory>
 #include <iostream>
@@ -36,26 +37,16 @@ protected:
         // 2. Converte para string para envio
         std::string payload(formatted.data(), formatted.size());
 
-        // 3. Tenta enviar pelo socket
-        bool sent = false;
+        // O transporte de logs nunca bloqueia. Falhas sao descartadas porque
+        // este sink nao pode registrar erros em si mesmo sem causar recursao.
         if (client_ && client_->isConnected()) {
-            try {
-                // A classe UnixSocketClient deve lidar com write() e retornar ou lançar.
-                // Assumindo que seu método send() é void e loga erro internamente,
-                // ou lança exceção se crítico.
-                client_->send(payload);
-                sent = true; 
-            } catch (const std::exception& e) {
-                std::cerr << "[UnixSocketSink] Send error: " << e.what() << std::endl;
-            }
-        }
-
-        // 4. Fallback se não enviado (Socket caído ou não inicializado)
-        if (!sent) {
-            // Escreve no stderr para garantir que o log não seja perdido
-            std::cerr << "[FALLBACK] " << payload;
-            if (!payload.empty() && payload.back() != '\n') {
-                std::cerr << '\n';
+            const ipc::SendResult result = client_->send(
+                payload,
+                std::chrono::milliseconds::zero()
+            );
+            if (result.status == ipc::SendStatus::Disconnected ||
+                result.status == ipc::SendStatus::Desynced) {
+                client_.reset();
             }
         }
     }

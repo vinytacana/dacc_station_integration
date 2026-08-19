@@ -8,6 +8,7 @@
 
 #include "NetworkClient.hpp"
 #include "Utils.hpp"
+#include <chrono>
 #include <cstring>
 #include <cerrno>
 #include <unistd.h>
@@ -15,12 +16,6 @@
 
 /// Caminho do socket Unix para comunicação IPC com o Process Manager
 #define SOCKET_PATH "/tmp/gameman.sock"
-
-namespace {
-
-constexpr std::size_t MAX_IPC_MESSAGE_SIZE = 64 * 1024;
-
-} // namespace
 
 /**
  * @brief Retorna a instância única do NetworkClient (Singleton).
@@ -71,7 +66,7 @@ bool NetworkClient::connectToManager() {
         
         /// Configura modo não-bloqueante para leitura assíncrona de eventos
         client_->setNonBlocking(true);
-        receiveBuffer_.clear();
+        frameReader_.reset();
         
         LOG_INFO("Connected to Process Manager.");
         return true;
@@ -86,13 +81,14 @@ bool NetworkClient::connectToManager() {
  * @brief Envia comando de inicialização de jogo para o Process Manager.
  * 
  * Serializa os dados em formato JSON e transmite via socket Unix.
- * Implementa "Optimistic Update": assume sucesso imediato para manter UI responsiva.
+ * Mantém o lançamento pendente até receber uma resposta correlacionada do daemon.
  * 
  * Formato da mensagem JSON:
  * @code{.json}
  * {
  *   "action": "start",
- *   "id": "game_id",
+ *   "request_id": "ui-...",
+ *   "game_id": "game_id",
  *   "path": "/path/to/executable"
  * }
  * @endcode
@@ -101,45 +97,63 @@ bool NetworkClient::connectToManager() {
  * @param path Caminho completo para o executável do jogo.
  * 
  * @note Se não houver conexão ativa, tenta reconectar automaticamente.
- * @note O envio usa mutex internamente (UnixSocketClient) para thread-safety.
+ * @note Este método e checkEvents() são chamados pela mesma thread da UI.
  */
 bool NetworkClient::sendStartGame(const std::string& id, const std::string& path) {
     if (id.empty()) {
+        lastLaunchError_ = "Identificador do jogo vazio.";
         LOG_ERROR("Cannot start game: empty id.");
         return false;
     }
 
     std::string absolutePath = MeuProjeto::caminho_absoluto_projeto(path);
     if (absolutePath.empty() || access(absolutePath.c_str(), F_OK) != 0) {
+        lastLaunchError_ = "Executavel do jogo nao encontrado.";
         LOG_ERROR("Cannot start game: executable path not found: " + absolutePath);
         return false;
     }
 
     /// Tenta reconectar se não houver conexão ativa
     if (!connectToManager()) {
+        lastLaunchError_ = "Process Manager indisponivel.";
         LOG_WARNING("Cannot start game: Not connected.");
-        launchPending_ = false;
+        recomputeDerivedState();
         return false;
     }
 
     /// Constrói mensagem JSON com dados do jogo
+    const std::string request_id = createRequestId();
     json j;
     j["action"] = "start";
-    j["id"] = id;
+    j["game_id"] = id;
+    j["request_id"] = request_id;
     j["path"] = absolutePath;
 
     /// Serializa para string e envia via socket
-    std::string msg = j.dump() + '\n';
-    client_->send(msg); // UnixSocketClient::send uses mutex and handles writing
+    const ipc::SendResult send_result = client_->send(
+        j.dump(),
+        std::chrono::milliseconds(250)
+    );
+    if (send_result.status != ipc::SendStatus::Ok) {
+        lastLaunchError_ = "Falha imediata ao enviar comando ao Process Manager.";
+        LOG_ERROR(
+            "Failed to send start command (status=" +
+            std::to_string(static_cast<int>(send_result.status)) +
+            ", errno=" + std::to_string(send_result.err) + ")."
+        );
+        recomputeDerivedState();
+        if (send_result.status == ipc::SendStatus::Disconnected ||
+            send_result.status == ipc::SendStatus::Desynced) {
+            resetConnectionState();
+        }
+        return false;
+    }
     
     LOG_INFO("Start command sent for: " + id);
-    
-    /**
-     * Mantem um estado pendente ate o Process Manager confirmar ou encerrar o processo.
-     * O daemon atual pode nao enviar game_started; nesse caso, game_finished ainda limpa o estado.
-     */
-    launchPending_ = true;
-    runningGameId_ = id;
+
+    pendingRequests_[request_id] = id;
+    recomputeDerivedState();
+    lastLaunchError_.clear();
     return true;
 }
 
@@ -151,8 +165,8 @@ bool NetworkClient::sendStartGame(const std::string& id, const std::string& path
  * 
  * Eventos processados:
  * - **game_finished**: Jogo foi encerrado normalmente
- * - **process_exited**: Processo do jogo terminou (com ou sem erro)
  * - **game_started**: Confirmação de que o jogo iniciou com sucesso
+ * - **game_start_failed**: Falha confirmada antes da execução do jogo
  * 
  * @note Esta função deve ser chamada periodicamente no loop principal da aplicação.
  * @note Erros EAGAIN/EWOULDBLOCK são ignorados (normal em sockets não-bloqueantes).
@@ -166,24 +180,16 @@ void NetworkClient::checkEvents() {
         ssize_t bytes_read = client_->receive(buffer, sizeof(buffer));
 
         if (bytes_read > 0) {
-            receiveBuffer_.append(buffer, static_cast<std::size_t>(bytes_read));
-
-            std::size_t delimiterPosition = std::string::npos;
-            while ((delimiterPosition = receiveBuffer_.find('\n')) != std::string::npos) {
-                std::string message = receiveBuffer_.substr(0, delimiterPosition);
-                receiveBuffer_.erase(0, delimiterPosition + 1);
-
-                if (!message.empty() && message.back() == '\r') {
-                    message.pop_back();
-                }
-                if (!message.empty()) {
-                    processMessage(message);
+            frameReader_.feed(buffer, static_cast<std::size_t>(bytes_read));
+            while (auto message = frameReader_.next()) {
+                if (!message->empty()) {
+                    processMessage(*message);
                 }
             }
 
-            if (receiveBuffer_.size() > MAX_IPC_MESSAGE_SIZE) {
+            if (frameReader_.overflowed()) {
                 LOG_ERROR(
-                    "IPC message exceeded " + std::to_string(MAX_IPC_MESSAGE_SIZE) + " bytes."
+                    "IPC message exceeded " + std::to_string(ipc::kMaxFrameBytes) + " bytes."
                 );
                 resetConnectionState();
                 return;
@@ -216,38 +222,115 @@ void NetworkClient::processMessage(const std::string& message) {
 
     try {
         auto j = json::parse(message);
-        if (!j.contains("event")) {
+        if (!j.is_object() || !j.contains("event") || !j["event"].is_string()) {
             return;
         }
 
-        std::string evt = j["event"];
+        const std::string evt = j["event"].get<std::string>();
+        if (!j.contains("request_id") ||
+            !j["request_id"].is_string() ||
+            j["request_id"].get<std::string>().empty()) {
+            LOG_WARNING("Ignoring IPC event without request_id: " + evt);
+            return;
+        }
 
-        if (evt == "game_finished" || evt == "process_exited") {
-            LOG_INFO(">>> JOGO TERMINOU! <<<");
-            isRunning_ = false;
-            launchPending_ = false;
-            runningGameId_.clear();
-        } else if (evt == "game_started") {
-            isRunning_ = true;
-            launchPending_ = false;
-            if (j.contains("id")) {
-                runningGameId_ = j["id"];
+        const std::string request_id = j["request_id"].get<std::string>();
+        const std::string event_game_id =
+            j.contains("game_id") && j["game_id"].is_string()
+                ? j["game_id"].get<std::string>()
+                : std::string{};
+
+        if (event_game_id.empty()) {
+            LOG_WARNING("Ignoring IPC event without game_id for request_id: " + request_id);
+            return;
+        }
+
+        if (evt == "game_finished") {
+            auto active = activeRequests_.find(request_id);
+            if (active == activeRequests_.end()) {
+                LOG_WARNING("Ignoring finish event for unknown request_id: " + request_id);
+                return;
             }
+            if (active->second != event_game_id) {
+                LOG_ERROR("Protocol mismatch in game_finished for request_id: " + request_id);
+                return;
+            }
+            activeRequests_.erase(active);
+            recomputeDerivedState();
+            LOG_INFO(">>> JOGO TERMINOU! <<<");
+        } else if (evt == "game_started") {
+            auto pending = pendingRequests_.find(request_id);
+            if (pending == pendingRequests_.end()) {
+                LOG_WARNING("Ignoring start event for unknown request_id: " + request_id);
+                return;
+            }
+            if (pending->second != event_game_id) {
+                LOG_ERROR("Protocol mismatch in game_started for request_id: " + request_id);
+                return;
+            }
+            activeRequests_.emplace(request_id, pending->second);
+            pendingRequests_.erase(pending);
+            lastLaunchError_.clear();
+            recomputeDerivedState();
         } else if (evt == "game_start_failed") {
-            LOG_ERROR("Game start failed event received.");
-            isRunning_ = false;
-            launchPending_ = false;
-            runningGameId_.clear();
+            auto pending = pendingRequests_.find(request_id);
+            if (pending == pendingRequests_.end()) {
+                LOG_WARNING("Ignoring failure event for unknown request_id: " + request_id);
+                return;
+            }
+            if (pending->second != event_game_id) {
+                LOG_ERROR("Protocol mismatch in game_start_failed for request_id: " + request_id);
+                return;
+            }
+            pendingRequests_.erase(pending);
+            lastLaunchError_ = j.value("message", "Falha ao iniciar o jogo.");
+            recomputeDerivedState();
+            LOG_ERROR("Game start failed: " + lastLaunchError_);
+        } else {
+            LOG_WARNING("Ignoring unknown IPC event: " + evt);
         }
     } catch (const json::exception& e) {
         LOG_ERROR("Invalid IPC JSON message: " + std::string(e.what()));
     }
 }
 
-void NetworkClient::resetConnectionState() {
-    isRunning_ = false;
-    launchPending_ = false;
+std::string NetworkClient::createRequestId() {
+    const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    ++requestSequence_;
+    return "ui-" + std::to_string(getpid()) + "-" + std::to_string(timestamp) + "-" +
+        std::to_string(requestSequence_);
+}
+
+void NetworkClient::recomputeDerivedState() {
+    launchPending_ = !pendingRequests_.empty();
+    isRunning_ = !activeRequests_.empty();
+    currentRequestId_.clear();
     runningGameId_.clear();
-    receiveBuffer_.clear();
+
+    if (activeRequests_.size() == 1) {
+        const auto& active = *activeRequests_.begin();
+        currentRequestId_ = active.first;
+        runningGameId_ = active.second;
+        return;
+    }
+    if (activeRequests_.size() > 1) {
+        LOG_ERROR("Protocol inconsistency: more than one game is active.");
+        return;
+    }
+
+    if (pendingRequests_.size() == 1) {
+        const auto& pending = *pendingRequests_.begin();
+        currentRequestId_ = pending.first;
+        runningGameId_ = pending.second;
+    } else if (pendingRequests_.size() > 1) {
+        LOG_ERROR("Protocol inconsistency: more than one launch is pending.");
+    }
+}
+
+void NetworkClient::resetConnectionState() {
+    pendingRequests_.clear();
+    activeRequests_.clear();
+    recomputeDerivedState();
+    frameReader_.reset();
     client_.reset();
 }
