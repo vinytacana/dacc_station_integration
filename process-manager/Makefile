@@ -6,7 +6,7 @@ CC := gcc
 # -Ithird-party: External libraries (json.hpp)
 # -I../logs/include: Logging system headers
 CXXFLAGS := -std=c++17 -Wall -Wextra -g -Iinclude -Ithird-party -I../ipc/include -I../logs/include -I../logs/third-party/spdlog/include
-TEST_CXXFLAGS := $(CXXFLAGS) -DSIGMASK_HELPER_PATH=\"$(abspath tests/bin/sigmask_helper)\"
+TEST_CXXFLAGS := $(CXXFLAGS) -I../tests/support -DSIGMASK_HELPER_PATH=\"$(abspath tests/bin/sigmask_helper)\"
 LDFLAGS := -pthread -L../logs -ldacc-logs -L../ipc -ldacc-ipc
 
 # Directories
@@ -19,6 +19,7 @@ TARGET_PM := $(BIN_DIR)/process-manager
 TEST_BIN := tests/bin/test_process_manager
 TEST_SIGMASK_HELPER := tests/bin/sigmask_helper
 TEST_EXECVP_DOUBLE := tests/execvp_test_double.cpp
+TEST_SEND_DOUBLE := ../tests/support/send_test_double.cpp
 IPC_LIB := ../ipc/libdacc-ipc.a
 LOGS_LIB := ../logs/libdacc-logs.a
 
@@ -61,9 +62,9 @@ $(TEST_SIGMASK_HELPER): tests/sigmask_helper.c
 	@mkdir -p $(@D)
 	$(CC) -std=c11 -Wall -Wextra -g $< -o $@
 
-$(TEST_BIN): tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(SRC_DIR)/ProcessManager.cpp include/ProcessManager.hpp $(TEST_SIGMASK_HELPER) $(IPC_LIB) $(LOGS_LIB)
+$(TEST_BIN): tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(TEST_SEND_DOUBLE) $(SRC_DIR)/ProcessManager.cpp include/ProcessManager.hpp $(TEST_SIGMASK_HELPER) $(IPC_LIB) $(LOGS_LIB)
 	@mkdir -p $(@D)
-	$(CXX) $(TEST_CXXFLAGS) tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(SRC_DIR)/ProcessManager.cpp -o $@ $(LDFLAGS) -Wl,--wrap=execvp
+	$(CXX) $(TEST_CXXFLAGS) tests/test_process_manager.cpp $(TEST_EXECVP_DOUBLE) $(TEST_SEND_DOUBLE) $(SRC_DIR)/ProcessManager.cpp -o $@ $(LDFLAGS) -Wl,--wrap=execvp -Wl,--wrap=send
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)

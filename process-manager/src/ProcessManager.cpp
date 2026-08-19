@@ -60,8 +60,7 @@ int normalizedExitStatus(int status) {
 }
 
 bool requiresDisconnect(ipc::SendStatus status) {
-    return status == ipc::SendStatus::Disconnected ||
-        status == ipc::SendStatus::Desynced;
+    return status != ipc::SendStatus::Ok;
 }
 
 [[noreturn]] void reportChildFailure(int error_fd, int error_code) {
@@ -447,7 +446,11 @@ void ProcessManager::terminateStartedProcess(pid_t child_pid) {
     int status = 0;
     while (std::chrono::steady_clock::now() < deadline) {
         const pid_t wait_result = waitpid(child_pid, &status, WNOHANG);
-        if (wait_result == child_pid || (wait_result < 0 && errno == ECHILD)) {
+        if (wait_result == child_pid) {
+            if (logger_) logger_->info("Reaped terminated process PID={}", child_pid);
+            return;
+        }
+        if (wait_result < 0 && errno == ECHILD) {
             return;
         }
         if (wait_result < 0 && errno != EINTR) {
@@ -459,7 +462,12 @@ void ProcessManager::terminateStartedProcess(pid_t child_pid) {
     if (kill(child_pid, SIGKILL) != 0 && errno != ESRCH && logger_) {
         logger_->warn("SIGKILL failed for undelivered PID={}: {}", child_pid, strerror(errno));
     }
-    while (waitpid(child_pid, &status, 0) < 0 && errno == EINTR) {
+    pid_t wait_result = -1;
+    do {
+        wait_result = waitpid(child_pid, &status, 0);
+    } while (wait_result < 0 && errno == EINTR);
+    if (wait_result == child_pid && logger_) {
+        logger_->info("Reaped terminated process PID={}", child_pid);
     }
 }
 

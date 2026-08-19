@@ -2,6 +2,7 @@
 
 #include "ipc/FramedSocket.hpp"
 #include "json.hpp"
+#include "send_test_double.hpp"
 
 #include <spdlog/sinks/ostream_sink.h>
 
@@ -17,6 +18,7 @@
 #include <optional>
 #include <poll.h>
 #include <regex>
+#include <signal.h>
 #include <sstream>
 #include <string>
 #include <sys/socket.h>
@@ -147,6 +149,54 @@ json receberEvento(int fd, ipc::FrameReader& reader, std::chrono::milliseconds t
     auto event = tentarReceberEvento(fd, reader, timeout);
     exigir(event.has_value(), "daemon deve responder dentro do prazo");
     return std::move(*event);
+}
+
+void exigirSocketFechado(int fd, std::chrono::milliseconds timeout) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    std::array<char, 4096> buffer{};
+
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now()
+        );
+        pollfd descriptor{fd, POLLIN | POLLHUP | POLLERR, 0};
+        const int poll_result = poll(
+            &descriptor,
+            1,
+            static_cast<int>(std::max<std::int64_t>(1, remaining.count()))
+        );
+        if (poll_result < 0 && errno == EINTR) {
+            continue;
+        }
+        exigir(poll_result >= 0, "poll ao aguardar fechamento nao deve falhar");
+        if (poll_result == 0) {
+            continue;
+        }
+
+        const ssize_t count = recv(fd, buffer.data(), buffer.size(), MSG_DONTWAIT);
+        if (count == 0) {
+            return;
+        }
+        if (count < 0 && (errno == ECONNRESET || errno == ENOTCONN)) {
+            return;
+        }
+        if (count < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
+            continue;
+        }
+        exigir(count >= 0, "recv ao aguardar fechamento nao deve falhar");
+    }
+
+    exigir(false, "daemon deve fechar o socket apos falha de evento terminal");
+}
+
+std::size_t contarOcorrencias(const std::string& texto, const std::string& trecho) {
+    std::size_t total = 0;
+    std::size_t posicao = 0;
+    while ((posicao = texto.find(trecho, posicao)) != std::string::npos) {
+        ++total;
+        posicao += trecho.size();
+    }
+    return total;
 }
 
 void exigirCorrelacao(
@@ -339,23 +389,75 @@ void testarEncerramentoAoDesconectar() {
 
 void testarFalhaAoEntregarGameStarted() {
     TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
     const std::string slow_script = temp.path() + "/slow-exec.sh";
     const std::string marker = temp.path() + "/slow-exec-marker";
     const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
     criarScript(slow_script, "sleep 0.5\n: > \"" + marker + "\"\nexit 0\n");
 
     std::ostringstream logs;
     {
         ProcessManager manager(criarLogger(logs), socket_path);
         const int owner_fd = conectar(socket_path);
+        test_support::failMatchingSends("\"event\":\"game_started\"", EIO);
         enviarStart(owner_fd, "request-undelivered", "slow-exec", slow_script);
-        close(owner_fd);
+        exigirSocketFechado(owner_fd, 3s);
 
-        std::this_thread::sleep_for(1200ms);
+        exigir(
+            test_support::matchingSendFailureCount() == 1,
+            "game_started deve falhar exatamente uma vez no transporte"
+        );
+        const json failed_event = json::parse(test_support::lastFailedSendPayload());
+        exigir(
+            failed_event.value("event", "") == "game_started",
+            "double deve interceptar game_started"
+        );
+        const pid_t failed_pid = failed_event.value("pid", -1);
+        exigir(failed_pid > 0, "game_started interceptado deve identificar o PID");
+
+        errno = 0;
+        exigir(
+            kill(failed_pid, 0) == -1 && errno == ESRCH,
+            "processo sem confirmacao entregue deve estar sinalizado e colhido"
+        );
         exigir(
             access(marker.c_str(), F_OK) != 0,
             "jogo sem confirmacao entregue deve ser encerrado"
         );
+
+        const std::string reap_log =
+            "Reaped terminated process PID=" + std::to_string(failed_pid);
+        const std::string termination_log =
+            "Terminating PID=" + std::to_string(failed_pid) +
+            " because game_started could not be delivered";
+        exigir(
+            contarOcorrencias(logs.str(), termination_log) == 1,
+            "processo sem confirmacao deve ser sinalizado exatamente uma vez"
+        );
+        exigir(
+            contarOcorrencias(logs.str(), reap_log) == 1,
+            "processo sem confirmacao deve ser colhido exatamente uma vez"
+        );
+        exigir(
+            logs.str().find("owner client disconnected") == std::string::npos,
+            "desconexao nao deve tentar encerrar novamente processo ja removido"
+        );
+
+        close(owner_fd);
+        test_support::resetSendTestDouble();
+
+        const int replacement_fd = conectar(socket_path);
+        ipc::FrameReader replacement_reader;
+        exigirExecucao(
+            replacement_fd,
+            replacement_reader,
+            "request-after-undelivered-start",
+            "exit-zero",
+            exit_zero,
+            0
+        );
+        close(replacement_fd);
     }
 
     exigir(
@@ -366,10 +468,96 @@ void testarFalhaAoEntregarGameStarted() {
         logs.str().find("game_started could not be delivered") != std::string::npos,
         "daemon deve registrar falha ao entregar game_started"
     );
-    exigir(
-        logs.str().find("owner client disconnected") == std::string::npos,
-        "falha de entrega nao deve ser registrada como desconexao posterior"
+}
+
+void testarFalhaAoEntregarGameStartFailed() {
+    TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string missing = temp.path() + "/missing-executable";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
+
+    ProcessManager manager(nullptr, socket_path);
+    const int owner_fd = conectar(socket_path);
+    test_support::failMatchingSends("\"event\":\"game_start_failed\"", EIO);
+    enviarStart(
+        owner_fd,
+        "request-undelivered-failure",
+        "missing",
+        missing
     );
+    exigirSocketFechado(owner_fd, 3s);
+
+    exigir(
+        test_support::matchingSendFailureCount() == 1,
+        "game_start_failed deve falhar exatamente uma vez no transporte"
+    );
+    const json failed_event = json::parse(test_support::lastFailedSendPayload());
+    exigir(
+        failed_event.value("event", "") == "game_start_failed",
+        "double deve interceptar game_start_failed"
+    );
+    exigirCorrelacao(failed_event, "request-undelivered-failure", "missing");
+    close(owner_fd);
+    test_support::resetSendTestDouble();
+
+    const int replacement_fd = conectar(socket_path);
+    ipc::FrameReader replacement_reader;
+    exigirExecucao(
+        replacement_fd,
+        replacement_reader,
+        "request-undelivered-failure",
+        "exit-zero",
+        exit_zero,
+        0
+    );
+    close(replacement_fd);
+}
+
+void testarFalhaAoEntregarGameFinished() {
+    TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
+
+    ProcessManager manager(nullptr, socket_path);
+    const int owner_fd = conectar(socket_path);
+    ipc::FrameReader owner_reader;
+    test_support::failMatchingSends("\"event\":\"game_finished\"", EIO);
+    enviarStart(owner_fd, "request-undelivered-finish", "exit-zero", exit_zero);
+
+    const json started = receberEvento(owner_fd, owner_reader, 3s);
+    exigir(
+        started.value("event", "") == "game_started",
+        "game_started deve ser entregue antes da falha terminal"
+    );
+    exigirCorrelacao(started, "request-undelivered-finish", "exit-zero");
+    exigirSocketFechado(owner_fd, 3s);
+
+    exigir(
+        test_support::matchingSendFailureCount() == 1,
+        "game_finished deve falhar exatamente uma vez no transporte"
+    );
+    const json failed_event = json::parse(test_support::lastFailedSendPayload());
+    exigir(
+        failed_event.value("event", "") == "game_finished",
+        "double deve interceptar game_finished"
+    );
+    exigirCorrelacao(failed_event, "request-undelivered-finish", "exit-zero");
+    close(owner_fd);
+    test_support::resetSendTestDouble();
+
+    const int replacement_fd = conectar(socket_path);
+    ipc::FrameReader replacement_reader;
+    exigirExecucao(
+        replacement_fd,
+        replacement_reader,
+        "request-after-undelivered-finish",
+        "exit-zero",
+        exit_zero,
+        0
+    );
+    close(replacement_fd);
 }
 
 void testarGeracaoEmFdReutilizado() {
@@ -420,10 +608,13 @@ void testarGeracaoEmFdReutilizado() {
 } // namespace
 
 int main() {
+    test_support::resetSendTestDouble();
     testarExecucoesDeterministicas();
     testarPrazoDaConfirmacaoDeExec();
     testarEncerramentoAoDesconectar();
     testarFalhaAoEntregarGameStarted();
+    testarFalhaAoEntregarGameStartFailed();
+    testarFalhaAoEntregarGameFinished();
     testarGeracaoEmFdReutilizado();
     std::cout << "Process Manager integration tests passed." << std::endl;
     return 0;
