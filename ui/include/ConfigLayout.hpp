@@ -464,6 +464,9 @@ struct ConfigLayout {
      * @param alturaAtual Altura atual da janela/tela em pixels
      */
     static void inicializar(int larguraAtual, int alturaAtual) {
+        if (larguraAtual <= 0 || alturaAtual <= 0) {
+            return;
+        }
         larguraTela = larguraAtual;
         alturaTela = alturaAtual;
         

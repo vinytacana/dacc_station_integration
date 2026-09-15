@@ -8,6 +8,7 @@
  */
 
 #include "GerenciarSDL.hpp"
+#include "ConfigLayout.hpp"
 #include "Utils.hpp" 
 #include "config-dacc/functions.hpp"
 #include <SDL2/SDL_image.h>
@@ -167,6 +168,25 @@ bool GerenciarSDL::inicializar(SDL_Window*& janela, SDL_Renderer*& renderer, int
     }
     cout << "[OK] Renderizador criado" << endl;
     
+    return true;
+}
+
+bool GerenciarSDL::atualizarLayoutDaJanela(SDL_Window* janela, SDL_Renderer* renderer) {
+    if (!janela) {
+        return false;
+    }
+
+    int largura = 0;
+    int altura = 0;
+    if (!renderer || SDL_GetRendererOutputSize(renderer, &largura, &altura) != 0 ||
+        largura <= 0 || altura <= 0) {
+        SDL_GetWindowSize(janela, &largura, &altura);
+    }
+    if (largura <= 0 || altura <= 0) {
+        return false;
+    }
+
+    ConfigLayout::inicializar(largura, altura);
     return true;
 }
 

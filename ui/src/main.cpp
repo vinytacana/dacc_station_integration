@@ -40,6 +40,7 @@
 #include "Arquivos.hpp"
 #include "GerenciadorTemas.hpp"
 #include "ConfigLayout.hpp"
+#include "LayoutEvents.hpp"
 #include "NetworkClient.hpp"
 #include "LogManager.hpp"
 #include "SystemStatus.hpp"
@@ -215,6 +216,7 @@ int main(int argc, char* argv[]) {
     if (!GerenciarSDL::inicializar(janela, renderer, LARGURA_JANELA, ALTURA_JANELA)) {
         return 1; ///< Encerra com código de erro
     }
+    GerenciarSDL::atualizarLayoutDaJanela(janela, renderer);
 
     /**
      * Reproduz vídeo de introdução usando MPV externo.
@@ -318,6 +320,19 @@ int main(int argc, char* argv[]) {
          * Processa todos os eventos acumulados na fila antes de renderizar.
          */
         while (SDL_PollEvent(&evento)) {
+            if (eventoAtualizaLayout(evento, SDL_GetWindowID(janela)) &&
+                GerenciarSDL::atualizarLayoutDaJanela(janela, renderer)) {
+                interface.atualizarLayout(estado);
+                if (janelaConfig.estaAberta()) {
+                    janelaConfig.fechar();
+                    estado.configAberta = true;
+                }
+                if (estado.janelaJogoAtual) {
+                    MeuProjeto::janelaJogoAtual.reset();
+                    estado.janelaJogoAtual = nullptr;
+                }
+                continue;
+            }
             
             /**
              * PRIORIDADE 1: Janela de Configuração (Modo Modal)

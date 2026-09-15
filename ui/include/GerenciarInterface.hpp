@@ -92,6 +92,8 @@ public:
      * @param estado Referência para a classe GerenciarScroll.
      */
     void atualizarPosicoes(GerenciarScroll& estado);
+
+    void atualizarLayout(GerenciarScroll& estado);
     
     /**
      * @brief Obtém o vetor de botões habilitados para navegação.

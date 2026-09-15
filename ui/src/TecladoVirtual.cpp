@@ -89,6 +89,12 @@ void TecladoVirtual::inicializarLayout() {
  */
 TecladoVirtual::~TecladoVirtual() {}
 
+void TecladoVirtual::atualizarLayoutResponsivo() {
+    baseX = ConfigLayout::X(460);
+    baseY = ConfigLayout::Y(600);
+    inicializarLayout();
+}
+
 /**
  * @brief Gerencia a renderização principal do teclado e seus componentes.
  * 

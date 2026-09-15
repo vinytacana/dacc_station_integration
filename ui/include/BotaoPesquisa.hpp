@@ -178,6 +178,8 @@ public:
      */
     void setTamanhoFonteResultados(int tamanho) { tamanhoResultados = tamanho; }
 
+    void atualizarLayoutResponsivo();
+
     /**
      * @brief Verifica se há resultados sendo exibidos (dropdown aberto).
      */

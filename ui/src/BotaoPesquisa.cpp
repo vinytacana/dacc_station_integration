@@ -77,6 +77,19 @@ BotaoPesquisa::~BotaoPesquisa() {
     SDL_StopTextInput(); 
 }
 
+void BotaoPesquisa::atualizarLayoutResponsivo() {
+    tamanhoPlaceholder = ConfigLayout::F(28);
+    tamanhoResultados = ConfigLayout::F(32);
+    itemHeight = ConfigLayout::Y(120);
+    itemPadding = ConfigLayout::Y(6);
+    imgSize = ConfigLayout::F(90);
+    imgOffsetX = ConfigLayout::X(15);
+    imgOffsetY = (itemHeight - imgSize) / 2;
+    textOffsetX = imgOffsetX + imgSize + ConfigLayout::X(20);
+    raioBorda = ConfigLayout::F(15);
+    raioDestaque = ConfigLayout::F(18);
+}
+
 /**
  * @brief Atualiza o vetor de resultados baseando-se no conteúdo atual do input.
  * Realiza uma consulta ao GerenciadorJogos para filtrar títulos que correspondam

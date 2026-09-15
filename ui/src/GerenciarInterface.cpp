@@ -611,6 +611,107 @@ void GerenciarInterface::atualizarPosicoes(GerenciarScroll& estado) {
         setaDireita->area.y = ConfigLayout::Y(ConfigLayout::SETA_CATEGORIA_POS_Y);
 }
 
+void GerenciarInterface::atualizarLayout(GerenciarScroll& estado) {
+    if (btnConfig) {
+        btnConfig->area = {
+            ConfigLayout::X(ConfigLayout::BOTAO_CONFIG_POS_X),
+            ConfigLayout::Y(ConfigLayout::BOTAO_CONFIG_POS_Y),
+            ConfigLayout::F(ConfigLayout::BOTAO_CONFIG_LARGURA),
+            ConfigLayout::F(ConfigLayout::BOTAO_CONFIG_ALTURA)
+        };
+    }
+    if (btnMudarTema) {
+        btnMudarTema->area = {
+            ConfigLayout::X(ConfigLayout::BOTAO_TEMA_POS_X),
+            ConfigLayout::Y(ConfigLayout::BOTAO_TEMA_POS_Y),
+            ConfigLayout::F(ConfigLayout::BOTAO_TEMA_LARGURA),
+            ConfigLayout::F(ConfigLayout::BOTAO_TEMA_ALTURA)
+        };
+    }
+    if (btnPesquisa) {
+        btnPesquisa->area = {
+            ConfigLayout::X(ConfigLayout::PESQUISA_POS_X),
+            ConfigLayout::Y(ConfigLayout::PESQUISA_POS_Y),
+            ConfigLayout::F(ConfigLayout::PESQUISA_LARGURA),
+            ConfigLayout::F(ConfigLayout::PESQUISA_ALTURA)
+        };
+        btnPesquisa->atualizarLayoutResponsivo();
+    }
+
+    for (auto& categoria : categorias) {
+        categoria.area.w = ConfigLayout::F(ConfigLayout::ITEM_CATEGORIA_LARGURA);
+        categoria.area.h = ConfigLayout::F(ConfigLayout::ITEM_CATEGORIA_ALTURA);
+        categoria.setTamanhoFonte(ConfigLayout::F(24));
+    }
+    if (fundoCategorias) {
+        fundoCategorias->definirArea(
+            ConfigLayout::X(ConfigLayout::PAINEL_CATEGORIA_POS_X),
+            ConfigLayout::Y(ConfigLayout::PAINEL_CATEGORIA_POS_Y),
+            ConfigLayout::F(ConfigLayout::PAINEL_CATEGORIA_LARGURA),
+            ConfigLayout::F(ConfigLayout::PAINEL_CATEGORIA_ALTURA)
+        );
+    }
+    if (setaEsquerda) {
+        setaEsquerda->area = {
+            ConfigLayout::X(ConfigLayout::SETA_CATEGORIA_ESQ_POS_X),
+            ConfigLayout::Y(ConfigLayout::SETA_CATEGORIA_POS_Y),
+            ConfigLayout::F(ConfigLayout::SETA_CATEGORIA_LARGURA),
+            ConfigLayout::F(ConfigLayout::SETA_CATEGORIA_ALTURA)
+        };
+    }
+    if (setaDireita) {
+        setaDireita->area = {
+            ConfigLayout::X(ConfigLayout::SETA_CATEGORIA_DIR_POS_X),
+            ConfigLayout::Y(ConfigLayout::SETA_CATEGORIA_POS_Y),
+            ConfigLayout::F(ConfigLayout::SETA_CATEGORIA_LARGURA),
+            ConfigLayout::F(ConfigLayout::SETA_CATEGORIA_ALTURA)
+        };
+    }
+
+    const int colunas = ConfigLayout::GRADE_JOGOS_COLUNAS;
+    const int larguraItem = ConfigLayout::F(ConfigLayout::GRADE_JOGOS_LARGURA_ITEM);
+    const int alturaItem = ConfigLayout::F(ConfigLayout::GRADE_JOGOS_ALTURA_ITEM);
+    const int espacoX = ConfigLayout::F(ConfigLayout::GRADE_JOGOS_ESPACO_X);
+    const int alturaLinha = alturaItem + ConfigLayout::F(ConfigLayout::GRADE_JOGOS_ESPACO_Y);
+    const int larguraGrade = colunas * larguraItem + (colunas - 1) * espacoX;
+    const int xInicial = (ConfigLayout::larguraTela - larguraGrade) / 2;
+    const int yInicial = ConfigLayout::Y(ConfigLayout::GRADE_JOGOS_Y_INICIAL);
+
+    if (btnAleatorio) {
+        btnAleatorio->area = {xInicial, yInicial, larguraItem, alturaItem};
+    }
+    for (size_t i = 0; i < jogos.size(); ++i) {
+        const int indiceVisual = static_cast<int>(i) + 1;
+        jogos[i].area = {
+            xInicial + (indiceVisual % colunas) * (larguraItem + espacoX),
+            yInicial + (indiceVisual / colunas) * alturaLinha,
+            larguraItem,
+            alturaItem
+        };
+    }
+
+    const int inicioX = ConfigLayout::X(ConfigLayout::DESTAQUE_MINI_POS_X_INICIAL);
+    const int inicioY = ConfigLayout::Y(ConfigLayout::DESTAQUE_MINI_POS_Y);
+    const int tamanho = ConfigLayout::F(ConfigLayout::DESTAQUE_MINI_TAMANHO);
+    const int passo = ConfigLayout::F(ConfigLayout::DESTAQUE_MINI_PASSO_TOTAL);
+    for (size_t i = 0; i < destaques.size(); ++i) {
+        destaques[i].area = {
+            inicioX + static_cast<int>(i) * passo,
+            inicioY,
+            tamanho,
+            tamanho
+        };
+    }
+
+    if (popupJanela) {
+        popupJanela->fecharPopup();
+    }
+    if (tecladoVirtual) {
+        tecladoVirtual->atualizarLayoutResponsivo();
+    }
+    atualizarPosicoes(estado);
+}
+
 /**
  * @brief Obtém a lista ordenada de todos os botões navegáveis da interface
  *
