@@ -40,5 +40,6 @@ clean:
 
 test:
 	$(MAKE) -C config-dacc test
+	$(MAKE) -C ui test
 	$(MAKE) -C ipc test
 	$(MAKE) -C process-manager test
