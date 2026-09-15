@@ -50,13 +50,15 @@ struct DispositivoAudio {
 struct Resolucao {
     int largura;    /**< Largura em pixels. */
     int altura;     /**< Altura em pixels. */
+    float taxaAtualizacao; /**< Taxa de atualização informada pelo backend. */
     
     /**
      * @brief Construtor da estrutura Resolucao.
      * @param l Largura.
      * @param a Altura.
      */
-    Resolucao(int l, int a) : largura(l), altura(a) {}
+    Resolucao(int l, int a, float taxa = 0.0f)
+        : largura(l), altura(a), taxaAtualizacao(taxa) {}
     
     /**
      * @brief Retorna a resolução formatada como string.

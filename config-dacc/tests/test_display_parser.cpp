@@ -34,6 +34,7 @@ void testar_wlr_randr_basico() {
     exigir(displays[0].current_mode.width == 1920, "deve detectar largura atual");
     exigir(displays[0].current_mode.height == 1080, "deve detectar altura atual");
     exigir(displays[0].current_mode.is_current, "deve marcar modo atual");
+    exigir(displays[0].current_mode.refresh_rate == 60.0f, "deve preservar a taxa atual wlr-randr");
     exigir(displays[0].current_scale == 1.0f, "deve parsear escala atual");
 }
 
@@ -50,8 +51,10 @@ void testar_xrandr_basico() {
     exigir(displays[0].backend_id == "HDMI-1", "deve preencher backend_id xrandr");
     exigir(displays[0].backend == display_backend::xrandr, "deve marcar backend xrandr");
     exigir(displays[0].primary, "deve identificar a saida primaria do xrandr");
-    exigir(displays[0].modes.size() == 2, "deve parsear modos xrandr");
+    exigir(displays[0].modes.size() == 3, "deve preservar cada taxa dos modos xrandr");
     exigir(displays[0].current_mode.width == 1920, "deve detectar modo atual xrandr");
+    exigir(displays[0].current_mode.refresh_rate == 60.0f, "deve preservar a taxa atual xrandr");
+    exigir(displays[0].modes[1].refresh_rate == 59.94f, "deve preservar taxa alternativa xrandr");
 }
 
 } // namespace
