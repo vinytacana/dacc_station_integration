@@ -221,6 +221,7 @@ std::vector<wifi_network> listar_wifi_parsed();
 system_result listar_wifi_result(std::vector<wifi_network>& redes);
 wifi_adapter_status obter_status_wifi();
 network_connection_status obter_status_conexao_rede();
+network_connection_status obter_status_conexao_rede(const command_options& options);
 bool wifi_conectado();
 system_result definir_estado_wifi_result(bool ligar);
 void conectar_wifi(const std::string &ssid, const std::string &senha);

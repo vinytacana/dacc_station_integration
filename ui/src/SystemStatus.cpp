@@ -9,6 +9,7 @@
 
 #include "SystemStatus.hpp"
 #include "config-dacc/functions.hpp"
+#include <chrono>
 #include <ctime>
 #include <SDL2/SDL.h>
 
@@ -24,6 +25,44 @@ using namespace MeuProjeto;
 SystemStatus::SystemStatus() : lastUpdate(0) {
     cache = {"--:--", false, false, -1};
     update();
+    networkThread = std::thread(&SystemStatus::atualizarRedeEmBackground, this);
+}
+
+SystemStatus::~SystemStatus() {
+    encerrarNetworkThread.store(true);
+    networkWaitCondition.notify_all();
+    if (networkThread.joinable()) {
+        networkThread.join();
+    }
+}
+
+void SystemStatus::atualizarRedeEmBackground() {
+    while (!encerrarNetworkThread.load()) {
+        command_options options;
+        options.timeout = std::chrono::seconds(2);
+        options.terminate_grace_period = std::chrono::milliseconds(250);
+        options.cancel_requested = &encerrarNetworkThread;
+
+        network_connection_status rede;
+        try {
+            rede = ::obter_status_conexao_rede(options);
+        } catch (...) {
+            rede = {};
+        }
+
+        if (!encerrarNetworkThread.load()) {
+            std::lock_guard<std::mutex> lock(cacheMutex);
+            cache.wifiConnected = rede.wifi_conectado;
+            cache.wiredConnected = rede.cabeado_conectado;
+        }
+
+        std::unique_lock<std::mutex> lock(networkWaitMutex);
+        networkWaitCondition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [this]() { return encerrarNetworkThread.load(); }
+        );
+    }
 }
 
 /**
@@ -56,17 +95,9 @@ void SystemStatus::update() {
     if (nowTm) {
         char hora[6] = "--:--";
         if (std::strftime(hora, sizeof(hora), "%H:%M", nowTm) > 0) {
+            std::lock_guard<std::mutex> lock(cacheMutex);
             cache.currentTime = hora;
         }
-    }
-
-    try {
-        network_connection_status rede = ::obter_status_conexao_rede();
-        cache.wifiConnected = rede.wifi_conectado;
-        cache.wiredConnected = rede.cabeado_conectado;
-    } catch (...) {
-        cache.wifiConnected = false;
-        cache.wiredConnected = false;
     }
 
     int battery = ::obter_bateria();
@@ -76,6 +107,7 @@ void SystemStatus::update() {
     if (battery < 0 || battery > 100) {
         battery = BATERIA_INDISPONIVEL;
     }
+    std::lock_guard<std::mutex> lock(cacheMutex);
     cache.batteryLevel = battery;
 }
 
@@ -88,5 +120,6 @@ void SystemStatus::update() {
  * @return SystemData Estrutura contendo horário, status WiFi e nível de bateria.
  */
 SystemData SystemStatus::getCachedData() const {
+    std::lock_guard<std::mutex> lock(cacheMutex);
     return cache;
 }
