@@ -1,10 +1,12 @@
 #ifndef FUNCOES_H
 #define FUNCOES_H
 
-#include <string>
-#include <vector>
-#include <unordered_map>
+#include <atomic>
+#include <chrono>
 #include <istream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 struct wifi_network{
     std::string backend_id;
@@ -88,6 +90,15 @@ struct command_result {
     std::string stdout_output;
     std::string stderr_output;
     std::string mensagem;
+    bool timed_out = false;
+    bool cancelled = false;
+};
+
+struct command_options {
+    // Um valor zero ou negativo desativa o timeout.
+    std::chrono::milliseconds timeout{30000};
+    std::chrono::milliseconds terminate_grace_period{500};
+    const std::atomic_bool* cancel_requested = nullptr;
 };
 
 enum class audio_backend {
@@ -157,7 +168,12 @@ struct station_capabilities {
 bool comando_existe(const std::string& cmd);
 std::string exec_command(const char* cmd);
 command_result exec_command_result(const std::string& cmd);
+command_result exec_command_result(const std::string& cmd, const command_options& options);
 command_result exec_command_args_result(const std::vector<std::string>& args);
+command_result exec_command_args_result(
+    const std::vector<std::string>& args,
+    const command_options& options
+);
 long long obter_tempo_ms();
 int obter_bateria();
 station_capabilities obter_capacidades_sistema();
