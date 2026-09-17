@@ -7,10 +7,11 @@ ARFLAGS := rcs
 BUILD_DIR := build
 LIB_TARGET := libdacc-ipc.a
 TEST_BIN := tests/bin/test_framed_socket
+SOCKET_TEST_BIN := tests/bin/test_local_socket
 TEST_SEND_DOUBLE := ../tests/support/send_test_double.cpp
 TEST_SEND_DOUBLE_HEADER := ../tests/support/send_test_double.hpp
 
-SRCS := src/FramedSocket.cpp
+SRCS := src/FramedSocket.cpp src/LocalSocket.cpp
 OBJS := $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
