@@ -25,7 +25,6 @@
 #include <vector>
 #include <string>
 #include <ctime>
-#include <fstream>
 #include <algorithm>
 #include <filesystem>
 
@@ -43,6 +42,7 @@
 #include "LayoutEvents.hpp"
 #include "NetworkClient.hpp"
 #include "LogManager.hpp"
+#include "ipc/LocalSocket.hpp"
 #include "SystemStatus.hpp"
 #include "Utils.hpp"
 #include "json.hpp"
@@ -188,21 +188,10 @@ int main(int argc, char* argv[]) {
      * caso contrário usa path padrão do socket Unix.
      */
     try {
-        std::ifstream config_file(caminho_absoluto_projeto("process-manager/config.json"));
-        std::string socket_path = "/tmp/dacc-station.sock"; ///< Path padrão
-        
-        if (config_file.is_open()) {
-             nlohmann::json config = nlohmann::json::parse(config_file);
-             /// Extrai path customizado se disponível no JSON
-             if(config.contains("server") && config["server"].contains("socket_path"))
-                socket_path = config["server"]["socket_path"];
-        }
-        
-        /// Inicializa logger com identificador "UI" e path do socket
-        LogManager::getInstance().initialize("UI", socket_path);
-    } catch (...) {
-        /// Fallback para configuração padrão em caso de erro
-        LogManager::getInstance().initialize("UI", "/tmp/dacc-station.sock");
+        LogManager::getInstance().initialize("UI", ipc::logSocketPath());
+    } catch (const std::exception& e) {
+        // Console logging remains available when the runtime directory is absent.
+        LogManager::getInstance().getLogger()->warn("IPC logging unavailable: {}", e.what());
     }
 
     /// Ponteiros para janela e renderizador SDL (gerenciados por GerenciarSDL)

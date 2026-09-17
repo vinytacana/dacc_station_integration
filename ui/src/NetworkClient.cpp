@@ -7,15 +7,12 @@
  */
 
 #include "NetworkClient.hpp"
-#include "Utils.hpp"
+#include "ipc/LocalSocket.hpp"
+#include "LogManager.hpp"
 #include <chrono>
 #include <cstring>
 #include <cerrno>
 #include <unistd.h>
-#include "LogManager.hpp"
-
-/// Caminho do socket Unix para comunicação IPC com o Process Manager
-#define SOCKET_PATH "/tmp/gameman.sock"
 
 /**
  * @brief Retorna a instância única do NetworkClient (Singleton).
@@ -62,7 +59,7 @@ bool NetworkClient::connectToManager() {
 
     try {
         /// Cria nova instância do cliente Unix Socket apontando para SOCKET_PATH
-        client_ = std::make_unique<UnixSocketClient>(SOCKET_PATH);
+        client_ = std::make_unique<UnixSocketClient>(ipc::processManagerSocketPath());
         
         /// Configura modo não-bloqueante para leitura assíncrona de eventos
         client_->setNonBlocking(true);
@@ -88,28 +85,19 @@ bool NetworkClient::connectToManager() {
  * {
  *   "action": "start",
  *   "request_id": "ui-...",
- *   "game_id": "game_id",
- *   "path": "/path/to/executable"
+ *   "game_id": "game_id"
  * }
  * @endcode
  * 
  * @param id Identificador único do jogo no sistema.
- * @param path Caminho completo para o executável do jogo.
  * 
  * @note Se não houver conexão ativa, tenta reconectar automaticamente.
  * @note Este método e checkEvents() são chamados pela mesma thread da UI.
  */
-bool NetworkClient::sendStartGame(const std::string& id, const std::string& path) {
+bool NetworkClient::sendStartGame(const std::string& id) {
     if (id.empty()) {
         lastLaunchError_ = "Identificador do jogo vazio.";
         LOG_ERROR("Cannot start game: empty id.");
-        return false;
-    }
-
-    std::string absolutePath = MeuProjeto::caminho_absoluto_projeto(path);
-    if (absolutePath.empty() || access(absolutePath.c_str(), F_OK) != 0) {
-        lastLaunchError_ = "Executavel do jogo nao encontrado.";
-        LOG_ERROR("Cannot start game: executable path not found: " + absolutePath);
         return false;
     }
 
@@ -127,7 +115,6 @@ bool NetworkClient::sendStartGame(const std::string& id, const std::string& path
     j["action"] = "start";
     j["game_id"] = id;
     j["request_id"] = request_id;
-    j["path"] = absolutePath;
 
     /// Serializa para string e envia via socket
     const ipc::SendResult send_result = client_->send(
