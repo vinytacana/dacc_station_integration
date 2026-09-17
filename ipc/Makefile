@@ -30,10 +30,15 @@ $(TEST_BIN): tests/test_framed_socket.cpp $(TEST_SEND_DOUBLE) $(TEST_SEND_DOUBLE
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXXFLAGS) $< $(TEST_SEND_DOUBLE) $(LIB_TARGET) -pthread -Wl,--wrap=send -o $@
 
-test: $(TEST_BIN)
+$(SOCKET_TEST_BIN): tests/test_local_socket.cpp $(LIB_TARGET)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $< $(LIB_TARGET) -pthread -o $@
+
+test: $(TEST_BIN) $(SOCKET_TEST_BIN)
 	./$(TEST_BIN)
+	./$(SOCKET_TEST_BIN)
 
 clean:
-	rm -rf $(BUILD_DIR) $(LIB_TARGET) $(TEST_BIN)
+	rm -rf $(BUILD_DIR) $(LIB_TARGET) $(TEST_BIN) $(SOCKET_TEST_BIN)
 
 -include $(DEPS)
