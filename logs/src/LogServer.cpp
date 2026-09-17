@@ -1,5 +1,7 @@
 #include "LogManager.hpp"
-#include "UnixSocketUtils.hpp"
+#include "ipc/LocalSocket.hpp"
+#include "LogProtocol.hpp"
+#include <unordered_set>
 #include "json.hpp"
 
 #include <spdlog/spdlog.h>
@@ -23,7 +25,7 @@
 
 namespace fs = std::filesystem;
 
-std::atomic<bool> shutdown_flag{false};
+volatile sig_atomic_t shutdown_flag = 0;
 
 void signal_handler(int signal){
     if(signal == SIGINT || signal == SIGTERM){
@@ -38,6 +40,9 @@ int main(){
     int stream_socket_fd = -1;
     int epoll_fd = -1;
     std::string socket_path;
+    std::unique_ptr<ipc::LocalSocketServer> server;
+    std::unordered_set<int> clients;
+    LogProtocol protocol;
     std::shared_ptr<spdlog::logger> server_logger;
 
     try {
@@ -54,7 +59,7 @@ int main(){
 
         nlohmann::json config = nlohmann::json::parse(config_file);
 
-        socket_path = config["server"]["socket_path"];
+        socket_path = ipc::logSocketPath();
         const std::string output_type = config["output"]["type"];
 
         if (output_type == "file") {
@@ -80,27 +85,8 @@ int main(){
         server_logger->set_pattern("%v");
         server_logger->flush_on(spdlog::level::info);
 
-        sockaddr_un addr {};
-        UnixSocketUtils::prepareAddress(addr, socket_path);
-
-        stream_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0); 
-        if (stream_socket_fd < 0) {
-            std::cerr << "[LogServer] CRITICAL: socket() failed" << std::endl; return 1;
-        }
-
-        unlink(socket_path.c_str());  
-
-        if (bind(stream_socket_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-            std::cerr << "[LogServer] CRITICAL: bind() failed" << std::endl;
-            close(stream_socket_fd);
-            return 1;
-        }
-        
-        if (listen(stream_socket_fd, 5) < 0) {
-            std::cerr << "[LogServer] CRITICAL: listen() failed" << std::endl;
-            close(stream_socket_fd);
-            return 1;
-        }
+        server = std::make_unique<ipc::LocalSocketServer>(socket_path);
+        stream_socket_fd = server->fd();
 
         epoll_fd = epoll_create1(EPOLL_CLOEXEC);
         if (epoll_fd < 0) {
@@ -129,31 +115,43 @@ int main(){
 
             for (int i = 0; i < n_events; ++i) {
                 if (events[i].data.fd == stream_socket_fd) {
-                    int client_fd = accept(stream_socket_fd, nullptr, nullptr);
+                    int client_fd = accept4(stream_socket_fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
                     if (client_fd < 0) {
                         continue;
                     }
-                    int flags = fcntl(client_fd, F_GETFL, 0);
-                    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+                    const auto admission = protocol.admit(client_fd, geteuid());
+                    if (admission != LogAdmission::Accepted) {
+                        server_logger->warn("Rejected log client: {}", static_cast<int>(admission));
+                        close(client_fd);
+                        continue;
+                    }
 
                     epoll_event ev_client{};
                     ev_client.events = EPOLLIN;
                     ev_client.data.fd = client_fd;
-                    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev_client);
+                    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev_client) != 0) {
+                        protocol.remove(client_fd);
+                        close(client_fd);
+                        continue;
+                    }
+                    clients.insert(client_fd);
                 } else {
                     int client_fd = events[i].data.fd;
                     char buf[4096]; 
                     ssize_t n;
                     bool closed = false;
 
-                    while (true) {
+                    for (int batch = 0; batch < 16 && !shutdown_flag; ++batch) {
                         n = read(client_fd, buf, sizeof(buf));
                         if (n > 0) {
-                            server_logger->info(std::string_view(buf, n));
+                            auto result = protocol.feed(client_fd, buf, static_cast<std::size_t>(n));
+                            for (const auto& message : result.messages) server_logger->info(message);
+                            if (result.overflowed) { closed = true; break; }
                         } else if (n == 0) {
                             closed = true;
                             break;
                         } else {
+                            if (errno == EINTR) continue;
                             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                                 break;
                             } else {
@@ -166,6 +164,8 @@ int main(){
                     if (closed) {
                         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
                         close(client_fd);
+                        protocol.remove(client_fd);
+                        clients.erase(client_fd);
                     }
                 }
             }
@@ -175,14 +175,14 @@ int main(){
         std::cerr << "[LogServer] Exception: " << e.what() << std::endl;
         
         if (epoll_fd >= 0) close(epoll_fd);
-        if (stream_socket_fd >= 0) close(stream_socket_fd);
-        if (!socket_path.empty()) unlink(socket_path.c_str());
+        for (int client : clients) close(client);
+        server.reset();
         return 1;
     }
     
     if (epoll_fd >= 0) close(epoll_fd);
-    if (stream_socket_fd >= 0) close(stream_socket_fd);
-    if (!socket_path.empty()) unlink(socket_path.c_str());
+    for (int client : clients) close(client);
+    server.reset();
 
     return 0;
 }
