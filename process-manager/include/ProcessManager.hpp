@@ -1,7 +1,7 @@
 #pragma once
 
 #include <sys/epoll.h> 
-#include <sys/signalfd.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -15,14 +15,15 @@
 #include <string>
 #include <future> 
 #include <memory>
-#include <mutex>
 
 #include <spdlog/spdlog.h>
 
 #include "ipc/FramedSocket.hpp"
+#include "ipc/LocalSocket.hpp"
+#include "GameCatalog.hpp"
+#include <unordered_set>
 
 #define MAX_EVENTS 10
-class ApplicationDefinition;
 
 using TimePoint = std::chrono::steady_clock::time_point;
 
@@ -47,26 +48,36 @@ struct RunningProcess {
 
 class ProcessManager{
 private:
+    GameCatalog catalog_;
+    std::unordered_map<int, std::unordered_set<std::string>> seen_requests_;
     std::shared_ptr<spdlog::logger> logger_;   
 
     std::unordered_map<pid_t, RunningProcess> running_processes_;
     std::unordered_map<int, std::uint64_t> connected_clients_;
     std::unordered_map<int, ipc::FrameReader> client_frame_readers_;
-    std::mutex processes_mutex_;
     std::uint64_t connection_seq_{0};
 
     std::promise<void> ready_promise;
     std::thread event_loop_thread_;
     std::atomic<bool> stop_loop_{false};
     
-    int epoll_fd_;
-    int signal_fd_;
-    int server_socket_fd_;
+    int epoll_fd_{-1};
+    int wake_fd_{-1};
+    int server_socket_fd_{-1};
+    int previous_subreaper_{0};
+    bool owns_supervision_{false};
+    std::atomic<bool> cleanup_incomplete_{false};
+#ifdef PROCESS_MANAGER_TESTING
+    std::atomic<bool> force_registration_failure_{false};
+#endif
     std::string socket_path_;
+    std::unique_ptr<ipc::LocalSocketServer> server_;
 
     void eventLoop();
-    void handleChildSignal();
-    std::vector<std::string> buildCommand(const ApplicationDefinition& app);
+    void reapFinishedGame();
+    void finishGame(pid_t pid, bool leader_already_exited);
+    void cleanupResources() noexcept;
+    ProcessStartResult startApplication(const GameCommand& game);
     
     // Novas funções para IPC
     void setupServerSocket();
@@ -78,40 +89,19 @@ private:
     );
     ipc::SendStatus sendClientMessage(int client_fd, const std::string& message);
     void disconnectClient(int client_fd);
-    void terminateStartedProcess(pid_t child_pid);
+    int terminateStartedProcess(pid_t child_pid, bool leader_already_exited = false);
 
 public:
     explicit ProcessManager(
         std::shared_ptr<spdlog::logger> logger,
-        std::string socket_path = "/tmp/gameman.sock"
+        std::string socket_path = ipc::processManagerSocketPath(),
+        std::string catalog_path = defaultGameCatalogPath()
     );
     ~ProcessManager(); 
-    ProcessStartResult startApplication(ApplicationDefinition& app);
-    bool isAppValid(const ApplicationDefinition& app) const;
 
-};
+#ifdef PROCESS_MANAGER_TESTING
+    void forceCleanupIncompleteForTest() { cleanup_incomplete_ = true; }
+    void forceRegistrationFailureForTest() { force_registration_failure_ = true; }
+#endif
 
-class ApplicationDefinition
-{
-private:
-    std::string id_;
-    std::string executable_path_;
-    std::string type_;
-    
-public:
-    // Graphics Configuration
-    int renderWidth = 1280;
-    int renderHeight = 720;
-    int outputWidth = 0;   // 0 = Auto
-    int outputHeight = 0;  // 0 = Auto
-    int refreshRate = 60;
-    bool useGamescope = false;
-    bool fullscreen = true;
-
-    ApplicationDefinition(std::string id, const char* path, std::string type) : 
-        id_{std::move(id)}, executable_path_{path}, type_{std::move(type)} { }
-
-    const std::string& getId() const { return id_; }
-    const std::string& getPath() const { return executable_path_; }
-    const std::string& getType() const { return type_; }
 };

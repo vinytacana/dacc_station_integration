@@ -2,15 +2,14 @@
 #include <exception>
 #include <csignal>
 #include <memory>
-#include <fstream>
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
+#include <cstdlib>
 #include <poll.h>
 
 #include "ProcessManager.hpp"
 #include "LogManager.hpp" 
-#include "json.hpp"
 
 volatile sig_atomic_t shutdown_requested = 0;
 
@@ -31,28 +30,7 @@ int main() {
     }
 
     try {
-        std::string socket_path = "/tmp/dacc-station.sock"; 
-
-        std::ifstream config_file("config.json"); 
-        if (!config_file.is_open()) {
-            config_file.open("../config.json");
-        }
-        if (!config_file.is_open()) {
-            config_file.open("process-manager/config.json");
-        }
-        
-        if (config_file.is_open()) {
-            try {
-                nlohmann::json config = nlohmann::json::parse(config_file);
-                if (config.contains("server") && config["server"].contains("socket_path")) {
-                    socket_path = config["server"]["socket_path"];
-                }
-            } catch(...) {
-                std::cerr << "Warning: Failed to parse config.json, using default socket path." << std::endl;
-            }
-        }
-
-        LogManager::getInstance().initialize("PM", socket_path);
+        LogManager::getInstance().initialize("PM", ipc::logSocketPath());
         
     } catch (const std::exception& e) {
         std::cerr << "CRITICAL: Failed to initialize LogManager: " << e.what() << std::endl;
@@ -62,7 +40,11 @@ int main() {
         auto logger = LogManager::getInstance().getLogger();
         logger->info("Starting Process Manager...");
         
-        ProcessManager pm(logger);
+        const char* catalog_env = std::getenv("DACC_GAME_CATALOG");
+        const std::string catalog_path = catalog_env && *catalog_env
+            ? catalog_env
+            : defaultGameCatalogPath();
+        ProcessManager pm(logger, ipc::processManagerSocketPath(), catalog_path);
 
         std::cout << "\n>>> Process Manager is active. Press Ctrl+C to exit." << std::endl;
 
