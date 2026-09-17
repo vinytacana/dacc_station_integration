@@ -1,0 +1,9 @@
+{
+  "games": [
+    {
+      "id": "run-sync",
+      "argv": ["../games/run-sync.sh"],
+      "cwd": "../games"
+    }
+  ]
+}
