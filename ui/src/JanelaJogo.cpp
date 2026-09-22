@@ -283,12 +283,8 @@ void JanelaJogo::executarJogo() {
     gerAudio.tocarSom("jogar.wav");
     std::cout << "\n[LAUNCHER] Iniciando: " << nomeJogo << std::endl;
     
-    std::string path = codigoJogo.find('/') != std::string::npos
-        ? caminho_absoluto_projeto(codigoJogo)
-        : caminho_absoluto_projeto("games/" + codigoJogo + ".sh"); 
-
     NetworkClient& network = NetworkClient::getInstance();
-    if (!network.sendStartGame(codigoJogo, path)) {
+    if (!network.sendStartGame(codigoJogo)) {
         std::cerr << "[LAUNCHER] Falha ao enviar inicio do jogo: "
                   << network.getLastLaunchError() << std::endl;
     }

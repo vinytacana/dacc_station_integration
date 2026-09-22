@@ -274,12 +274,17 @@ wifi_adapter_status obter_status_wifi() {
 }
 
 network_connection_status obter_status_conexao_rede() {
+    return obter_status_conexao_rede(command_options{});
+}
+
+network_connection_status obter_status_conexao_rede(const command_options& options) {
     network_connection_status status;
     if (!comando_existe("nmcli")) {
         return obter_status_conexao_rede_sysfs();
     }
     command_result result = exec_command_args_result(
-        {"nmcli", "-t", "-f", "TYPE,DEVICE,STATE,CONNECTION", "device", "status"}
+        {"nmcli", "-t", "-f", "TYPE,DEVICE,STATE,CONNECTION", "device", "status"},
+        options
     );
     if (!result.ok) {
         return status;

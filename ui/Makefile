@@ -18,12 +18,15 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -g \
 LDFLAGS = ../config-dacc/libdacc-config.a \
           ../logs/libdacc-logs.a \
           ../ipc/libdacc-ipc.a \
-          -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer
+          -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_gfx -lSDL2_mixer -pthread
 
 SRC_DIR = src
 OBJ_DIR = build
 BIN_DIR = ../bin
 BIN = $(BIN_DIR)/dacc-ui
+TEST_SYSTEM_STATUS_BIN = tests/bin/test_system_status
+TEST_CONFIG_LAYOUT_BIN = tests/bin/test_config_layout
+TEST_BINS = $(TEST_SYSTEM_STATUS_BIN) $(TEST_CONFIG_LAYOUT_BIN)
 
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
@@ -43,9 +46,21 @@ directories:
 	@mkdir -p $(OBJ_DIR)
 	@mkdir -p $(BIN_DIR)
 
-clean:
-	rm -rf $(OBJ_DIR) $(BIN)
+$(TEST_SYSTEM_STATUS_BIN): tests/test_system_status.cpp src/SystemStatus.cpp include/SystemStatus.hpp ../config-dacc/include/config-dacc/functions.hpp
+	@mkdir -p tests/bin
+	$(CXX) $(CXXFLAGS) tests/test_system_status.cpp src/SystemStatus.cpp -o $@ -lSDL2 -pthread
 
-.PHONY: all clean directories
+$(TEST_CONFIG_LAYOUT_BIN): tests/test_config_layout.cpp src/ConfigLayout.cpp include/ConfigLayout.hpp include/JanelaAudioEVideo.hpp include/LayoutEvents.hpp
+	@mkdir -p tests/bin
+	$(CXX) $(CXXFLAGS) tests/test_config_layout.cpp src/ConfigLayout.cpp -o $@
+
+test: $(TEST_BINS)
+	./$(TEST_SYSTEM_STATUS_BIN)
+	./$(TEST_CONFIG_LAYOUT_BIN)
+
+clean:
+	rm -rf $(OBJ_DIR) $(BIN) $(TEST_BINS)
+
+.PHONY: all clean directories test
 
 -include $(DEPS)

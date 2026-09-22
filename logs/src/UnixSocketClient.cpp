@@ -1,5 +1,5 @@
 #include "UnixSocketClient.hpp"
-#include "UnixSocketUtils.hpp"
+#include "ipc/LocalSocket.hpp"
 
 #include <unistd.h> 
 #include <sys/un.h>
@@ -8,25 +8,8 @@
 #include <cstring>
 #include <stdexcept>
 
-UnixSocketClient::UnixSocketClient(const std::string& path){
-    fd_  = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (fd_ < 0) { 
-        throw std::runtime_error("UnixSocketClient: socket failed");
-    }
-
-    sockaddr_un addr{};
-    UnixSocketUtils::prepareAddress(addr, path);
-    
-    int ret = connect(fd_, (sockaddr*)&addr, sizeof(addr));
-    
-    if( ret < 0 ){
-        std::string error_msg = strerror(errno);
-        close(fd_);
-        throw std::runtime_error("UnixSocketClient: connect() failed for path: " + path + " (" + error_msg + ")");
-    }
-
-}
+UnixSocketClient::UnixSocketClient(const std::string& path)
+    : fd_(ipc::connectLocalSocket(path)) {}
 
 UnixSocketClient::~UnixSocketClient(){
     if (fd_ >= 0) close(fd_);

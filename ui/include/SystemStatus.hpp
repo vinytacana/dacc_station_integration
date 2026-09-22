@@ -1,7 +1,11 @@
 #ifndef SYSTEM_STATUS_HPP
 #define SYSTEM_STATUS_HPP
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 
 namespace MeuProjeto {
 
@@ -107,6 +111,11 @@ private:
      * Pode realizar configurações iniciais e primeira consulta dos dados do sistema.
      */
     SystemStatus();
+    ~SystemStatus();
+    SystemStatus(const SystemStatus&) = delete;
+    SystemStatus& operator=(const SystemStatus&) = delete;
+
+    void atualizarRedeEmBackground();
     
     /**
      * @brief Cache dos dados do sistema
@@ -115,6 +124,11 @@ private:
      * Este cache é atualizado pelo método update() e consultado por getCachedData().
      */
     SystemData cache;
+    mutable std::mutex cacheMutex;
+    std::thread networkThread;
+    std::atomic_bool encerrarNetworkThread{false};
+    std::mutex networkWaitMutex;
+    std::condition_variable networkWaitCondition;
     
     /**
      * @brief Timestamp da última atualização

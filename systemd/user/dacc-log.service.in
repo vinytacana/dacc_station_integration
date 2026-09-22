@@ -1,0 +1,17 @@
+[Unit]
+Description=DACC Station LogServer
+StartLimitIntervalSec=30s
+StartLimitBurst=5
+PartOf=dacc-station.target
+
+[Service]
+Type=exec
+WorkingDirectory=@DACC_ROOT@
+ExecStart=@DACC_ROOT@/bin/log-server
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=5s
+KillMode=control-group
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes

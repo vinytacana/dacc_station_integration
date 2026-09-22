@@ -87,6 +87,17 @@ bool escalaIgual(float a, float b) {
 std::string Resolucao::toString() const {
     std::stringstream ss;
     ss << largura << "x" << altura;
+    if (taxaAtualizacao > 0.0f) {
+        ss << " @ " << std::fixed << std::setprecision(2) << taxaAtualizacao;
+        std::string texto = ss.str();
+        while (!texto.empty() && texto.back() == '0') {
+            texto.pop_back();
+        }
+        if (!texto.empty() && texto.back() == '.') {
+            texto.pop_back();
+        }
+        return texto + " Hz";
+    }
     return ss.str();
 }
 
@@ -302,7 +313,7 @@ void JanelaAudioEVideo::inicializarResolucoes() {
     
     for (const auto& mode : displayPrincipal.modes) {
         if (mode.width >= 800) {
-            resolucoes.push_back(Resolucao(mode.width, mode.height));
+            resolucoes.push_back(Resolucao(mode.width, mode.height, mode.refresh_rate));
             
             if (mode.is_current) {
                 indiceResolucaoAtual = static_cast<int>(resolucoes.size()) - 1;
@@ -314,7 +325,8 @@ void JanelaAudioEVideo::inicializarResolucoes() {
         if (displayPrincipal.current_mode.width >= 800) {
             resolucoes.push_back(Resolucao(
                 displayPrincipal.current_mode.width,
-                displayPrincipal.current_mode.height
+                displayPrincipal.current_mode.height,
+                displayPrincipal.current_mode.refresh_rate
             ));
         } else {
             resolucoes.push_back(Resolucao(1920, 1080));
@@ -1810,9 +1822,12 @@ void JanelaAudioEVideo::aplicarAlteracoes() {
         !resolucoes.empty() && indiceResolucaoAtual >= 0 && indiceResolucaoAtual < (int)resolucoes.size()) {
         Resolucao alvo = resolucoes[indiceResolucaoAtual];
         
-        // A nova função pede (nome, largura, altura, refresh_rate)
-        // Usamos 60.0f como padrão seguro, já que a UI ainda não escolhe Hz
-        system_result resolucao = ::alterarResolucao_result(nomeMonitor, alvo.largura, alvo.altura, 60.0f);
+        system_result resolucao = ::alterarResolucao_result(
+            nomeMonitor,
+            alvo.largura,
+            alvo.altura,
+            alvo.taxaAtualizacao
+        );
         if (!resolucao.ok) {
             definirMensagemStatus(
                 mensagemResultadoUi(resolucao, "Falha ao definir resolucao."),

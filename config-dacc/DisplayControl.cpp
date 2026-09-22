@@ -107,6 +107,19 @@ std::string descrever_tentativas(const std::vector<std::string>& tentativas) {
     return detalhes;
 }
 
+std::string formatar_refresh_rate(float rate) {
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(3) << rate;
+    std::string valor = ss.str();
+    while (!valor.empty() && valor.back() == '0') {
+        valor.pop_back();
+    }
+    if (!valor.empty() && valor.back() == '.') {
+        valor.pop_back();
+    }
+    return valor;
+}
+
 std::vector<std::filesystem::path> listar_backlights() {
     std::vector<std::filesystem::path> backlights;
     const std::filesystem::path root{"/sys/class/backlight"};
@@ -298,7 +311,7 @@ system_result listar_displays_result(std::vector<DisplayOutput>& displays) {
     }
 
     if (tem_xrandr) {
-        command_result result = exec_command_args_result({"xrandr", "--verbose"});
+        command_result result = exec_command_args_result({"xrandr", "--query"});
         if (result.ok) {
             displays = config_dacc::display_parsing::parse_xrandr_verbose(result.stdout_output);
             if (!displays.empty()) {
@@ -484,7 +497,6 @@ bool alterarResolucao(const std::string& saida, int width, int height, float rat
 }
 
 system_result alterarResolucao_result(const std::string& saida, int width, int height, float rate) {
-    (void)rate;
     std::string sessao = obter_tipo_sessao();
     std::string mode_str = std::to_string(width) + "x" + std::to_string(height);
     std::vector<std::string> args;
@@ -493,12 +505,19 @@ system_result alterarResolucao_result(const std::string& saida, int width, int h
         if (!comando_existe("wlr-randr")) {
             return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de resolucao indisponivel.", "wlr-randr ausente.");
         }
+        if (rate > 0.0f) {
+            mode_str += "@" + formatar_refresh_rate(rate) + "Hz";
+        }
         args = {"wlr-randr", "--output", saida, "--mode", mode_str};
     } else if (sessao == "x11") {
         if (!comando_existe("xrandr")) {
             return config_result::error(err::FEATURE_UNAVAILABLE, "Controle de resolucao indisponivel.", "xrandr ausente.");
         }
         args = {"xrandr", "--output", saida, "--mode", mode_str};
+        if (rate > 0.0f) {
+            args.push_back("--rate");
+            args.push_back(formatar_refresh_rate(rate));
+        }
     } else {
         return config_result::error(err::DISPLAY_SESSION_UNKNOWN, "Sessao grafica nao suportada.");
     }

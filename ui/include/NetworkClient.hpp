@@ -56,15 +56,13 @@ public:
      * @brief Envia comando para iniciar um jogo específico
      * 
      * Transmite uma requisição ao gerenciador para iniciar a execução de um jogo.
-     * O comando inclui tanto o identificador único do jogo quanto o caminho completo
-     * para seu executável. O gerenciador será responsável por lançar o processo do jogo
-     * e notificar quando o jogo for encerrado.
+     * O comando inclui somente o identificador estável do jogo. O gerenciador resolve
+     * o comando no catálogo server-side e notifica quando o jogo for encerrado.
      * 
      * @param id Identificador único do jogo a ser iniciado
-     * @param path Caminho completo do arquivo executável do jogo
      * @return true se o comando foi validado e enviado ao gerenciador
      */
-    bool sendStartGame(const std::string& id, const std::string& path);
+    bool sendStartGame(const std::string& id);
                       
     /**
      * @brief Verifica e processa eventos recebidos do gerenciador

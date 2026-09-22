@@ -94,4 +94,4 @@ Antes de uma demo ou execução em Raspberry Pi/desktop, confira:
 * Execute `make -C ui` para garantir que a interface linka com `libdacc-config.a` e `libdacc-logs.a`.
 * Execute `./scripts/check_compatibility.sh` a partir da raiz do projeto para ver ferramentas ausentes como `nmcli`, `bluetoothctl`, `wpctl`, `xrandr`, `wlr-randr` e `brightnessctl`.
 * Se uma capacidade faltar, a UI deve desabilitar ou esconder a ação correspondente. O comportamento esperado é mensagem curta na tela e detalhe técnico no log.
-* Se o botão de jogar não inicia nada, verifique se `/tmp/gameman.sock` existe, se o Process Manager está rodando e se o caminho do jogo existe. A UI não deve assumir que o jogo iniciou só porque o comando foi enviado.
+* Se o botão de jogar não inicia nada, verifique o socket `$XDG_RUNTIME_DIR/dacc-station/process-manager.sock`, o Process Manager e a entrada correspondente em `process-manager/games.json`. A UI não deve assumir que o jogo iniciou só porque o comando foi enviado.

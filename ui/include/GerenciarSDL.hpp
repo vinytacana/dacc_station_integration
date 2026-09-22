@@ -51,6 +51,8 @@ public:
      */
     static bool inicializar(SDL_Window*& janela, SDL_Renderer*& renderer, int largura, int altura);
 
+    static bool atualizarLayoutDaJanela(SDL_Window* janela, SDL_Renderer* renderer);
+
     /**
      * @brief Exibe uma tela de verificação inicial de periféricos.
      * 

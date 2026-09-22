@@ -123,13 +123,19 @@ fi
 
 echo
 echo "[5/5] Sockets IPC"
-for sock in /tmp/dacc-station.sock /tmp/gameman.sock; do
+runtime_dir="${XDG_RUNTIME_DIR:+${XDG_RUNTIME_DIR}/dacc-station}"
+runtime_dir="${runtime_dir:-${DACC_RUNTIME_DIR:-}}"
+if [[ -z "$runtime_dir" ]]; then
+    warn "runtime IPC ausente: configure XDG_RUNTIME_DIR ou DACC_RUNTIME_DIR privado (0700)"
+else
+for sock in "$runtime_dir/log-server.sock" "$runtime_dir/process-manager.sock"; do
     if [[ -S "$sock" ]]; then
         warn "socket existente: $sock"
     else
         ok "socket livre: $sock"
     fi
 done
+fi
 
 echo
 echo "--- Resumo ---"

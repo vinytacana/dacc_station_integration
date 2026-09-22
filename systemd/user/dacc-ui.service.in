@@ -1,0 +1,20 @@
+[Unit]
+Description=DACC Station SDL interface
+Wants=dacc-process-manager.service
+After=graphical-session.target dacc-process-manager.service
+StartLimitIntervalSec=30s
+StartLimitBurst=5
+PartOf=dacc-station.target
+
+[Service]
+Type=exec
+WorkingDirectory=@DACC_ROOT@
+ExecCondition=@DACC_ROOT@/scripts/check-wayland-session.sh
+ExecStart=@DACC_ROOT@/bin/dacc-ui
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=5s
+KillMode=control-group
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes

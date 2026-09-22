@@ -110,6 +110,8 @@ public:
      */
     bool estaVisivel() const { return visivel; }
 
+    void atualizarLayoutResponsivo();
+
 private:
     bool visivel = false; /**< Estado de exibição do teclado. */
     

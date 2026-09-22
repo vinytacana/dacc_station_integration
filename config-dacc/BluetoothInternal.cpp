@@ -23,18 +23,42 @@ namespace {
 
 std::mutex g_bluetooth_mutex;
 
+bool escrever_tudo(int fd, const std::string& conteudo) {
+    size_t total = 0;
+    while (total < conteudo.size()) {
+        ssize_t escritos = write(fd, conteudo.data() + total, conteudo.size() - total);
+        if (escritos > 0) {
+            total += static_cast<size_t>(escritos);
+            continue;
+        }
+        if (escritos < 0 && errno == EINTR) {
+            continue;
+        }
+        if (escritos == 0) {
+            errno = EIO;
+        }
+        return false;
+    }
+    return true;
+}
+
 struct BluetoothctlSession {
     int master_fd = -1;
     pid_t pid = -1;
     bool wait_blocking = false;
+    bool status_colhido = false;
+    int wait_status = 0;
 
     ~BluetoothctlSession() {
         if (master_fd >= 0) {
             close(master_fd);
         }
         if (pid > 0) {
-            int status = 0;
-            waitpid(pid, &status, wait_blocking ? 0 : WNOHANG);
+            if (wait_blocking) {
+                collect_status(true);
+            } else {
+                terminate_with_fallback();
+            }
         }
     }
 
@@ -49,10 +73,41 @@ struct BluetoothctlSession {
         wait_blocking = true;
     }
 
-    void kill_if_running(int signal_number) {
-        if (pid > 0) {
-            kill(pid, signal_number);
+    bool collect_status(bool blocking) {
+        if (pid <= 0) {
+            return status_colhido;
         }
+
+        int status = 0;
+        pid_t waited;
+        do {
+            waited = waitpid(pid, &status, blocking ? 0 : WNOHANG);
+        } while (waited < 0 && errno == EINTR);
+
+        if (waited == pid) {
+            wait_status = status;
+            status_colhido = true;
+            pid = -1;
+        }
+        return status_colhido;
+    }
+
+    void terminate_with_fallback() {
+        if (pid <= 0 || collect_status(false)) {
+            return;
+        }
+
+        kill(pid, SIGTERM);
+        const auto limite = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+        while (std::chrono::steady_clock::now() < limite) {
+            if (collect_status(false)) {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        kill(pid, SIGKILL);
+        collect_status(true);
     }
 };
 
@@ -105,7 +160,6 @@ system_result mapear_erro_bluetoothctl(
 }
 
 system_result executar_bluetoothctl_locked(const std::string& comando, int timeout_ms) {
-    system_result resultado;
     BluetoothctlSession session;
     session.pid = forkpty(&session.master_fd, nullptr, nullptr, nullptr);
     if (session.pid < 0) {
@@ -118,8 +172,7 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
     }
 
     const std::string entrada = comando + "\nquit\n";
-    ssize_t escritos = write(session.master_fd, entrada.c_str(), entrada.size());
-    if (escritos < 0) {
+    if (!escrever_tudo(session.master_fd, entrada)) {
         return make_bt_error(err::WRITE_FAILED, "Falha ao enviar comando ao bluetoothctl.", std::strerror(errno));
     }
 
@@ -131,7 +184,7 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
         fd_set fds;
         FD_ZERO(&fds);
         FD_SET(session.master_fd, &fds);
-        struct timeval tv{1, 0};
+        struct timeval tv{0, 100000};
 
         int ret = select(session.master_fd + 1, &fds, nullptr, nullptr, &tv);
         if (ret > 0 && FD_ISSET(session.master_fd, &fds)) {
@@ -139,16 +192,19 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
             if (lidos > 0) {
                 buffer[lidos] = '\0';
                 saida += buffer;
-                continue;
             }
-            if (lidos == 0 || errno == EIO) {
+            if (lidos == 0 || (lidos < 0 && errno == EIO)) {
                 break;
             }
+            if (lidos < 0 && errno != EINTR) {
+                return make_bt_error(
+                    err::READ_FAILED,
+                    "Falha ao ler resposta do bluetoothctl.",
+                    std::strerror(errno)
+                );
+            }
         } else if (ret == 0) {
-            int status = 0;
-            pid_t waited = waitpid(session.pid, &status, WNOHANG);
-            if (waited == session.pid) {
-                session.pid = -1;
+            if (session.collect_status(false)) {
                 break;
             }
         } else if (ret < 0) {
@@ -158,43 +214,31 @@ system_result executar_bluetoothctl_locked(const std::string& comando, int timeo
         const auto decorrido = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - inicio
         ).count();
-        if (decorrido > timeout_ms) {
-            session.kill_if_running(SIGKILL);
-            session.enable_blocking_wait();
+        if (decorrido >= timeout_ms) {
+            session.terminate_with_fallback();
+            std::string detalhes = remover_ansi(saida);
+            if (!detalhes.empty() && detalhes.back() != '\n') {
+                detalhes += '\n';
+            }
+            detalhes += "Comando: " + comando;
             return make_bt_error(
                 err::BLUETOOTHCTL_TIMEOUT,
                 "bluetoothctl excedeu o tempo limite.",
-                "Comando: " + comando
+                detalhes
             );
         }
     }
 
     session.close_master_fd();
-    int status = 0;
     if (session.pid > 0) {
         session.enable_blocking_wait();
-        waitpid(session.pid, &status, 0);
-        session.pid = -1;
+        session.collect_status(true);
     }
-
-    resultado.ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    resultado.mensagem = remover_ansi(saida);
-    if (resultado.ok) {
-        resultado.codigo = err::OK;
-    } else if (WIFSIGNALED(status)) {
-        resultado.codigo = err::BLUETOOTHCTL_SIGNALED;
-    } else {
-        resultado.codigo = err::BLUETOOTHCTL_FAILED;
-    }
-    resultado.detalhes = resultado.mensagem;
-    if (!resultado.ok && resultado.mensagem.empty()) {
-        if (WIFSIGNALED(status)) {
-            resultado.mensagem = "bluetoothctl terminou por sinal " + std::to_string(WTERMSIG(status)) + ".";
-        } else {
-            resultado.mensagem = "bluetoothctl falhou sem resposta.";
-        }
-    }
-    return resultado;
+    return classificar_status_bluetoothctl(
+        session.wait_status,
+        session.status_colhido,
+        saida
+    );
 }
 
 } // namespace
@@ -234,6 +278,38 @@ system_result make_bt_success(const std::string& mensagem, const std::string& de
     result.mensagem = mensagem;
     result.detalhes = detalhes;
     return result;
+}
+
+system_result classificar_status_bluetoothctl(
+    int status,
+    bool status_colhido,
+    const std::string& saida
+) {
+    system_result resultado;
+    resultado.ok = status_colhido && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    resultado.mensagem = remover_ansi(saida);
+    resultado.detalhes = resultado.mensagem;
+
+    if (resultado.ok) {
+        resultado.codigo = err::OK;
+    } else if (status_colhido && WIFSIGNALED(status)) {
+        resultado.codigo = err::BLUETOOTHCTL_SIGNALED;
+    } else {
+        resultado.codigo = err::BLUETOOTHCTL_FAILED;
+    }
+
+    if (!resultado.ok && resultado.mensagem.empty()) {
+        if (!status_colhido) {
+            resultado.mensagem = "Nao foi possivel obter o status final do bluetoothctl.";
+        } else if (WIFSIGNALED(status)) {
+            resultado.mensagem = "bluetoothctl terminou por sinal " +
+                std::to_string(WTERMSIG(status)) + ".";
+        } else {
+            resultado.mensagem = "bluetoothctl falhou sem resposta.";
+        }
+        resultado.detalhes = resultado.mensagem;
+    }
+    return resultado;
 }
 
 system_result executar_bluetoothctl(const std::string& comando, int timeout_ms) {
@@ -278,7 +354,7 @@ system_result executar_bluetoothctl_ate(
 
     auto escrever_linha = [&session](const std::string& linha) -> bool {
         const std::string entrada = linha + "\n";
-        return write(session.master_fd, entrada.c_str(), entrada.size()) >= 0;
+        return escrever_tudo(session.master_fd, entrada);
     };
 
     for (const auto& comando : comandos) {
@@ -299,7 +375,7 @@ system_result executar_bluetoothctl_ate(
         fd_set fds;
         FD_ZERO(&fds);
         FD_SET(session.master_fd, &fds);
-        struct timeval tv{1, 0};
+        struct timeval tv{0, 100000};
 
         int ret = select(session.master_fd + 1, &fds, nullptr, nullptr, &tv);
         if (ret > 0 && FD_ISSET(session.master_fd, &fds)) {
@@ -348,16 +424,19 @@ system_result executar_bluetoothctl_ate(
                 if (finalizado_por_marcador) {
                     break;
                 }
-                continue;
             }
-            if (lidos == 0 || errno == EIO) {
+            if (lidos == 0 || (lidos < 0 && errno == EIO)) {
                 break;
             }
+            if (lidos < 0 && errno != EINTR) {
+                return make_bt_error(
+                    err::READ_FAILED,
+                    "Falha ao ler resposta do bluetoothctl.",
+                    std::strerror(errno)
+                );
+            }
         } else if (ret == 0) {
-            int status = 0;
-            pid_t waited = waitpid(session.pid, &status, WNOHANG);
-            if (waited == session.pid) {
-                session.pid = -1;
+            if (session.collect_status(false)) {
                 break;
             }
         } else if (ret < 0) {
@@ -367,7 +446,7 @@ system_result executar_bluetoothctl_ate(
         const auto decorrido = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - inicio
         ).count();
-        if (decorrido > timeout_ms) {
+        if (decorrido >= timeout_ms) {
             std::string saida_limpa = remover_ansi(saida);
             if (contem_algum_marcador(saida_limpa, marcadores_sucesso)) {
                 finalizado_por_marcador = true;
@@ -379,8 +458,7 @@ system_result executar_bluetoothctl_ate(
                 (void)escrever_linha(comando);
             }
             (void)escrever_linha("quit");
-            session.kill_if_running(SIGKILL);
-            session.enable_blocking_wait();
+            session.terminate_with_fallback();
             return make_bt_error(
                 err::BLUETOOTHCTL_TIMEOUT,
                 "bluetoothctl excedeu o tempo limite.",
@@ -414,13 +492,8 @@ system_result executar_bluetoothctl_ate(
             break;
         }
 
-        session.kill_if_running(SIGTERM);
-        session.enable_blocking_wait();
         session.close_master_fd();
-        if (session.pid > 0) {
-            waitpid(session.pid, nullptr, 0);
-            session.pid = -1;
-        }
+        session.terminate_with_fallback();
 
         return make_bt_success("Comando executado.", remover_ansi(saida));
     }
@@ -443,19 +516,22 @@ system_result executar_bluetoothctl_ate(
     }
 
     session.close_master_fd();
-    int status = 0;
     if (session.pid > 0) {
         session.enable_blocking_wait();
-        waitpid(session.pid, &status, 0);
-        session.pid = -1;
+        session.collect_status(true);
     }
 
     system_result resultado;
-    resultado.ok = sucesso || (WIFEXITED(status) && WEXITSTATUS(status) == 0 && marcadores_sucesso.empty());
+    resultado.ok = sucesso || (
+        session.status_colhido &&
+        WIFEXITED(session.wait_status) &&
+        WEXITSTATUS(session.wait_status) == 0 &&
+        marcadores_sucesso.empty()
+    );
     resultado.codigo = resultado.ok ? err::OK : err::BLUETOOTHCTL_FAILED;
     resultado.mensagem = remover_ansi(saida);
     resultado.detalhes = resultado.mensagem;
-    if (!resultado.ok && WIFSIGNALED(status)) {
+    if (!resultado.ok && session.status_colhido && WIFSIGNALED(session.wait_status)) {
         resultado.codigo = err::BLUETOOTHCTL_SIGNALED;
     }
     return resultado;

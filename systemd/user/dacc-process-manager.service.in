@@ -1,0 +1,20 @@
+[Unit]
+Description=DACC Station Process Manager
+Wants=dacc-log.service
+After=dacc-log.service
+StartLimitIntervalSec=30s
+StartLimitBurst=5
+PartOf=dacc-station.target
+
+[Service]
+Type=exec
+WorkingDirectory=@DACC_ROOT@
+ExecStart=@DACC_ROOT@/bin/process-manager
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=5s
+KillMode=mixed
+SendSIGKILL=yes
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes

@@ -25,7 +25,6 @@
 #include <vector>
 #include <string>
 #include <ctime>
-#include <fstream>
 #include <algorithm>
 #include <filesystem>
 
@@ -40,8 +39,10 @@
 #include "Arquivos.hpp"
 #include "GerenciadorTemas.hpp"
 #include "ConfigLayout.hpp"
+#include "LayoutEvents.hpp"
 #include "NetworkClient.hpp"
 #include "LogManager.hpp"
+#include "ipc/LocalSocket.hpp"
 #include "SystemStatus.hpp"
 #include "Utils.hpp"
 #include "json.hpp"
@@ -187,21 +188,10 @@ int main(int argc, char* argv[]) {
      * caso contrário usa path padrão do socket Unix.
      */
     try {
-        std::ifstream config_file(caminho_absoluto_projeto("process-manager/config.json"));
-        std::string socket_path = "/tmp/dacc-station.sock"; ///< Path padrão
-        
-        if (config_file.is_open()) {
-             nlohmann::json config = nlohmann::json::parse(config_file);
-             /// Extrai path customizado se disponível no JSON
-             if(config.contains("server") && config["server"].contains("socket_path"))
-                socket_path = config["server"]["socket_path"];
-        }
-        
-        /// Inicializa logger com identificador "UI" e path do socket
-        LogManager::getInstance().initialize("UI", socket_path);
-    } catch (...) {
-        /// Fallback para configuração padrão em caso de erro
-        LogManager::getInstance().initialize("UI", "/tmp/dacc-station.sock");
+        LogManager::getInstance().initialize("UI", ipc::logSocketPath());
+    } catch (const std::exception& e) {
+        // Console logging remains available when the runtime directory is absent.
+        LogManager::getInstance().getLogger()->warn("IPC logging unavailable: {}", e.what());
     }
 
     /// Ponteiros para janela e renderizador SDL (gerenciados por GerenciarSDL)
@@ -215,6 +205,7 @@ int main(int argc, char* argv[]) {
     if (!GerenciarSDL::inicializar(janela, renderer, LARGURA_JANELA, ALTURA_JANELA)) {
         return 1; ///< Encerra com código de erro
     }
+    GerenciarSDL::atualizarLayoutDaJanela(janela, renderer);
 
     /**
      * Reproduz vídeo de introdução usando MPV externo.
@@ -318,6 +309,19 @@ int main(int argc, char* argv[]) {
          * Processa todos os eventos acumulados na fila antes de renderizar.
          */
         while (SDL_PollEvent(&evento)) {
+            if (eventoAtualizaLayout(evento, SDL_GetWindowID(janela)) &&
+                GerenciarSDL::atualizarLayoutDaJanela(janela, renderer)) {
+                interface.atualizarLayout(estado);
+                if (janelaConfig.estaAberta()) {
+                    janelaConfig.fechar();
+                    estado.configAberta = true;
+                }
+                if (estado.janelaJogoAtual) {
+                    MeuProjeto::janelaJogoAtual.reset();
+                    estado.janelaJogoAtual = nullptr;
+                }
+                continue;
+            }
             
             /**
              * PRIORIDADE 1: Janela de Configuração (Modo Modal)

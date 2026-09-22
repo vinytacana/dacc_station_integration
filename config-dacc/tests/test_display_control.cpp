@@ -27,10 +27,10 @@ std::filesystem::path criar_backend_xrandr_falso(
     std::ofstream arquivo(script);
     arquivo
         << "#!/bin/sh\n"
-        << "if [ \"$1\" = \"--verbose\" ]; then\n"
+        << "if [ \"$1\" = \"--query\" ]; then\n"
         << "  printf '%s\\n' "
            "'HDMI-1 connected primary 1920x1080+0+0' "
-           "'   1920x1080     60.00*+' "
+           "'   1920x1080     60.00*+ 59.94' "
            "'DP-1 connected 1280x720+1920+0' "
            "'   1280x720      60.00*+'\n"
         << "  exit 0\n"
@@ -77,6 +77,16 @@ void testar_selecao_xrandr() {
         "deve executar xrandr com argumentos separados e o backend_id correto"
     );
 
+    system_result resolucao = alterarResolucao_result("DP-1", 1280, 720, 59.94f);
+    exigir(resolucao.ok, "deve aplicar resolucao e taxa pelo xrandr falso");
+    entradaLog.close();
+    entradaLog.open(log);
+    std::getline(entradaLog, comandoExecutado);
+    exigir(
+        comandoExecutado == "--output DP-1 --mode 1280x720 --rate 59.94",
+        "deve encaminhar a taxa real ao xrandr"
+    );
+
     DisplayOutput inexistente;
     inexistente.backend_id = "VIRTUAL-9";
     system_result ausente = selecionar_display_result(inexistente);
@@ -90,10 +100,46 @@ void testar_selecao_xrandr() {
     std::filesystem::remove_all(diretorio, ec);
 }
 
+void testar_resolucao_wlr_randr() {
+    char modeloDiretorio[] = "/tmp/dacc-wlr-display-test-XXXXXX";
+    char* diretorioCriado = mkdtemp(modeloDiretorio);
+    exigir(diretorioCriado != nullptr, "deve criar diretorio temporario Wayland");
+
+    const std::filesystem::path diretorio(diretorioCriado);
+    const std::filesystem::path script = diretorio / "wlr-randr";
+    const std::filesystem::path log = diretorio / "comando.log";
+    std::ofstream arquivo(script);
+    arquivo
+        << "#!/bin/sh\n"
+        << "printf '%s\\n' \"$*\" > \"$DACC_DISPLAY_TEST_LOG\"\n";
+    arquivo.close();
+    exigir(arquivo.good(), "deve criar o backend wlr-randr falso");
+    exigir(chmod(script.c_str(), 0700) == 0, "deve tornar wlr-randr falso executavel");
+
+    exigir(setenv("PATH", diretorio.c_str(), 1) == 0, "deve configurar PATH Wayland");
+    exigir(setenv("XDG_SESSION_TYPE", "wayland", 1) == 0, "deve configurar sessao Wayland");
+    exigir(setenv("DACC_DISPLAY_TEST_LOG", log.c_str(), 1) == 0, "deve configurar log Wayland");
+
+    system_result resultado = alterarResolucao_result("HDMI-A-1", 1920, 1080, 59.94f);
+    exigir(resultado.ok, "deve aplicar resolucao pelo wlr-randr falso");
+
+    std::ifstream entrada(log);
+    std::string comandoExecutado;
+    std::getline(entrada, comandoExecutado);
+    exigir(
+        comandoExecutado == "--output HDMI-A-1 --mode 1920x1080@59.94Hz",
+        "deve encaminhar a taxa real no formato aceito pelo wlr-randr"
+    );
+
+    std::error_code ec;
+    std::filesystem::remove_all(diretorio, ec);
+}
+
 } // namespace
 
 int main() {
     testar_selecao_xrandr();
+    testar_resolucao_wlr_randr();
     std::cout << "Display control tests passed." << std::endl;
     return 0;
 }

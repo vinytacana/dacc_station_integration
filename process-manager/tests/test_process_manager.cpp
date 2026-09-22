@@ -4,7 +4,7 @@
 #include "json.hpp"
 #include "send_test_double.hpp"
 
-#include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/sinks/base_sink.h>
 
 #include <algorithm>
 #include <array>
@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <optional>
 #include <poll.h>
@@ -61,7 +62,7 @@ public:
         unlink((path_ + "/orphan-marker").c_str());
         unlink((path_ + "/slow-exec-marker").c_str());
         unlink((path_ + "/daemon.sock").c_str());
-        rmdir(path_.c_str());
+        std::filesystem::remove_all(path_);
     }
 
     const std::string& path() const { return path_; }
@@ -78,6 +79,22 @@ void criarScript(const std::string& path, const std::string& body) {
     exigir(chmod(path.c_str(), 0700) == 0, "script artificial deve ser executavel");
 }
 
+std::string criarCatalogo(const std::string& directory) {
+    json games = json::array();
+    for (const auto& file : std::filesystem::directory_iterator(directory)) {
+        if (file.path().extension() == ".sh") games.push_back({
+            {"id", file.path().stem().string()}, {"argv", {file.path().string()}}
+        });
+    }
+    games.push_back({{"id", "stopped-before-exec"}, {"argv", {directory + "/stop-before-exec.sh"}}});
+    games.push_back({{"id", "missing"}, {"argv", {directory + "/missing-executable"}}});
+    games.push_back({{"id", "sigmask-helper"}, {"argv", {SIGMASK_HELPER_PATH}}});
+    const auto path = directory + "/games.json";
+    { std::ofstream file(path); file << json{{"games", games}}; }
+    exigir(chmod(path.c_str(), 0600) == 0, "catalogo de teste privado");
+    return path;
+}
+
 std::string caminhoAbsoluto(const std::string& path) {
     char* resolved = realpath(path.c_str(), nullptr);
     exigir(resolved != nullptr, "caminho do helper deve existir");
@@ -86,9 +103,36 @@ std::string caminhoAbsoluto(const std::string& path) {
     return absolute_path;
 }
 
-std::shared_ptr<spdlog::logger> criarLogger(std::ostringstream& output) {
-    auto sink = std::make_shared<spdlog::sinks::ostream_sink_mt>(output);
-    return std::make_shared<spdlog::logger>("process-manager-test", std::move(sink));
+class LogCaptureSink final : public spdlog::sinks::base_sink<std::mutex> {
+public:
+    std::string snapshot() {
+        std::lock_guard<std::mutex> lock(this->mutex_);
+        return output_;
+    }
+protected:
+    void sink_it_(const spdlog::details::log_msg& message) override {
+        spdlog::memory_buf_t formatted;
+        this->formatter_->format(message, formatted);
+        output_.append(formatted.data(), formatted.size());
+    }
+    void flush_() override {}
+private:
+    std::string output_;
+};
+
+class LogCapture {
+public:
+    LogCapture() : sink_(std::make_shared<LogCaptureSink>()) {}
+    std::shared_ptr<spdlog::logger> logger() {
+        return std::make_shared<spdlog::logger>("process-manager-test", sink_);
+    }
+    std::string str() { return sink_->snapshot(); }
+private:
+    std::shared_ptr<LogCaptureSink> sink_;
+};
+
+std::shared_ptr<spdlog::logger> criarLogger(LogCapture& output) {
+    return output.logger();
 }
 
 int conectar(const std::string& socket_path) {
@@ -238,16 +282,52 @@ void enviarStart(
     int fd,
     const std::string& request_id,
     const std::string& game_id,
-    const std::string& path
+    const std::string& /* path: server catalog is authoritative */
 ) {
     const json command{
         {"action", "start"},
         {"request_id", request_id},
-        {"game_id", game_id},
-        {"path", path}
+        {"game_id", game_id}
     };
     const ipc::SendResult send_result = ipc::sendMessage(fd, command.dump(), 500ms);
     exigir(send_result.status == ipc::SendStatus::Ok, "comando start deve ser enviado");
+}
+
+void enviarComando(int fd, const json& command) {
+    const auto result = ipc::sendMessage(fd, command.dump(), 500ms);
+    exigir(result.status == ipc::SendStatus::Ok, "comando IPC deve ser enviado");
+}
+
+void enviarBytes(int fd, const std::string& bytes) {
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const ssize_t count = send(fd, bytes.data() + offset, bytes.size() - offset, MSG_NOSIGNAL);
+        if (count > 0) offset += static_cast<std::size_t>(count);
+        else if (count < 0 && errno == EINTR) continue;
+        else break;
+    }
+}
+
+void exigirProcessoAusente(pid_t pid, std::chrono::milliseconds timeout = 2s) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        errno = 0;
+        if (kill(pid, 0) < 0 && errno == ESRCH) return;
+        std::this_thread::sleep_for(10ms);
+    }
+    exigir(false, "processo deve estar encerrado e coletado: " + std::to_string(pid));
+}
+
+pid_t aguardarPidNoArquivo(const std::string& path, std::chrono::milliseconds timeout = 2s) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::ifstream input(path);
+        pid_t pid = -1;
+        if (input >> pid && pid > 1) return pid;
+        std::this_thread::sleep_for(10ms);
+    }
+    exigir(false, "helper deve registrar PID descendente");
+    return -1;
 }
 
 void exigirExecucao(
@@ -288,7 +368,7 @@ void testarExecucoesDeterministicas() {
     criarScript(exit_one, "exit 1\n");
     criarScript(marker_script, ": > \"" + marker + "\"\nexit 0\n");
 
-    ProcessManager manager(nullptr, socket_path);
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
     const int client_fd = conectar(socket_path);
     ipc::FrameReader reader;
 
@@ -340,7 +420,7 @@ void testarPrazoDaConfirmacaoDeExec() {
     criarScript(exit_zero, "exit 0\n");
     criarScript(stopped_before_exec, "exit 0\n");
 
-    ProcessManager manager(nullptr, socket_path);
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
     const int client_fd = conectar(socket_path);
     ipc::FrameReader reader;
 
@@ -375,9 +455,9 @@ void testarEncerramentoAoDesconectar() {
     criarScript(exit_zero, "exit 0\n");
     criarScript(orphan_script, "sleep 0.8\n: > \"" + marker + "\"\nexit 0\n");
 
-    std::ostringstream logs;
+    LogCapture logs;
     {
-        ProcessManager manager(criarLogger(logs), socket_path);
+        ProcessManager manager(criarLogger(logs), socket_path, criarCatalogo(temp.path()));
         const int owner_fd = conectar(socket_path);
         ipc::FrameReader owner_reader;
         enviarStart(owner_fd, "request-orphan", "orphan-marker", orphan_script);
@@ -426,9 +506,9 @@ void testarFalhaAoEntregarGameStarted() {
     criarScript(exit_zero, "exit 0\n");
     criarScript(slow_script, "sleep 0.5\n: > \"" + marker + "\"\nexit 0\n");
 
-    std::ostringstream logs;
+    LogCapture logs;
     {
-        ProcessManager manager(criarLogger(logs), socket_path);
+        ProcessManager manager(criarLogger(logs), socket_path, criarCatalogo(temp.path()));
         const int owner_fd = conectar(socket_path);
         test_support::failMatchingSends("\"event\":\"game_started\"", EIO);
         enviarStart(owner_fd, "request-undelivered", "slow-exec", slow_script);
@@ -506,7 +586,7 @@ void testarFalhaAoEntregarGameStartFailed() {
     const std::string socket_path = temp.path() + "/daemon.sock";
     criarScript(exit_zero, "exit 0\n");
 
-    ProcessManager manager(nullptr, socket_path);
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
     const int owner_fd = conectar(socket_path);
     test_support::failMatchingSends("\"event\":\"game_start_failed\"", EIO);
     enviarStart(
@@ -548,7 +628,7 @@ void testarFalhaAoEntregarGameFinished() {
     const std::string socket_path = temp.path() + "/daemon.sock";
     criarScript(exit_zero, "exit 0\n");
 
-    ProcessManager manager(nullptr, socket_path);
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
     const int owner_fd = conectar(socket_path);
     ipc::FrameReader owner_reader;
     test_support::failMatchingSends("\"event\":\"game_finished\"", EIO);
@@ -596,8 +676,8 @@ void testarEscritaParcialDeGameStarted() {
     criarScript(exit_zero, "exit 0\n");
     criarScript(slow_script, "sleep 0.5\n: > \"" + marker + "\"\nexit 0\n");
 
-    std::ostringstream logs;
-    ProcessManager manager(criarLogger(logs), socket_path);
+    LogCapture logs;
+    ProcessManager manager(criarLogger(logs), socket_path, criarCatalogo(temp.path()));
     const int owner_fd = conectar(socket_path);
     configurarFalhaAposEscritaParcial("game_started");
     enviarStart(owner_fd, "request-partial-start", "slow-exec", slow_script);
@@ -659,7 +739,7 @@ void testarEscritaParcialDeGameStartFailed() {
     const std::string socket_path = temp.path() + "/daemon.sock";
     criarScript(exit_zero, "exit 0\n");
 
-    ProcessManager manager(nullptr, socket_path);
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
     const int owner_fd = conectar(socket_path);
     configurarFalhaAposEscritaParcial("game_start_failed");
     enviarStart(owner_fd, "request-partial-failure", "missing", missing);
@@ -690,7 +770,7 @@ void testarEscritaParcialDeGameFinished() {
     const std::string socket_path = temp.path() + "/daemon.sock";
     criarScript(exit_zero, "exit 0\n");
 
-    ProcessManager manager(nullptr, socket_path);
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
     const int owner_fd = conectar(socket_path);
     ipc::FrameReader owner_reader;
     configurarFalhaAposEscritaParcial("game_finished");
@@ -726,10 +806,10 @@ void testarGeracaoEmFdReutilizado() {
     test_support::resetSendTestDouble();
     TempDirectory temp;
     const std::string socket_path = temp.path() + "/daemon.sock";
-    std::ostringstream logs;
+    LogCapture logs;
 
     {
-        ProcessManager manager(criarLogger(logs), socket_path);
+        ProcessManager manager(criarLogger(logs), socket_path, criarCatalogo(temp.path()));
         const int first_client = conectar(socket_path);
         std::this_thread::sleep_for(100ms);
         close(first_client);
@@ -768,6 +848,280 @@ void testarGeracaoEmFdReutilizado() {
     exigir(found_reused_fd, "fd reutilizado deve receber uma nova geracao");
 }
 
+void testarCatalogoEProtocoloAutoritativo() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string executable = temp.path() + "/exit-zero.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(executable, "exit 0\n");
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
+    const int fd = conectar(socket_path);
+    ipc::FrameReader reader;
+
+    auto exigirFalha = [&](const json& request, const std::string& code) {
+        enviarComando(fd, request);
+        const json response = receberEvento(fd, reader, 2s);
+        exigir(response.value("event", "") == "game_start_failed", "pedido deve falhar");
+        exigir(response.value("code", "") == code, "falha deve ter codigo " + code);
+    };
+
+    exigirFalha({{"action", "start"}, {"request_id", "unknown"}, {"game_id", "not-listed"}}, "unknown_game");
+    exigirFalha({{"action", "start"}, {"request_id", "malformed"}, {"game_id", "../escape"}}, "invalid_game_id");
+    const std::array<const char*, 4> forbidden{{"path", "argv", "cwd", "graphics"}};
+    for (const char* field : forbidden) {
+        json request{{"action", "start"}, {"request_id", std::string("forbidden-") + field}, {"game_id", "exit-zero"}};
+        request[field] = field == std::string("argv") ? json::array({"/bin/true"}) : json("attacker-controlled");
+        exigirFalha(request, "client_command_forbidden");
+    }
+
+    const json duplicate{{"action", "start"}, {"request_id", "unknown"}, {"game_id", "not-listed"}};
+    enviarComando(fd, duplicate);
+    const json duplicate_response = receberEvento(fd, reader, 2s);
+    exigir(duplicate_response.value("event", "") == "request_rejected", "request_id duplicado deve ser rejeitado");
+    exigir(duplicate_response.value("code", "") == "duplicate_request", "duplicata deve ter codigo explicito");
+    close(fd);
+}
+
+void testarSaidasSinaisEEventoUnico() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string crash = temp.path() + "/crash.sh";
+    const std::string self_term = temp.path() + "/self-term.sh";
+    const std::string wait_signal = temp.path() + "/wait-signal.sh";
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(crash, "kill -ABRT $$\n");
+    criarScript(self_term, "kill -TERM $$\n");
+    criarScript(wait_signal, "while :; do sleep 1; done\n");
+    criarScript(exit_zero, "exit 0\n");
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
+    const int fd = conectar(socket_path);
+    ipc::FrameReader reader;
+
+    exigirExecucao(fd, reader, "crash-request", "crash", crash, 128 + SIGABRT);
+    exigirExecucao(fd, reader, "self-term-request", "self-term", self_term, 128 + SIGTERM);
+
+    enviarStart(fd, "external-term", "wait-signal", wait_signal);
+    const json started = receberEvento(fd, reader, 2s);
+    const pid_t pid = started.value("pid", -1);
+    exigir(pid > 1, "jogo sinalizado deve iniciar");
+    exigir(kill(pid, SIGTERM) == 0, "teste deve sinalizar o jogo");
+    const json finished = receberEvento(fd, reader, 3s);
+    exigir(finished.value("event", "") == "game_finished", "sinal deve gerar evento terminal");
+    exigir(finished.value("exit_status", -1) == 128 + SIGTERM, "status deve preservar SIGTERM");
+    exigir(!tentarReceberEvento(fd, reader, 200ms).has_value(), "evento terminal deve ser emitido uma unica vez");
+    exigirProcessoAusente(pid);
+
+    enviarStart(fd, "normal-latency", "exit-zero", exit_zero);
+    const json normal_started = receberEvento(fd, reader, 2s);
+    exigir(normal_started.value("event", "") == "game_started", "jogo normal deve iniciar");
+    const auto latency_start = std::chrono::steady_clock::now();
+    const json normal_finished = receberEvento(fd, reader, 2s);
+    const auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - latency_start
+    );
+    exigir(normal_finished.value("event", "") == "game_finished", "jogo normal deve terminar");
+    exigir(normal_finished.value("exit_status", -1) == 0, "jogo normal deve preservar exit 0");
+    exigir(latency < 200ms, "exit normal nao deve aguardar grace period completo");
+    std::cout << "Normal exit -> game_finished latency: " << latency.count() << " ms\n";
+    close(fd);
+}
+
+void testarUnicoJogoEConcorrencia() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string active = temp.path() + "/active.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(active, "trap '' TERM\nwhile :; do sleep 1; done\n");
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
+
+    int first = conectar(socket_path);
+    ipc::FrameReader first_reader;
+    enviarStart(first, "first-active", "active", active);
+    const json started = receberEvento(first, first_reader, 2s);
+    const pid_t first_pid = started.value("pid", -1);
+    enviarStart(first, "same-active", "active", active);
+    const json busy = receberEvento(first, first_reader, 2s);
+    exigir(busy.value("code", "") == "game_already_running", "segundo launch deve ser rejeitado");
+    close(first);
+    exigirProcessoAusente(first_pid);
+
+    int left = conectar(socket_path);
+    int right = conectar(socket_path);
+    ipc::FrameReader left_reader, right_reader;
+    std::thread left_send([&] { enviarStart(left, "concurrent-left", "active", active); });
+    std::thread right_send([&] { enviarStart(right, "concurrent-right", "active", active); });
+    left_send.join();
+    right_send.join();
+    const json left_event = receberEvento(left, left_reader, 2s);
+    const json right_event = receberEvento(right, right_reader, 2s);
+    const int started_count = (left_event.value("event", "") == "game_started") +
+                              (right_event.value("event", "") == "game_started");
+    const int busy_count = (left_event.value("code", "") == "game_already_running") +
+                           (right_event.value("code", "") == "game_already_running");
+    exigir(started_count == 1, "apenas uma requisicao concorrente deve iniciar");
+    exigir(busy_count == 1, "uma requisicao concorrente deve receber busy");
+    const pid_t running_pid = left_event.value("pid", right_event.value("pid", -1));
+    close(left);
+    close(right);
+    exigirProcessoAusente(running_pid);
+}
+
+void testarDescendentesTermKillEShutdown() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string child_file = temp.path() + "/child.pid";
+    const std::string term_marker = temp.path() + "/term.marker";
+    const std::string tree = temp.path() + "/tree.sh";
+    const std::string detached_after_leader = temp.path() + "/leader-exits.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(
+        tree,
+        "trap 'echo term > \"" + term_marker + "\"; trap \"\" TERM' TERM\n"
+        "(trap '' TERM; while :; do sleep 1; done) &\n"
+        "echo $! > \"" + child_file + "\"\n"
+        "while :; do sleep 1; done\n"
+    );
+    criarScript(
+        detached_after_leader,
+        "(trap '' TERM; while :; do sleep 1; done) &\n"
+        "echo $! > \"" + child_file + "\"\nexit 0\n"
+    );
+    const std::string catalog = criarCatalogo(temp.path());
+
+    pid_t leader = -1;
+    pid_t child = -1;
+    const auto shutdown_started = std::chrono::steady_clock::now();
+    {
+        auto manager = std::make_unique<ProcessManager>(nullptr, socket_path, catalog);
+        const int fd = conectar(socket_path);
+        ipc::FrameReader reader;
+        enviarStart(fd, "tree-shutdown", "tree", tree);
+        leader = receberEvento(fd, reader, 2s).value("pid", -1);
+        child = aguardarPidNoArquivo(child_file);
+        manager.reset();
+        close(fd);
+    }
+    const auto shutdown_elapsed = std::chrono::steady_clock::now() - shutdown_started;
+    exigir(shutdown_elapsed < 2s, "shutdown com jogo deve ter limite finito");
+    exigir(access(term_marker.c_str(), F_OK) == 0, "grupo deve receber SIGTERM antes de SIGKILL");
+    exigirProcessoAusente(leader);
+    exigirProcessoAusente(child);
+    exigir(access(socket_path.c_str(), F_OK) != 0, "shutdown deve remover apenas seu socket");
+
+    unlink(child_file.c_str());
+    {
+        ProcessManager manager(nullptr, socket_path, catalog);
+        const int fd = conectar(socket_path);
+        ipc::FrameReader reader;
+        enviarStart(fd, "leader-exits", "leader-exits", detached_after_leader);
+        const pid_t parent = receberEvento(fd, reader, 2s).value("pid", -1);
+        const pid_t descendant = aguardarPidNoArquivo(child_file);
+        const json finished = receberEvento(fd, reader, 3s);
+        exigir(finished.value("exit_status", -1) == 0, "saida do lider deve ser preservada");
+        exigirProcessoAusente(parent);
+        exigirProcessoAusente(descendant);
+        close(fd);
+    }
+
+    const auto empty_started = std::chrono::steady_clock::now();
+    { ProcessManager manager(nullptr, socket_path, catalog); }
+    exigir(std::chrono::steady_clock::now() - empty_started < 1s, "shutdown sem jogo deve ser imediato");
+    { ProcessManager restarted(nullptr, socket_path, catalog); }
+}
+
+void testarDestrutorDuranteLaunchECleanupIncompleto() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string stopped = temp.path() + "/stop-before-exec.sh";
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(stopped, "exit 0\n");
+    criarScript(exit_zero, "exit 0\n");
+    const std::string catalog = criarCatalogo(temp.path());
+
+    auto manager = std::make_unique<ProcessManager>(nullptr, socket_path, catalog);
+    const int launch_fd = conectar(socket_path);
+    enviarStart(launch_fd, "destroy-launch", "stopped-before-exec", stopped);
+    std::this_thread::sleep_for(100ms);
+    const auto destroy_started = std::chrono::steady_clock::now();
+    manager.reset();
+    exigir(std::chrono::steady_clock::now() - destroy_started < 1500ms, "destrutor deve cancelar launch em andamento");
+    close(launch_fd);
+
+    {
+        ProcessManager fail_closed(nullptr, socket_path, catalog);
+        fail_closed.forceCleanupIncompleteForTest();
+        const int fd = conectar(socket_path);
+        ipc::FrameReader reader;
+        enviarStart(fd, "cleanup-incomplete", "exit-zero", exit_zero);
+        const json failed = receberEvento(fd, reader, 2s);
+        exigir(failed.value("code", "") == "process_cleanup_incomplete", "cleanup incompleto deve bloquear launch");
+        close(fd);
+    }
+
+    LogCapture logs;
+    ProcessManager launch_failures(criarLogger(logs), socket_path, catalog);
+    const int fd = conectar(socket_path);
+    ipc::FrameReader reader;
+    for (const char* stage : {"setpgid", "fchdir"}) {
+        setenv("DACC_PM_TEST_CHILD_FAILURE", stage, 1);
+        enviarStart(fd, std::string("failure-") + stage, "exit-zero", exit_zero);
+        const json failed = receberEvento(fd, reader, 2s);
+        exigir(failed.value("event", "") == "game_start_failed", "falha de setup deve impedir launch");
+        unsetenv("DACC_PM_TEST_CHILD_FAILURE");
+    }
+    launch_failures.forceRegistrationFailureForTest();
+    enviarStart(fd, "registration-failure", "exit-zero", exit_zero);
+    const json registration = receberEvento(fd, reader, 2s);
+    exigir(registration.value("code", "") == "state_registration_failed", "falha de registro deve ser explicita");
+    const std::regex pid_pattern(R"(PID=([0-9]+))");
+    std::smatch match;
+    const std::string log_text = logs.str();
+    exigir(std::regex_search(log_text, match, pid_pattern), "launch deve registrar PID antes da falha injetada");
+    exigirProcessoAusente(static_cast<pid_t>(std::stoi(match[1].str())));
+    exigirExecucao(fd, reader, "after-launch-failures", "exit-zero", exit_zero, 0);
+    close(fd);
+}
+
+void testarRobustezDoIpc() {
+    test_support::resetSendTestDouble();
+    TempDirectory temp;
+    const std::string exit_zero = temp.path() + "/exit-zero.sh";
+    const std::string socket_path = temp.path() + "/daemon.sock";
+    criarScript(exit_zero, "exit 0\n");
+    ProcessManager manager(nullptr, socket_path, criarCatalogo(temp.path()));
+
+    int fd = conectar(socket_path);
+    ipc::FrameReader reader;
+    const std::string invalid_json = "{not-json}\n";
+    enviarBytes(fd, invalid_json);
+    exigir(!tentarReceberEvento(fd, reader, 150ms).has_value(), "JSON invalido nao deve iniciar processo");
+    const std::string command = json{{"action", "start"}, {"request_id", "partial-frame"}, {"game_id", "exit-zero"}}.dump() + "\n";
+    const auto split = command.size() / 2;
+    enviarBytes(fd, command.substr(0, split));
+    exigir(!tentarReceberEvento(fd, reader, 100ms).has_value(), "frame parcial deve aguardar delimitador");
+    enviarBytes(fd, command.substr(split));
+    const json started = receberEvento(fd, reader, 2s);
+    const json finished = receberEvento(fd, reader, 2s);
+    exigir(started.value("event", "") == "game_started", "frame parcial completo deve iniciar");
+    exigir(finished.value("event", "") == "game_finished", "frame parcial deve terminar normalmente");
+    close(fd);
+
+    fd = conectar(socket_path);
+    enviarBytes(fd, std::string(ipc::kMaxFrameBytes + 1, 'x') + "\n");
+    exigirSocketFechado(fd, 2s);
+    close(fd);
+
+    fd = conectar(socket_path);
+    enviarComando(fd, {{"action", "start"}, {"request_id", "../invalid"}, {"game_id", "exit-zero"}});
+    exigirSocketFechado(fd, 2s);
+    close(fd);
+
+    fd = conectar(socket_path);
+    close(fd); // desconexao abrupta sem frame completo
+}
+
 } // namespace
 
 int main() {
@@ -781,6 +1135,12 @@ int main() {
     testarEscritaParcialDeGameStartFailed();
     testarEscritaParcialDeGameFinished();
     testarGeracaoEmFdReutilizado();
+    testarCatalogoEProtocoloAutoritativo();
+    testarSaidasSinaisEEventoUnico();
+    testarUnicoJogoEConcorrencia();
+    testarDescendentesTermKillEShutdown();
+    testarDestrutorDuranteLaunchECleanupIncompleto();
+    testarRobustezDoIpc();
     std::cout << "Process Manager integration tests passed." << std::endl;
     return 0;
 }

@@ -78,6 +78,10 @@ public:
      */
     void mover(int novoX, int novoY);
 
+    void definirArea(int x, int y, int largura, int altura) {
+        area = {x, y, largura, altura};
+    }
+
 private:
     SDL_Rect area;     /**< Estrutura SDL que armazena posição (x, y) e dimensões (w, h). */
     SDL_Color cor;     /**< Cor atual da forma no formato RGBA. */

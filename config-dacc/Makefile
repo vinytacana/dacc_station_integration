@@ -11,6 +11,7 @@ TEST_DISPLAY_BIN := tests/bin/test_display_parser
 TEST_DISPLAY_CONTROL_BIN := tests/bin/test_display_control
 TEST_AUDIO_BIN := tests/bin/test_audio_parser
 TEST_CONFIG_COMMAND_BIN := tests/bin/test_config_command
+BT_FAKE_BIN := tests/bin/fake_bluetoothctl
 CAPABILITIES_SMOKE_BIN := tests/bin/capabilities_smoke
 TEST_BINS := $(TEST_BT_BIN) $(TEST_NETWORK_BIN) $(TEST_DISPLAY_BIN) $(TEST_DISPLAY_CONTROL_BIN) $(TEST_AUDIO_BIN) $(TEST_CONFIG_COMMAND_BIN)
 
@@ -29,9 +30,13 @@ $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(TEST_BT_BIN): tests/test_bluetooth_parser.cpp BluetoothInternal.cpp include/config-dacc/functions.hpp BluetoothInternal.hpp
+$(BT_FAKE_BIN): tests/fake_bluetoothctl.cpp
 	@mkdir -p tests/bin
-	$(CXX) $(CXXFLAGS) tests/test_bluetooth_parser.cpp BluetoothInternal.cpp -o $@
+	$(CXX) $(CXXFLAGS) $< -o $@
+
+$(TEST_BT_BIN): tests/test_bluetooth_parser.cpp BluetoothInternal.cpp include/config-dacc/functions.hpp BluetoothInternal.hpp $(BT_FAKE_BIN)
+	@mkdir -p tests/bin
+	$(CXX) $(CXXFLAGS) -DFAKE_BLUETOOTHCTL_PATH=\"$(abspath $(BT_FAKE_BIN))\" tests/test_bluetooth_parser.cpp BluetoothInternal.cpp -o $@
 
 $(TEST_NETWORK_BIN): tests/test_network_parser.cpp include/config-dacc/NetworkParsing.hpp
 	@mkdir -p tests/bin
@@ -68,7 +73,7 @@ test: $(TEST_BINS)
 capabilities-smoke: $(CAPABILITIES_SMOKE_BIN)
 
 clean:
-	rm -rf $(BUILD_DIR) $(LIB_TARGET) $(TEST_BINS) $(CAPABILITIES_SMOKE_BIN)
+	rm -rf $(BUILD_DIR) $(LIB_TARGET) $(TEST_BINS) $(BT_FAKE_BIN) $(CAPABILITIES_SMOKE_BIN)
 	rm -f *.o *.d
 
 -include $(DEPS_LIB)

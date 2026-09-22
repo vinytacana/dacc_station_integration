@@ -22,6 +22,11 @@ system_result make_bt_error(
     const std::string& detalhes = ""
 );
 system_result make_bt_success(const std::string& mensagem, const std::string& detalhes = "");
+system_result classificar_status_bluetoothctl(
+    int status,
+    bool status_colhido,
+    const std::string& saida
+);
 system_result executar_bluetoothctl(
     const std::string& comando,
     int timeout_ms = kBluetoothctlTimeoutMs

@@ -1,0 +1,3 @@
+# Add this line to the real ~/.config/labwc/autostart after validating the
+# installed labwc imports the graphical environment into systemd --user.
+systemctl --user start dacc-station.target

@@ -50,6 +50,29 @@ inline bool extrair_resolucao(const std::string& token, int& width, int& height)
     }
 }
 
+inline bool extrair_refresh_xrandr(const std::string& token, float& refresh_rate) {
+    if (token.empty() || !std::isdigit(static_cast<unsigned char>(token[0]))) {
+        return false;
+    }
+
+    try {
+        size_t fim_numero = 0;
+        float valor = std::stof(token, &fim_numero);
+        if (valor <= 0.0f || fim_numero == 0) {
+            return false;
+        }
+        for (size_t i = fim_numero; i < token.size(); ++i) {
+            if (token[i] != '*' && token[i] != '+') {
+                return false;
+            }
+        }
+        refresh_rate = valor;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 inline std::vector<DisplayOutput> parse_xrandr_verbose(const std::string& output) {
     std::vector<DisplayOutput> displays;
     std::stringstream ss(output);
@@ -79,21 +102,24 @@ inline std::vector<DisplayOutput> parse_xrandr_verbose(const std::string& output
         std::string token;
         int width = 0;
         int height = 0;
+        if (!(mode_ss >> token) || !extrair_resolucao(token, width, height)) {
+            continue;
+        }
+
         while (mode_ss >> token) {
-            if (!extrair_resolucao(token, width, height)) {
+            float refresh_rate = 0.0f;
+            if (!extrair_refresh_xrandr(token, refresh_rate)) {
                 continue;
             }
-
             DisplayMode mode;
             mode.width = width;
             mode.height = height;
-            mode.refresh_rate = 60.0f;
-            mode.is_current = linha.find("*current") != std::string::npos || linha.find('*') != std::string::npos;
+            mode.refresh_rate = refresh_rate;
+            mode.is_current = token.find('*') != std::string::npos;
             current_display->modes.push_back(mode);
             if (mode.is_current) {
                 current_display->current_mode = mode;
             }
-            break;
         }
     }
 
