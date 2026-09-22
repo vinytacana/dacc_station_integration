@@ -1,12 +1,16 @@
 #include "LogProtocol.hpp"
 #include "UnixSocketClient.hpp"
+#include "UnixSocketSink.hpp"
 #include "ipc/LocalSocket.hpp"
 
 #include <array>
 #include <cassert>
 #include <filesystem>
 #include <iostream>
+#include <poll.h>
+#include <spdlog/logger.h>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
@@ -69,6 +73,27 @@ int main() {
         assert(wire.messages.size() == 1 && wire.messages[0] == "wire-format");
         protocol.remove(accepted);
         close(accepted);
+    }
+    // A logger created before LogServer must connect after it appears, and
+    // reconnect after a server crash/restart without recreating the logger.
+    const std::string restart_path = std::string(root) + "/restart.sock";
+    auto sink = std::make_shared<spdlog::sinks::unix_socket_sink_mt>(restart_path);
+    spdlog::logger logger("restart-test", sink);
+    logger.info("before-server");
+    for (int restart = 0; restart < 2; ++restart) {
+        ipc::LocalSocketServer restarted(restart_path);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+        logger.info("after-restart-{}", restart);
+        pollfd ready{restarted.fd(), POLLIN, 0};
+        assert(poll(&ready, 1, 250) == 1);
+        const int accepted = accept4(restarted.fd(), nullptr, nullptr, SOCK_CLOEXEC);
+        assert(accepted >= 0);
+        char data[512]{};
+        const ssize_t count = recv(accepted, data, sizeof(data), 0);
+        assert(count > 0);
+        assert(std::string(data, static_cast<std::size_t>(count)).find("after-restart") != std::string::npos);
+        close(accepted);
+        logger.info("detect-disconnect");
     }
     std::filesystem::remove_all(root);
     std::cout << "Log protocol tests passed.\n";

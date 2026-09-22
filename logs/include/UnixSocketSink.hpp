@@ -17,6 +17,7 @@ class unix_socket_sink : public base_sink<Mutex>
 {
 public:
     explicit unix_socket_sink(const std::string& socket_path)
+        : socket_path_(socket_path)
     {
         try {
             client_ = std::make_unique<UnixSocketClient>(socket_path);
@@ -49,6 +50,15 @@ protected:
                 client_.reset();
             }
         }
+        if (!client_ && std::chrono::steady_clock::now() >= next_retry_) {
+            next_retry_ = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+            try {
+                client_ = std::make_unique<UnixSocketClient>(socket_path_);
+                client_->send(payload, std::chrono::milliseconds::zero());
+            } catch (const std::exception&) {
+                // Console sink remains available while LogServer is down.
+            }
+        }
     }
 
     void flush_() override
@@ -58,6 +68,8 @@ protected:
     }
 
 private:
+    std::string socket_path_;
+    std::chrono::steady_clock::time_point next_retry_{};
     std::unique_ptr<UnixSocketClient> client_;
 };
 
